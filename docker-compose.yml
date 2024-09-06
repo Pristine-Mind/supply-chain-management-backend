@@ -1,0 +1,44 @@
+version: '3.5'
+
+x-server: &base_server_setup
+  image: supply-chain-management:latest
+  build: .
+  stdin_open: true
+  tty: true
+  environment:
+    DB_HOST: ${DB_HOST:-db}
+    DB_NAME: ${DB_NAME:-postgres}
+    DB_USER: ${DB_USER:-postgres}
+    DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+  env_file:
+    - .env
+  volumes:
+    - .:/code
+  depends_on:
+    - db
+
+
+services:
+  db:
+    image: postgis/postgis:13-3.1-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+
+  web:
+    <<: *base_server_setup
+    ports:
+      - 8000:8000
+    command: python manage.py runserver 0.0.0.0:8000
+
+volumes:
+  postgres_data:
