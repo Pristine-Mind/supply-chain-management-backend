@@ -111,17 +111,6 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """
-        Ensure that:
-        - The total price corresponds to the product price multiplied by quantity.
-        - The delivery date is after the order date.
-        - The payment due date is after the order date.
-        """
-        product = data["product"]
-        expected_total = product.price * data["quantity"]
-        if data["total_price"] != expected_total:
-            raise serializers.ValidationError(f"Total price must be {expected_total} for the selected product and quantity.")
-
         # Ensure delivery_date is after order_date
         if "delivery_date" in data and data["delivery_date"] and data["delivery_date"] < data["order_date"]:
             raise serializers.ValidationError("Delivery date cannot be before the order date.")
