@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     # External apps
     "admin_auto_filters",
     "rest_framework",
+    "rest_framework.authtoken",
     "corsheaders",
     # localapps
     "producer",
@@ -176,28 +177,32 @@ MEDIA_ROOT = env("DJANGO_MEDIA_ROOT")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_URLS_REGEX = r"(^/media/.*$)|(^/graphql/$)"
-CORS_ALLOW_METHODS = (
-    "DELETE",
-    "GET",
-    "OPTIONS",
-    "PATCH",
-    "POST",
-    "PUT",
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ORIGIN_WHITELIST = (
+    'http://localhost:5173',
 )
+# CORS_URLS_REGEX = r"(^/media/.*$)|(^/graphql/$)"
+# CORS_ALLOW_METHODS = (
+#     "DELETE",
+#     "GET",
+#     "OPTIONS",
+#     "PATCH",
+#     "POST",
+#     "PUT",
+# )
 
-CORS_ALLOW_HEADERS = (
-    "accept",
-    "accept-encoding",
-    "authorization",
-    "content-type",
-    "dnt",
-    "origin",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-    "sentry-trace",
-)
+# CORS_ALLOW_HEADERS = (
+#     "accept",
+#     "accept-encoding",
+#     "authorization",
+#     "content-type",
+#     "dnt",
+#     "origin",
+#     "user-agent",
+#     "x-csrftoken",
+#     "x-requested-with",
+#     "sentry-trace",
+# )
 
 
 REST_FRAMEWORK = {

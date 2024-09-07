@@ -18,7 +18,16 @@ from django.contrib import admin
 from django.urls import path, include
 
 from rest_framework.routers import DefaultRouter
-from producer.views import ProducerViewSet, CustomerViewSet, ProductViewSet, OrderViewSet, SaleViewSet
+from producer.views import (
+    ProducerViewSet,
+    CustomerViewSet,
+    ProductViewSet,
+    OrderViewSet,
+    SaleViewSet,
+    LoginAPIView,
+    DashboardAPIView,
+    UserInfoView
+)
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -30,4 +39,8 @@ router.register(r'sales', SaleViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', include(router.urls)),
+    path("login/", LoginAPIView.as_view()),
+    path('api/v1/dashboard/', DashboardAPIView.as_view(), name='dashboard'),
+    path('api/v1/user-info/', UserInfoView.as_view())
+
 ]

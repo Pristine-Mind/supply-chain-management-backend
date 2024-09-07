@@ -9,7 +9,7 @@ class ProducerAPITestCase(APITestCase):
 
     def setUp(self):
         self.producer = ProducerFactory()
-        self.url = '/api/v1/producers/'
+        self.url = "/api/v1/producers/"
 
     def test_create_producer(self):
         """
@@ -20,9 +20,9 @@ class ProducerAPITestCase(APITestCase):
             "contact": "1234567890",
             "email": "producer@test.com",
             "address": "1234 Test Address",
-            "registration_number": "ABC123"
+            "registration_number": "ABC123",
         }
-        response = self.client.post(self.url, data, format='json')
+        response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_producer_list(self):
@@ -38,7 +38,7 @@ class CustomerAPITestCase(APITestCase):
 
     def setUp(self):
         self.customer = CustomerFactory()
-        self.url = '/api/v1/customers/'
+        self.url = "/api/v1/customers/"
 
     def test_create_customer(self):
         """
@@ -54,9 +54,9 @@ class CustomerAPITestCase(APITestCase):
             "shipping_address": "456 Test Shipping",
             "credit_limit": 5000.00,
             "current_balance": 1000.00,
-            "producer": producer.id
+            "producer": producer.id,
         }
-        response = self.client.post(self.url, data, format='json')
+        response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_customer_list(self):
@@ -72,7 +72,7 @@ class ProductAPITestCase(APITestCase):
 
     def setUp(self):
         self.product = ProductFactory()
-        self.url = '/api/v1/products/'
+        self.url = "/api/v1/products/"
 
     def test_create_product(self):
         """
@@ -86,9 +86,9 @@ class ProductAPITestCase(APITestCase):
             "price": 100.00,
             "cost_price": 80.00,
             "stock": 100,
-            "producer": producer.id
+            "producer": producer.id,
         }
-        response = self.client.post(self.url, data, format='json')
+        response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_product_list(self):
@@ -104,7 +104,7 @@ class OrderAPITestCase(APITestCase):
 
     def setUp(self):
         self.order = OrderFactory.create()
-        self.url = '/api/v1/orders/'
+        self.url = "/api/v1/orders/"
 
     def test_create_order(self):
         """
@@ -121,7 +121,7 @@ class OrderAPITestCase(APITestCase):
             "payment_status": Order.Status.PENDING,
             "order_number": 123232,
         }
-        response = self.client.post(self.url, data, format='json')
+        response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_order_list(self):
@@ -137,7 +137,7 @@ class SaleAPITestCase(APITestCase):
 
     def setUp(self):
         self.sale = SaleFactory()
-        self.url = '/api/v1/sales/'
+        self.url = "/api/v1/sales/"
 
     def test_create_sale(self):
         """
@@ -145,13 +145,8 @@ class SaleAPITestCase(APITestCase):
         """
         customer = CustomerFactory.create()
         product = ProductFactory.create()
-        data = {
-            "customer": customer.id,
-            "product": product.id,
-            "quantity": 5,
-            "sale_price": 150.00
-        }
-        response = self.client.post(self.url, data, format='json')
+        data = {"customer": customer.id, "product": product.id, "quantity": 5, "sale_price": 150.00}
+        response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_sale_list(self):
