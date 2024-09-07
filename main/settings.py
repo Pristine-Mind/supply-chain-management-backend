@@ -67,6 +67,8 @@ INSTALLED_APPS = [
     # External apps
     "admin_auto_filters",
     "corsheaders",
+    # localapps
+    "producer",
 ]
 
 MIDDLEWARE = [
