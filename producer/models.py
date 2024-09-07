@@ -146,10 +146,7 @@ class Order(models.Model):
     delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivery Date"))
     total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Total Price"), null=True, blank=True)
     payment_status = models.CharField(
-        max_length=50,
-        choices=Status.choices,
-        default=Status.PENDING,
-        verbose_name=_("Payment Status")
+        max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Payment Status")
     )
     payment_due_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Payment Due Date"))
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
