@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "django.contrib.gis",
     # External apps
     "admin_auto_filters",
+    "rest_framework",
     "corsheaders",
     # localapps
     "producer",
@@ -197,3 +198,9 @@ CORS_ALLOW_HEADERS = (
     "x-requested-with",
     "sentry-trace",
 )
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 100,
+}

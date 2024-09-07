@@ -144,12 +144,12 @@ class Order(models.Model):
     status = models.CharField(max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Order Status"))
     order_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Order Date"))
     delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivery Date"))
-    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Total Price"))
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Total Price"), null=True, blank=True)
     payment_status = models.CharField(
         max_length=50,
-        choices=[("Pending", _("Pending")), ("Paid", _("Paid"))],
-        default="Pending",
-        verbose_name=_("Payment Status"),
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name=_("Payment Status")
     )
     payment_due_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Payment Due Date"))
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
@@ -162,6 +162,10 @@ class Order(models.Model):
     class Meta:
         verbose_name = _("Order")
         verbose_name_plural = _("Orders")
+
+    def save(self, *args, **kwargs):
+        self.total_price = self.product.price * self.quantity
+        super().save(*args, **kwargs)
 
 
 class Sale(models.Model):
