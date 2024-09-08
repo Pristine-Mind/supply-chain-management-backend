@@ -73,6 +73,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
+    customer_details = CustomerSerializer(source='customer', read_only=True)
 
     class Meta:
         model = Order
@@ -123,6 +124,9 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
+    customer_details = CustomerSerializer(source='customer', read_only=True)
+    product_details = ProductSerializer(source='product', read_only=True)
+
     class Meta:
         model = Sale
         fields = "__all__"

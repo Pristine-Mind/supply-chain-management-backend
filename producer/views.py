@@ -22,6 +22,7 @@ from .serializers import (
     CustomerSalesSerializer,
     CustomerOrdersSerializer,
 )
+from .filters import SaleFilter
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
@@ -67,6 +68,7 @@ class SaleViewSet(viewsets.ModelViewSet):
 
     queryset = Sale.objects.all()
     serializer_class = SaleSerializer
+    filterset_class = SaleFilter
 
 
 class LoginAPIView(APIView):
