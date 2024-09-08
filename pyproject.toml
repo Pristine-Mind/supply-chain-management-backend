@@ -24,6 +24,8 @@ factory-boy = "*"
 uwsgi = "*"
 pdfkit = "*"
 django-pwa = "*"
+django-filter = "*"
+
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
