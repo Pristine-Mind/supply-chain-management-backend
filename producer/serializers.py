@@ -151,3 +151,19 @@ class SaleSerializer(serializers.ModelSerializer):
         if data["sale_price"] > product.price:
             raise serializers.ValidationError("Sale price cannot be greater than the original product price.")
         return data
+
+
+class CustomerSalesSerializer(serializers.ModelSerializer):
+    total_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'total_sales']
+
+
+class CustomerOrdersSerializer(serializers.ModelSerializer):
+    total_orders = serializers.IntegerField()
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'total_orders']

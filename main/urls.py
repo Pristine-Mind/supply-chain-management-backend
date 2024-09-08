@@ -26,7 +26,9 @@ from producer.views import (
     SaleViewSet,
     LoginAPIView,
     DashboardAPIView,
-    UserInfoView
+    UserInfoView,
+    TopSalesCustomersView,
+    TopOrdersCustomersView,
 )
 
 router = DefaultRouter()
@@ -41,6 +43,8 @@ urlpatterns = [
     path('api/v1/', include(router.urls)),
     path("login/", LoginAPIView.as_view()),
     path('api/v1/dashboard/', DashboardAPIView.as_view(), name='dashboard'),
-    path('api/v1/user-info/', UserInfoView.as_view())
+    path('api/v1/user-info/', UserInfoView.as_view()),
+    path('api/v1/customer/top-sales/', TopSalesCustomersView.as_view(), name='top-sales-customers'),
+    path('api/v1/customer/top-orders/', TopOrdersCustomersView.as_view(), name='top-orders-customers'),
 
 ]

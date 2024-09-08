@@ -7,13 +7,21 @@ from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
 from django.utils import timezone
 from django.db.models.functions import TruncMonth
 
 
 from .models import Producer, Customer, Product, Order, Sale
-from .serializers import ProducerSerializer, CustomerSerializer, ProductSerializer, OrderSerializer, SaleSerializer
+from .serializers import (
+    ProducerSerializer,
+    CustomerSerializer,
+    ProductSerializer,
+    OrderSerializer,
+    SaleSerializer,
+    CustomerSalesSerializer,
+    CustomerOrdersSerializer,
+)
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
@@ -111,3 +119,30 @@ class UserInfoView(APIView):
     def get(self, request):
         user = request.user
         return Response({"username": user.username})
+
+
+class TopSalesCustomersView(APIView):
+    def get(self, request, format=None):
+        current_year = timezone.now().year
+        # Aggregate total sales by customer for the current year
+        top_sales_customers = Customer.objects.filter(
+            sale__sale_date__year=current_year
+        ).annotate(
+            total_sales=Sum('sale__sale_price')
+        ).order_by('-total_sales')[:10]
+        print(top_sales_customers, "fff")
+        sales_serializer = CustomerSalesSerializer(top_sales_customers, many=True)
+        return Response(sales_serializer.data, status=status.HTTP_200_OK)
+
+
+class TopOrdersCustomersView(APIView):
+    def get(self, request, format=None):
+        current_year = timezone.now().year
+        top_orders_customers = Customer.objects.filter(
+            order__order_date__year=current_year
+        ).annotate(
+            total_orders=Count('order')
+        ).order_by('-total_orders')[:10]
+
+        orders_serializer = CustomerOrdersSerializer(top_orders_customers, many=True)
+        return Response(orders_serializer.data, status=status.HTTP_200_OK)
