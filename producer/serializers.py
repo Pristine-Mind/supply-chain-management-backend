@@ -2,7 +2,14 @@ from datetime import datetime
 
 from rest_framework import serializers
 
-from .models import Producer, Customer, Product, Order, Sale
+from .models import (
+    Producer,
+    Customer,
+    Product,
+    Order,
+    Sale,
+    StockList,
+)
 
 
 class ProducerSerializer(serializers.ModelSerializer):
@@ -171,3 +178,11 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = ['id', 'name', 'total_orders']
+
+
+class StockListSerializer(serializers.ModelSerializer):
+    product_details = ProductSerializer(source='product', read_only=True)
+
+    class Meta:
+        model = StockList
+        fields = ['product', 'moved_date', 'product_details']
