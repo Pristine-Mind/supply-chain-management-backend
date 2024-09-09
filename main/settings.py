@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
-
+from celery.schedules import crontab
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -37,6 +37,9 @@ env = environ.Env(
     # -- File System
     DJANGO_STATIC_ROOT=(str, os.path.join(BASE_DIR, "assets/static")),
     DJANGO_MEDIA_ROOT=(str, os.path.join(BASE_DIR, "assets/media")),
+    # Redis
+    CELERY_REDIS_URL=str,
+    CACHE_REDIS_URL=str,
 )
 
 # Quick-start development settings - unsuitable for production
@@ -70,6 +73,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "django_filters",
+    "django_celery_beat",
     # localapps
     "producer",
 ]
@@ -214,4 +218,18 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ),
+}
+
+CELERY_REDIS_URL = env("CELERY_REDIS_URL")
+CELERY_BROKER_URL = CELERY_REDIS_URL
+CELERY_RESULT_BACKEND = CELERY_REDIS_URL
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ACKS_LATE = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+CELERY_BEAT_SCHEDULE = {
+    'move_large_stock_to_stocklist': {
+        'task': 'producer.tasks.move_large_stock_to_stocklist',
+        'schedule': crontab(minute=0, hour='*/3')
+    },
 }
