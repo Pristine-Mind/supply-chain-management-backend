@@ -29,6 +29,7 @@ from producer.views import (
     UserInfoView,
     TopSalesCustomersView,
     TopOrdersCustomersView,
+    StockListView,
 )
 
 router = DefaultRouter()
@@ -46,5 +47,5 @@ urlpatterns = [
     path('api/v1/user-info/', UserInfoView.as_view()),
     path('api/v1/customer/top-sales/', TopSalesCustomersView.as_view(), name='top-sales-customers'),
     path('api/v1/customer/top-orders/', TopOrdersCustomersView.as_view(), name='top-orders-customers'),
-
+    path('api/v1/stocklist/', StockListView.as_view(), name='stocklist'),
 ]

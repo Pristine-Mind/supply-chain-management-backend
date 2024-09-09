@@ -197,3 +197,14 @@ class Sale(models.Model):
     class Meta:
         verbose_name = _("Sale")
         verbose_name_plural = _("Sales")
+
+
+class StockList(models.Model):
+    """
+    Represents a list of products that have been moved to the stock list due to threshold conditions.
+    """
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
+    moved_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Moved Date"))
+
+    def __str__(self):
+        return f"{self.product.name} moved to StockList on {self.moved_date}"

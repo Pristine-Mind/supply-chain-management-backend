@@ -6,13 +6,14 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics
 
 from django.db.models import Sum, Q, Count
 from django.utils import timezone
 from django.db.models.functions import TruncMonth
 
 
-from .models import Producer, Customer, Product, Order, Sale
+from .models import Producer, Customer, Product, Order, Sale, StockList
 from .serializers import (
     ProducerSerializer,
     CustomerSerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     SaleSerializer,
     CustomerSalesSerializer,
     CustomerOrdersSerializer,
+    StockListSerializer,
 )
 from .filters import SaleFilter
 
@@ -148,3 +150,8 @@ class TopOrdersCustomersView(APIView):
 
         orders_serializer = CustomerOrdersSerializer(top_orders_customers, many=True)
         return Response(orders_serializer.data, status=status.HTTP_200_OK)
+
+
+class StockListView(generics.ListAPIView):
+    queryset = StockList.objects.all()
+    serializer_class = StockListSerializer
