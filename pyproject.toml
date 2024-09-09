@@ -25,6 +25,9 @@ uwsgi = "*"
 pdfkit = "*"
 django-pwa = "*"
 django-filter = "*"
+celery = {extras = ["redis"], version = "^5.3.4"}
+django-redis = "^5.3.0"
+django-celery-beat = "*"
 
 
 [tool.poetry.dev-dependencies]
