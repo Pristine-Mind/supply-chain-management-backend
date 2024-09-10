@@ -7,13 +7,22 @@ from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics
+from rest_framework.decorators import action
 
 from django.db.models import Sum, Q, Count
 from django.utils import timezone
 from django.db.models.functions import TruncMonth
 
 
-from .models import Producer, Customer, Product, Order, Sale, StockList
+from .models import (
+    Producer,
+    Customer,
+    Product,
+    Order,
+    Sale,
+    StockList,
+    MarketplaceProduct,
+)
 from .serializers import (
     ProducerSerializer,
     CustomerSerializer,
@@ -23,6 +32,7 @@ from .serializers import (
     CustomerSalesSerializer,
     CustomerOrdersSerializer,
     StockListSerializer,
+    MarketplaceProductSerializer
 )
 from .filters import SaleFilter
 
@@ -152,6 +162,39 @@ class TopOrdersCustomersView(APIView):
         return Response(orders_serializer.data, status=status.HTTP_200_OK)
 
 
-class StockListView(generics.ListAPIView):
+class StockListView(viewsets.ModelViewSet):
     queryset = StockList.objects.all()
     serializer_class = StockListSerializer
+
+    @action(detail=True, methods=['post'], url_path='push-to-marketplace')
+    def push_to_marketplace(self, request, pk=None):
+        try:
+            stock_item = self.get_object()
+        except StockList.DoesNotExist:
+            return Response({"error": "StockList item not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if MarketplaceProduct.objects.filter(product=stock_item.product).exists():
+            return Response(
+                {
+                    "error": f"Product '{stock_item.product.name}' is already listed in the marketplace."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        MarketplaceProduct.objects.create(
+            product=stock_item.product,
+            listed_price=stock_item.product.price,
+            is_available=True
+        )
+
+        return Response(
+            {
+                "message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."
+            },
+            status=status.HTTP_200_OK
+            )
+
+
+class MarketplaceProductViewSet(viewsets.ModelViewSet):
+    queryset = MarketplaceProduct.objects.filter(is_available=True)
+    serializer_class = MarketplaceProductSerializer
