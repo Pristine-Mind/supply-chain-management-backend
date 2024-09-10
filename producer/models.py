@@ -208,3 +208,26 @@ class StockList(models.Model):
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
+
+
+class MarketplaceProduct(models.Model):
+    """
+    Represents a product listed in the marketplace.
+
+    Fields:
+    - product: The reference to the product in the stock list.
+    - listed_price: The price at which the product is listed in the marketplace.
+    - listed_date: The date when the product was listed in the marketplace.
+    - is_available: Indicates whether the product is still available for sale.
+    """
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
+    listed_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Listed Price"))
+    listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
+    is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
+
+    def __str__(self):
+        return f"{self.product.name} listed for {self.listed_price}"
+
+    class Meta:
+        verbose_name = _("Marketplace Product")
+        verbose_name_plural = _("Marketplace Products")
