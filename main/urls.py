@@ -31,6 +31,7 @@ from producer.views import (
     TopOrdersCustomersView,
     StockListView,
 )
+from market.views import PurchaseViewSet, BidViewSet, ChatMessageViewSet
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -39,6 +40,9 @@ router.register(r'products', ProductViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'sales', SaleViewSet)
 router.register(r'stocklist', StockListView)
+router.register(r'purchases', PurchaseViewSet, basename='purchases')
+router.register(r'bids', BidViewSet, basename='bids')
+router.register(r'chats', ChatMessageViewSet, basename='chats')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
