@@ -30,6 +30,7 @@ from producer.views import (
     TopSalesCustomersView,
     TopOrdersCustomersView,
     StockListView,
+    MarketplaceProductViewSet
 )
 from market.views import PurchaseViewSet, BidViewSet, ChatMessageViewSet
 
@@ -40,6 +41,7 @@ router.register(r'products', ProductViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'sales', SaleViewSet)
 router.register(r'stocklist', StockListView)
+router.register(r'marketplace', MarketplaceProductViewSet)
 router.register(r'purchases', PurchaseViewSet, basename='purchases')
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')

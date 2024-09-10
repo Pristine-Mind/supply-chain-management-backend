@@ -224,7 +224,7 @@ class MarketplaceProduct(models.Model):
     listed_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Listed Price"))
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
-    bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"))
+    bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"), null=True, blank=True)
 
     def __str__(self):
         return f"{self.product.name} listed for {self.listed_price}"

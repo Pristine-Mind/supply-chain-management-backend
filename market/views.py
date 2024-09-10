@@ -2,8 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 
 from market.models import Purchase, Bid, ChatMessage
+from rest_framework.permissions import IsAuthenticated
 
 from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer
+from .filters import ChatFilter, BidFilter
 
 
 class PurchaseViewSet(viewsets.ModelViewSet):
@@ -20,6 +22,8 @@ class PurchaseViewSet(viewsets.ModelViewSet):
 class BidViewSet(viewsets.ModelViewSet):
     queryset = Bid.objects.all()
     serializer_class = BidSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_class = BidFilter
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -31,6 +35,8 @@ class BidViewSet(viewsets.ModelViewSet):
 class ChatMessageViewSet(viewsets.ModelViewSet):
     queryset = ChatMessage.objects.all()
     serializer_class = ChatMessageSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_class = ChatFilter
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
