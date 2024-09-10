@@ -1,5 +1,32 @@
 import django_filters
-from .models import Sale
+from .models import Sale, Producer, Customer
+
+
+class ProducerFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+
+    class Meta:
+        model = Producer
+        fields = ['search']
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            name__icontains=value
+        ).distinct()
+
+
+class CustomerFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+
+    class Meta:
+        model = Customer
+        fields = ['search']
+
+    def filter_search(self, queryset, name, value):
+        print(value)
+        return queryset.filter(
+            name__icontains=value
+        ).distinct()
 
 
 class SaleFilter(django_filters.FilterSet):

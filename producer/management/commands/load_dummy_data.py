@@ -33,7 +33,6 @@ class Command(BaseCommand):
                     shipping_address=fake.address(),
                     credit_limit=fake.pydecimal(left_digits=5, right_digits=2, positive=True),
                     current_balance=fake.pydecimal(left_digits=4, right_digits=2, positive=True),
-                    producer=producer,
                 )
                 self.stdout.write(self.style.SUCCESS(f"  Created Customer: {customer.name}"))
 

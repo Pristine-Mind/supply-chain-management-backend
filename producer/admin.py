@@ -12,7 +12,7 @@ class ProducerAdmin(admin.ModelAdmin):
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'producer', 'customer_type', 'contact', 'email', 'credit_limit', 'current_balance', 'created_at', 'updated_at')
+    list_display = ('name', 'customer_type', 'contact', 'email', 'credit_limit', 'current_balance', 'created_at', 'updated_at')
     search_fields = ('name', 'email', 'customer_type')
     list_filter = ('customer_type', 'created_at', 'updated_at')
     readonly_fields = ('created_at', 'updated_at')

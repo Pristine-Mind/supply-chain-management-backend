@@ -37,7 +37,6 @@ class Customer(models.Model):
     Represents a customer of the producer, which can be a retailer, wholesaler, or distributor.
 
     Fields:
-    - producer: The producer to which the customer is linked.
     - name: The name of the customer, translatable.
     - customer_type: Defines the type of customer (Retailer, Wholesaler, Distributor).
     - contact: Contact details for the customer.
@@ -52,7 +51,6 @@ class Customer(models.Model):
 
     CUSTOMER_TYPE_CHOICES = [("Retailer", _("Retailer")), ("Wholesaler", _("Wholesaler")), ("Distributor", _("Distributor"))]
 
-    producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"))
     name = models.CharField(max_length=100, verbose_name=_("Customer Name"))
     customer_type = models.CharField(max_length=50, choices=CUSTOMER_TYPE_CHOICES, verbose_name=_("Customer Type"))
     contact = models.CharField(max_length=100, verbose_name=_("Contact Information"))
