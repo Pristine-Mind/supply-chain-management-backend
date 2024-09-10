@@ -34,7 +34,7 @@ from .serializers import (
     StockListSerializer,
     MarketplaceProductSerializer
 )
-from .filters import SaleFilter
+from .filters import SaleFilter, ProducerFilter, CustomerFilter
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
@@ -44,6 +44,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
 
     queryset = Producer.objects.all()
     serializer_class = ProducerSerializer
+    filterset_class = ProducerFilter
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -53,6 +54,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+    ilterset_class = CustomerFilter
 
 
 class ProductViewSet(viewsets.ModelViewSet):
