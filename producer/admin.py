@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Producer, Customer, Product, Order, Sale, StockList
+from .models import Producer, Customer, Product, Order, Sale, StockList, MarketplaceProduct
 
 
 @admin.register(Producer)
@@ -49,3 +49,8 @@ class StockListAdmin(admin.ModelAdmin):
     search_fields = ('product__name',)
     list_filter = ('moved_date',)
     readonly_fields = ('moved_date',)
+
+
+@admin.register(MarketplaceProduct)
+class MarketplaceProductAdmin(admin.ModelAdmin):
+    pass
