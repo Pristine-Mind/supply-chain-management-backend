@@ -9,6 +9,7 @@ from .models import (
     Order,
     Sale,
     StockList,
+    MarketplaceProduct,
 )
 
 
@@ -185,4 +186,10 @@ class StockListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StockList
-        fields = ['product', 'moved_date', 'product_details']
+        fields = ['product', 'moved_date', 'product_details', 'id']
+
+
+class MarketplaceProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarketplaceProduct
+        fields = ['product', 'listed_price', 'listed_date', 'is_available', 'id']
