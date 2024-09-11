@@ -23,7 +23,6 @@ class CustomerFilter(django_filters.FilterSet):
         fields = ['search']
 
     def filter_search(self, queryset, name, value):
-        print(value)
         return queryset.filter(
             name__icontains=value
         ).distinct()
