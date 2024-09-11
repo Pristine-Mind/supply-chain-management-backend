@@ -1,5 +1,5 @@
 import django_filters
-from .models import Sale, Producer, Customer
+from .models import Sale, Producer, Customer, Product
 
 
 class ProducerFilter(django_filters.FilterSet):
@@ -45,4 +45,17 @@ class SaleFilter(django_filters.FilterSet):
             product__name__icontains=value
         ) | queryset.filter(
             customer__name__icontains=value
+        ).distinct()
+
+
+class ProductFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+
+    class Meta:
+        model = Product
+        fields = ['search']
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            name__icontains=value
         ).distinct()
