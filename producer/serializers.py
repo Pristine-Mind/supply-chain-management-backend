@@ -89,13 +89,13 @@ class ProductSerializer(serializers.ModelSerializer):
         if data["cost_price"] > data["price"]:
             raise serializers.ValidationError("Cost price cannot be greater than selling price.")
         return data
-    
+
     def create(self, validated_data):
         uploaded_images = validated_data.pop('uploaded_images', [])
         product = super().create(validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
-        
+
         return product
 
     def update(self, instance, validated_data):
@@ -218,6 +218,8 @@ class StockListSerializer(serializers.ModelSerializer):
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
+    product_details = ProductSerializer(source='product', read_only=True)
+
     class Meta:
         model = MarketplaceProduct
-        fields = ['product', 'listed_price', 'listed_date', 'is_available', 'id']
+        fields = ['product', 'listed_price', 'listed_date', 'is_available', 'id', 'product_details']

@@ -187,7 +187,7 @@ class StockListView(viewsets.ModelViewSet):
             listed_price=stock_item.product.price,
             is_available=True
         )
-
+        
         return Response(
             {
                 "message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."
