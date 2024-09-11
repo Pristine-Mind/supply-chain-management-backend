@@ -86,6 +86,7 @@ class Product(models.Model):
     - is_active: Indicates whether the product is currently available for sale.
     - created_at: Timestamp indicating when the product was added.
     - updated_at: Timestamp indicating the last update to the product's details.
+    - rate: Unit price of each product
     """
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"))
