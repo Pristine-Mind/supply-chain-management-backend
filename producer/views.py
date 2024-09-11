@@ -146,7 +146,6 @@ class TopSalesCustomersView(APIView):
         ).annotate(
             total_sales=Sum('sale__sale_price')
         ).order_by('-total_sales')[:10]
-        print(top_sales_customers, "fff")
         sales_serializer = CustomerSalesSerializer(top_sales_customers, many=True)
         return Response(sales_serializer.data, status=status.HTTP_200_OK)
 
