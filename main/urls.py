@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 from rest_framework.routers import DefaultRouter
 from producer.views import (
@@ -30,6 +32,7 @@ from producer.views import (
     TopSalesCustomersView,
     TopOrdersCustomersView,
     StockListView,
+    MarketplaceProductViewSet
 )
 from market.views import PurchaseViewSet, BidViewSet, ChatMessageViewSet
 
@@ -40,6 +43,7 @@ router.register(r'products', ProductViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'sales', SaleViewSet)
 router.register(r'stocklist', StockListView)
+router.register(r'marketplace', MarketplaceProductViewSet)
 router.register(r'purchases', PurchaseViewSet, basename='purchases')
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
@@ -53,3 +57,5 @@ urlpatterns = [
     path('api/v1/customer/top-sales/', TopSalesCustomersView.as_view(), name='top-sales-customers'),
     path('api/v1/customer/top-orders/', TopOrdersCustomersView.as_view(), name='top-orders-customers'),
 ]
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

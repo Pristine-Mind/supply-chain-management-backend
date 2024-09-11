@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
 
 from .models import Purchase, Bid, ChatMessage
 from producer.models import MarketplaceProduct
@@ -76,13 +77,23 @@ class BidSerializer(serializers.ModelSerializer):
         return bid
 
 
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'username'
+        )
+
+
 class ChatMessageSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     message = serializers.CharField()
+    sender_details = UserSerializer(source='sender', read_only=True)
 
     class Meta:
         model = ChatMessage
-        fields = ['sender', 'product_id', 'message', 'timestamp']
+        fields = ['sender', 'product_id', 'message', 'timestamp', 'sender_details']
         read_only_fields = ['sender', 'timestamp']
 
     def validate(self, data):
