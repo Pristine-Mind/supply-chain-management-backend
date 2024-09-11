@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Producer, Customer, Product, Order, Sale, StockList, MarketplaceProduct
+from .models import Producer, Customer, Product, Order, Sale, StockList, MarketplaceProduct, ProductImage
 
 
 @admin.register(Producer)
@@ -53,4 +53,9 @@ class StockListAdmin(admin.ModelAdmin):
 
 @admin.register(MarketplaceProduct)
 class MarketplaceProductAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(ProductImage)
+class ProductImageAdmin(admin.ModelAdmin):
     pass
