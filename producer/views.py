@@ -6,7 +6,6 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import generics
 from rest_framework.decorators import action
 
 from django.db.models import Sum, Q, Count
@@ -34,7 +33,7 @@ from .serializers import (
     StockListSerializer,
     MarketplaceProductSerializer
 )
-from .filters import SaleFilter, ProducerFilter, CustomerFilter
+from .filters import SaleFilter, ProducerFilter, CustomerFilter, ProductFilter
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
@@ -54,7 +53,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
-    ilterset_class = CustomerFilter
+    filterset_class = CustomerFilter
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -64,6 +63,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    filterset_class = ProductFilter
 
 
 class OrderViewSet(viewsets.ModelViewSet):

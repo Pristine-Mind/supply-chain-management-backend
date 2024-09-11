@@ -10,6 +10,7 @@ from .models import (
     Sale,
     StockList,
     MarketplaceProduct,
+    ProductImage,
 )
 
 
@@ -49,7 +50,18 @@ class CustomerSerializer(serializers.ModelSerializer):
         return value
 
 
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ['id', 'image', 'alt_text', 'created_at']
+
+
 class ProductSerializer(serializers.ModelSerializer):
+    images = ProductImageSerializer(many=True, read_only=True)
+    uploaded_images = serializers.ListField(
+        child=serializers.ImageField(), write_only=True, required=False
+    )
+
     class Meta:
         model = Product
         fields = "__all__"
@@ -77,6 +89,22 @@ class ProductSerializer(serializers.ModelSerializer):
         if data["cost_price"] > data["price"]:
             raise serializers.ValidationError("Cost price cannot be greater than selling price.")
         return data
+    
+    def create(self, validated_data):
+        uploaded_images = validated_data.pop('uploaded_images', [])
+        product = super().create(validated_data)
+        for image in uploaded_images:
+            ProductImage.objects.create(product=product, image=image)
+        
+        return product
+
+    def update(self, instance, validated_data):
+        uploaded_images = validated_data.pop('uploaded_images', [])
+        product = super().update(instance, validated_data)
+        for image in uploaded_images:
+            ProductImage.objects.create(product=product, image=image)
+
+        return product
 
 
 class OrderSerializer(serializers.ModelSerializer):
