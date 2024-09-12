@@ -164,7 +164,7 @@ class TopOrdersCustomersView(APIView):
 
 
 class StockListView(viewsets.ModelViewSet):
-    queryset = StockList.objects.all()
+    queryset = StockList.objects.filter(is_pushed_to_marketplace=False)
     serializer_class = StockListSerializer
 
     @action(detail=True, methods=['post'], url_path='push-to-marketplace')
@@ -187,13 +187,16 @@ class StockListView(viewsets.ModelViewSet):
             listed_price=stock_item.product.price,
             is_available=True
         )
-        
+
+        # Update the product to have moved to marketplace
+        stock_item.is_pushed_to_marketplace = True
+        stock_item.save(update_fields=['is_pushed_to_marketplace'])
         return Response(
             {
                 "message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."
             },
             status=status.HTTP_200_OK
-            )
+        )
 
 
 class MarketplaceProductViewSet(viewsets.ModelViewSet):

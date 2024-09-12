@@ -204,6 +204,10 @@ class StockList(models.Model):
     """
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     moved_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Moved Date"))
+    is_pushed_to_marketplace = models.BooleanField(
+        verbose_name=_('Is Stock moved to marketplace'),
+        default=False
+    )
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
