@@ -214,7 +214,7 @@ class StockListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StockList
-        fields = ['product', 'moved_date', 'product_details', 'id']
+        fields = ['product', 'moved_date', 'product_details', 'id', 'is_pushed_to_marketplace']
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
