@@ -38,11 +38,14 @@ class Bid(models.Model):
     - bidder: The customer placing the bid.
     - product: The product being bid on.
     - bid_amount: The amount offered for the product.
+    - max_bid_amount: The maximum amount the bidder is willing to pay.
     - bid_date: The date the bid was placed.
     """
+
     bidder = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Bidder"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
     bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Bid Amount"))
+    max_bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Maximum Bid Amount"))
     bid_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Bid Date"))
 
     def __str__(self):
