@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from django.contrib.auth.models import User
 
 from .models import Purchase, Bid, ChatMessage
@@ -25,13 +26,17 @@ class PurchaseSerializer(serializers.ModelSerializer):
         if product.product.stock < data['quantity']:
             raise serializers.ValidationError("Insufficient stock for the requested quantity.")
 
+        if product.bid_end_date and product.bid_end_date > timezone.now():
+            raise serializers.ValidationError("The bidding time is not over yet. Purchase is not allowed.")
+
         data['product'] = product
         return data
 
     def create(self, validated_data):
         product = validated_data['product']
         quantity = validated_data['quantity']
-        total_price = product.listed_price * quantity
+        bid = Bid.objects.filter(product__id=product.id).order_by('-max_bid_amount').first()
+        total_price = bid.max_bid_amount * quantity
         purchase = Purchase.objects.create(
             buyer=self.context['request'].user,
             product=product,
@@ -59,15 +64,9 @@ class BidSerializer(serializers.ModelSerializer):
             product = MarketplaceProduct.objects.get(id=data['product_id'])
         except MarketplaceProduct.DoesNotExist:
             raise serializers.ValidationError("Product not found.")
-
-        # Ensure that the bid is higher than the product's listed price
         if data['bid_amount'] <= product.listed_price:
             raise serializers.ValidationError("Bid amount must be higher than the listed price.")
-
-        # Fetch the highest existing bid for the product (if any)
         highest_bid = Bid.objects.filter(product=product).order_by('-bid_amount').first()
-
-        # Ensure that the new bid amount is greater than the highest existing bid (if any)
         if highest_bid and data['bid_amount'] <= highest_bid.bid_amount:
             raise serializers.ValidationError("Your bid must be higher than the current highest bid.")
 
@@ -78,14 +77,12 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data['product']
         bid_amount = validated_data['bid_amount']
         bidder = self.context['request'].user
-
-        # Fetch the current highest bid for the product
         highest_bid = Bid.objects.filter(product=product).order_by('-bid_amount').first()
+        if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
+            max_bid_amount = bid_amount
+        else:
+            max_bid_amount = highest_bid.max_bid_amount
 
-        # If there is an existing highest bid, set the new bid's max_bid_amount to that value
-        max_bid_amount = highest_bid.bid_amount if highest_bid else bid_amount
-
-        # Create the new bid with the calculated max_bid_amount
         bid = Bid.objects.create(
             bidder=bidder,
             product=product,
