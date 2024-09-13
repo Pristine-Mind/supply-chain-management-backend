@@ -33,7 +33,13 @@ from .serializers import (
     StockListSerializer,
     MarketplaceProductSerializer
 )
-from .filters import SaleFilter, ProducerFilter, CustomerFilter, ProductFilter
+from .filters import (
+    SaleFilter,
+    ProducerFilter,
+    CustomerFilter,
+    ProductFilter,
+    MarketplaceProductFilter,
+)
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
@@ -202,3 +208,4 @@ class StockListView(viewsets.ModelViewSet):
 class MarketplaceProductViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceProduct.objects.filter(is_available=True)
     serializer_class = MarketplaceProductSerializer
+    filterset_class = MarketplaceProductFilter
