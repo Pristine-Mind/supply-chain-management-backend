@@ -32,9 +32,9 @@ from producer.views import (
     TopSalesCustomersView,
     TopOrdersCustomersView,
     StockListView,
-    MarketplaceProductViewSet
+    MarketplaceProductViewSet,
 )
-from market.views import PurchaseViewSet, BidViewSet, ChatMessageViewSet
+from market.views import PurchaseViewSet, BidViewSet, ChatMessageViewSet, highest_bidder
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -56,6 +56,7 @@ urlpatterns = [
     path('api/v1/user-info/', UserInfoView.as_view()),
     path('api/v1/customer/top-sales/', TopSalesCustomersView.as_view(), name='top-sales-customers'),
     path('api/v1/customer/top-orders/', TopOrdersCustomersView.as_view(), name='top-orders-customers'),
+    path('api/v1/bids/highest/<int:product_id>/', highest_bidder, name='highest_bidder'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
