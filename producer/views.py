@@ -71,6 +71,21 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     filterset_class = ProductFilter
 
+    @action(
+        detail=False,
+        url_path="catgeory",
+        methods=("get",),
+    )
+    def get_category(self, request, pk=None):
+        return Response(
+            [
+                {
+                    "key": key,
+                    "value": value,
+                } for key, value in Product.ProductCategory.choices
+            ]
+        )
+
 
 class OrderViewSet(viewsets.ModelViewSet):
     """
