@@ -63,10 +63,14 @@ class ProductFilter(django_filters.FilterSet):
 
 class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
+    category = django_filters.MultipleChoiceFilter(
+        choices=Product.ProductCategory.choices,
+        field_name='product__category',
+    )
 
     class Meta:
         model = MarketplaceProduct
-        fields = ['search']
+        fields = ['search', 'category']
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(
