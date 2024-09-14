@@ -36,6 +36,8 @@ class PurchaseSerializer(serializers.ModelSerializer):
         product = validated_data['product']
         quantity = validated_data['quantity']
         bid = Bid.objects.filter(product__id=product.id).order_by('-max_bid_amount').first()
+        if not bid or bid.bidder != self.context['request'].user:
+            raise serializers.ValidationError("Only the highest bidder can purchase this product.")
         total_price = bid.max_bid_amount * quantity
         purchase = Purchase.objects.create(
             buyer=self.context['request'].user,
@@ -44,6 +46,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
             purchase_price=total_price
         )
         product.product.stock -= quantity
+        product.is_available = False
         product.product.save()
 
         return purchase
