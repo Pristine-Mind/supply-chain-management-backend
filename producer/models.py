@@ -88,9 +88,29 @@ class Product(models.Model):
     - updated_at: Timestamp indicating the last update to the product's details.
     - rate: Unit price of each product
     """
+    class ProductCategory(models.TextChoices):
+        ELECTRONICS = 'EL', _('Electronics')
+        FASHION = 'FA', _('Fashion & Clothing')
+        HEALTH_BEAUTY = 'HB', _('Health & Beauty')
+        HOME_KITCHEN = 'HK', _('Home & Kitchen')
+        GROCERIES = 'GR', _('Groceries & Gourmet Food')
+        SPORTS_OUTDOORS = 'SO', _('Sports & Outdoors')
+        TOYS_KIDS_BABY = 'TK', _('Toys, Kids & Baby Products')
+        BOOKS_MUSIC_MOVIES = 'BM', _('Books, Music & Movies')
+        AUTOMOTIVE_INDUSTRIAL = 'AI', _('Automotive & Industrial')
+        PET_SUPPLIES = 'PS', _('Pet Supplies')
+        OFFICE_STATIONERY = 'OS', _('Office & Stationery')
+        HEALTH_FITNESS = 'HF', _('Health & Fitness')
+        JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
+        GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"))
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
+    category = models.CharField(
+        max_length=2,
+        choices=ProductCategory.choices,
+        default=ProductCategory.ELECTRONICS
+    )
     description = models.TextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"))
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Price"))
