@@ -1,7 +1,10 @@
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.conf import settings
 from urllib.parse import urlencode
 import time
+import requests
+import json
 
 from rest_framework import serializers
 
@@ -13,11 +16,13 @@ class PurchaseSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     quantity = serializers.IntegerField()
     payment_url = serializers.URLField(read_only=True)
+    khalti_payment_url = serializers.URLField(read_only=True)
+    payment_method = serializers.ChoiceField(choices=Payment.PAYMENT_METHOD_CHOICES, write_only=True)
 
     class Meta:
         model = Purchase
-        fields = ['buyer', 'product_id', 'quantity', 'purchase_price', 'purchase_date', 'payment_url']
-        read_only_fields = ['purchase_price', 'purchase_date', 'buyer', 'payment_url']
+        fields = ['buyer', 'product_id', 'quantity', 'purchase_price', 'purchase_date', 'payment_url', 'khalti_payment_url', 'payment_method']
+        read_only_fields = ['purchase_price', 'purchase_date', 'buyer', 'payment_url', 'khalti_payment_url']
 
     def validate(self, data):
         try:
@@ -39,6 +44,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         product = validated_data['product']
         quantity = validated_data['quantity']
+        payment_method = validated_data['payment_method']
         buyer = self.context['request'].user
 
         # Get the highest bid
@@ -71,34 +77,63 @@ class PurchaseSerializer(serializers.ModelSerializer):
             purchase=purchase,
             transaction_id=transaction_id,
             amount=total_price,
-            status='pending'
+            status='pending',
+            payment_method=payment_method  # Set the selected payment method
         )
 
-        # Prepare the eSewa payment URL and parameters
-        esewa_payment_url = 'https://uat.esewa.com.np/epay/main'
-        success_url = self.context['request'].build_absolute_uri('/payment/verify/')
-        failure_url = self.context['request'].build_absolute_uri('/payment/failure/')
+        # Prepare the payment URLs based on the payment method
+        if payment_method == 'esewa':
+            esewa_payment_url = 'https://uat.esewa.com.np/epay/main'
+            success_url = self.context['request'].build_absolute_uri('/payment/verify/')
+            failure_url = self.context['request'].build_absolute_uri('/payment/failure/')
 
-        payload = {
-            'amt': total_price,
-            'txAmt': 0,
-            'psc': 0,
-            'pdc': 0,
-            'tAmt': total_price,
-            'pid': transaction_id,
-            'scd': 'EPAYTEST',  # eSewa Merchant ID for sandbox
-            'su': success_url,
-            'fu': failure_url
-        }
+            esewa_payload = {
+                'amt': total_price,
+                'txAmt': 0,
+                'psc': 0,
+                'pdc': 0,
+                'tAmt': total_price,
+                'pid': transaction_id,
+                'scd': 'EPAYTEST',  # eSewa Merchant ID for sandbox
+                'su': success_url,
+                'fu': failure_url
+            }
 
-        # Generate the full payment URL
-        payment_url = f"{esewa_payment_url}?{urlencode(payload)}"
+            payment_url = f"{esewa_payment_url}?{urlencode(esewa_payload)}"
+            return {'purchase': purchase, 'payment_url': payment_url}
 
-        # Return the Purchase object with additional payment_url information
-        return {
-            'purchase': purchase,
-            'payment_url': payment_url
-        }
+        elif payment_method == 'khalti':
+            khalti_payment_url = 'https://a.khalti.com/api/v2/epayment/initiate/'
+            khalti_payload = {
+                'return_url': "http://localhost:8000/payment/verify/",
+                'website_url': "http://localhost:8000/",
+                'amount': int(total_price * 100),  # Khalti expects the amount in paisa
+                'purchase_order_id': str(purchase.id),
+                'purchase_order_name': purchase.product.product.name,
+                'customer_info': {
+                    'name': "Ram Bahadur",  # You can replace this with dynamic values if necessary
+                    'email': "test@khalti.com",
+                    'phone': "9800000001"  # Use test mobile number for Khalti
+                }
+            }
+
+            # Headers for the request
+            headers = {
+                'Authorization': 'key b885cd9d8dc04eebb59e6f12190ae017',
+                'Content-Type': 'application/json',
+            }
+            response = requests.post(khalti_payment_url, headers=headers, data=json.dumps(khalti_payload))
+            print(response.json(), "hhhhhhh")
+            if response.status_code == 200:
+                # Extracting the payment URL from the response
+                response_data = response.json()
+                khalti_payment_url = response_data.get('payment_url')
+            else:
+                # Handle error (optional)
+                print(f"Error occurred: {response.status_code}, {response.text}")
+
+            # Return payment URL and purchase info
+            return {'purchase': purchase, 'khalti_payment_url': khalti_payment_url}
 
 
 class BidSerializer(serializers.ModelSerializer):
