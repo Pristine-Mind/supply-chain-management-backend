@@ -1,19 +1,23 @@
-from rest_framework import serializers
 from django.utils import timezone
 from django.contrib.auth.models import User
+from urllib.parse import urlencode
+import time
 
-from .models import Purchase, Bid, ChatMessage
+from rest_framework import serializers
+
+from .models import Purchase, Bid, ChatMessage, Payment
 from producer.models import MarketplaceProduct
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     quantity = serializers.IntegerField()
+    payment_url = serializers.URLField(read_only=True)
 
     class Meta:
         model = Purchase
-        fields = ['buyer', 'product_id', 'quantity', 'purchase_price', 'purchase_date']
-        read_only_fields = ['purchase_price', 'purchase_date', 'buyer']
+        fields = ['buyer', 'product_id', 'quantity', 'purchase_price', 'purchase_date', 'payment_url']
+        read_only_fields = ['purchase_price', 'purchase_date', 'buyer', 'payment_url']
 
     def validate(self, data):
         try:
@@ -35,21 +39,66 @@ class PurchaseSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         product = validated_data['product']
         quantity = validated_data['quantity']
+        buyer = self.context['request'].user
+
+        # Get the highest bid
         bid = Bid.objects.filter(product__id=product.id).order_by('-max_bid_amount').first()
-        if not bid or bid.bidder != self.context['request'].user:
+        if not bid or bid.bidder != buyer:
             raise serializers.ValidationError("Only the highest bidder can purchase this product.")
+
+        # Calculate the total price
         total_price = bid.max_bid_amount * quantity
+
+        # Create the Purchase object
         purchase = Purchase.objects.create(
-            buyer=self.context['request'].user,
+            buyer=buyer,
             product=product,
             quantity=quantity,
             purchase_price=total_price
         )
+
+        # Update product stock
         product.product.stock -= quantity
-        product.is_available = False
+        if product.product.stock == 0:
+            product.is_available = False
         product.product.save()
 
-        return purchase
+        # Generate a unique transaction ID for the payment
+        transaction_id = 'TXN' + str(int(time.time()))
+
+        # Create the Payment object
+        Payment.objects.create(
+            purchase=purchase,
+            transaction_id=transaction_id,
+            amount=total_price,
+            status='pending'
+        )
+
+        # Prepare the eSewa payment URL and parameters
+        esewa_payment_url = 'https://uat.esewa.com.np/epay/main'
+        success_url = self.context['request'].build_absolute_uri('/payment/verify/')
+        failure_url = self.context['request'].build_absolute_uri('/payment/failure/')
+
+        payload = {
+            'amt': total_price,
+            'txAmt': 0,
+            'psc': 0,
+            'pdc': 0,
+            'tAmt': total_price,
+            'pid': transaction_id,
+            'scd': 'EPAYTEST',  # eSewa Merchant ID for sandbox
+            'su': success_url,
+            'fu': failure_url
+        }
+
+        # Generate the full payment URL
+        payment_url = f"{esewa_payment_url}?{urlencode(payload)}"
+
+        # Return the Purchase object with additional payment_url information
+        return {
+            'purchase': purchase,
+            'payment_url': payment_url
+        }
 
 
 class BidSerializer(serializers.ModelSerializer):
