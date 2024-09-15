@@ -148,7 +148,6 @@ class Order(models.Model):
     - created_at: Timestamp indicating when the order was created.
     - updated_at: Timestamp indicating the last update to the order.
     """
-
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         APPROVED = "approved", _("Approved")
@@ -164,10 +163,6 @@ class Order(models.Model):
     order_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Order Date"))
     delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivery Date"))
     total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Total Price"), null=True, blank=True)
-    payment_status = models.CharField(
-        max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Payment Status")
-    )
-    payment_due_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Payment Due Date"))
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
@@ -190,6 +185,7 @@ class Sale(models.Model):
 
     Fields:
     - customer: The customer making the sale.
+    - order: The order associated with this sale.
     - product: The product being sold.
     - quantity: The quantity of the product sold.
     - sale_price: The price at which the product was sold to the end-user.
@@ -199,23 +195,48 @@ class Sale(models.Model):
     - created_at: Timestamp indicating when the sale was recorded.
     - updated_at: Timestamp indicating the last update to the sale details.
     """
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        APPROVED = "approved", _("Approved")
+        SHIPPED = "shipped", _("Shipped")
+        DELIVERED = "delivered", _("Delivered")
+        CANCELLED = "cancelled", _("Cancelled")
 
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, verbose_name=_("Customer"))
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, verbose_name=_("Order"))
     quantity = models.IntegerField(verbose_name=_("Quantity Sold"))
     sale_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Sale Price"))
     sale_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Sale Date"))
-    customer_name = models.CharField(max_length=100, blank=True, verbose_name=_("End-User Name"))
-    customer_contact = models.CharField(max_length=100, blank=True, verbose_name=_("End-User Contact Information"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+    payment_status = models.CharField(
+        max_length=50,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name=_("Payment Status")
+    )
+    payment_due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Payment Due Date")
+    )
 
     def __str__(self):
-        return f"Sale of {self.product.name} by {self.customer.name}"
+        return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
 
     class Meta:
         verbose_name = _("Sale")
         verbose_name_plural = _("Sales")
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.reduce_product_stock()
+
+    def reduce_product_stock(self):
+        """
+        Reduce the stock of the product after a sale is made.
+        """
+        self.product.stock -= self.quantity
+        self.product.save()
 
 
 class StockList(models.Model):
