@@ -2,6 +2,7 @@ import requests
 
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
+from django.conf import settings
 
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -20,15 +21,27 @@ from .forms import ShippingAddressForm
 @permission_classes([IsAuthenticated])
 def create_purchase(request):
     """
-    API view to create a purchase and generate the eSewa payment URL.
+    API view to create a purchase and generate the payment URL for either eSewa or Khalti.
     """
     serializer = PurchaseSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         purchase_data = serializer.save()
+
+        # Return the appropriate payment URL based on the payment method
+        payment_method = request.data.get('payment_method', 'esewa')  # Default to eSewa if not provided
+
+        if payment_method == 'esewa':
+            payment_url = purchase_data.get('payment_url')
+        elif payment_method == 'khalti':
+            payment_url = purchase_data.get('khalti_payment_url')
+        else:
+            return Response({'error': 'Invalid payment method selected.'}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response({
             'purchase': PurchaseSerializer(purchase_data['purchase']).data,
-            'payment_url': purchase_data['payment_url']
+            'payment_url': payment_url
         }, status=status.HTTP_201_CREATED)
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -147,3 +160,46 @@ def shipping_address_form(request, payment_id):
         form = ShippingAddressForm()
 
     return render(request, 'shipping_address_form.html', {'form': form, 'payment': payment})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_khalti_payment(request):
+    """
+    API view to verify Khalti payment using the payment token.
+    """
+    token = request.data.get('token')
+    amount = request.data.get('amount')  # Amount in paisa (1 NPR = 100 paisa)
+    transaction_id = request.data.get('transaction_id')
+
+    if not token or not amount or not transaction_id:
+        return Response({'error': 'Missing token, amount, or transaction ID.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Khalti verification API URL
+    url = "https://khalti.com/api/v2/payment/verify/"
+    payload = {
+        'token': token,
+        'amount': amount
+    }
+    headers = {
+        'Authorization': f'Key {settings.KHALTI_SECRET_KEY}'
+    }
+
+    # Send a POST request to Khalti's verification API
+    response = requests.post(url, data=payload, headers=headers)
+    if response.status_code == 200:
+        # If the payment is successful, update the payment status
+        try:
+            payment = Payment.objects.get(transaction_id=transaction_id)
+            payment.status = 'completed'
+            payment.save()
+
+            return redirect('payment_confirmation', payment_id=payment.id)
+        except Payment.DoesNotExist:
+            payment.status = 'failed'
+            payment.save()
+            return Response({'error': 'Payment not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        payment.status = 'failed'
+        payment.save()
+        return Response({'error': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
