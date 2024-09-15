@@ -1,17 +1,19 @@
+import requests
+
+from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponse
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 
-from market.models import Purchase, Bid, ChatMessage
+from market.models import Bid, ChatMessage
 from producer.models import MarketplaceProduct
-
 from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer
 from .filters import ChatFilter, BidFilter
-import requests
-from django.shortcuts import get_object_or_404
-from django.http import HttpResponse
 from .models import Payment
+from .forms import ShippingAddressForm
 
 
 @api_view(['POST'])
@@ -80,7 +82,6 @@ def highest_bidder(request, product_id):
         return Response({"is_highest_bidder": False})
 
 
-
 @api_view(['GET'])
 def verify_payment(request):
     # Get the transaction details from the query parameters
@@ -107,9 +108,42 @@ def verify_payment(request):
         # If the payment is verified, update the Payment status to 'completed'
         payment.status = 'completed'
         payment.save()
-        return HttpResponse("Payment Verified and Completed")
+        return redirect('payment_confirmation', payment_id=payment.id)
     else:
         # If the verification failed, update the Payment status to 'failed'
         payment.status = 'failed'
         payment.save()
         return HttpResponse("Payment Verification Failed")
+
+
+def payment_confirmation(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+    if payment.status == 'completed':
+        context = {
+            'payment': payment,
+            'message': "Your payment was successful. Please proceed to the shipping details."
+        }
+        return render(request, 'payment_confirmation.html', context)
+    else:
+        return HttpResponse("Payment not verified")
+
+
+@api_view(['POST'])
+def shipping_address_form(request, payment_id):
+    payment = get_object_or_404(Payment, id=payment_id)
+
+    if request.method == 'POST':
+        form = ShippingAddressForm(request.POST)
+        if form.is_valid():
+            shipping_address = form.save(commit=False)
+            shipping_address.payment = payment
+            shipping_address.save()
+            return render(request, 'shipping_address_form.html', {
+                'form': form,
+                'payment': payment,
+                'order_success': True,
+            })
+    else:
+        form = ShippingAddressForm()
+
+    return render(request, 'shipping_address_form.html', {'form': form, 'payment': payment})
