@@ -34,7 +34,7 @@ from producer.views import (
     StockListView,
     MarketplaceProductViewSet,
 )
-from market.views import BidViewSet, ChatMessageViewSet, highest_bidder, create_purchase, verify_payment
+from market.views import BidViewSet, ChatMessageViewSet, highest_bidder, create_purchase, verify_payment, payment_confirmation, shipping_address_form
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -58,6 +58,8 @@ urlpatterns = [
     path('api/v1/bids/highest/<int:product_id>/', highest_bidder, name='highest_bidder'),
     path('api/v1/purchases/', create_purchase, name='create_purchase'),
     path('payment/verify/', verify_payment, name='verify_payment'),
+    path('payment/confirmation/<int:payment_id>/', payment_confirmation, name='payment_confirmation'),
+    path('shipping/address/<int:payment_id>/', shipping_address_form, name='shipping_address_form'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
