@@ -34,7 +34,16 @@ from producer.views import (
     StockListView,
     MarketplaceProductViewSet,
 )
-from market.views import BidViewSet, ChatMessageViewSet, highest_bidder, create_purchase, verify_payment, payment_confirmation, shipping_address_form
+from market.views import (
+    BidViewSet,
+    ChatMessageViewSet,
+    highest_bidder,
+    create_purchase,
+    verify_payment,
+    payment_confirmation,
+    shipping_address_form,
+    verify_khalti_payment
+)
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -60,6 +69,7 @@ urlpatterns = [
     path('payment/verify/', verify_payment, name='verify_payment'),
     path('payment/confirmation/<int:payment_id>/', payment_confirmation, name='payment_confirmation'),
     path('shipping/address/<int:payment_id>/', shipping_address_form, name='shipping_address_form'),
+    path('khalti/verify/', verify_khalti_payment, name='verify_khalti_payment'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

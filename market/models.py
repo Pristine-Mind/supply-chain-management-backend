@@ -48,12 +48,22 @@ class Payment(models.Model):
         ('completed', 'Completed'),
         ('failed', 'Failed'),
     ]
+    PAYMENT_METHOD_CHOICES = [
+        ('esewa', 'eSewa'),
+        ('khalti', 'Khalti'),
+    ]
 
     purchase = models.OneToOneField('Purchase', on_delete=models.CASCADE, verbose_name=_("Purchase"))
     transaction_id = models.CharField(max_length=100, unique=True, verbose_name=_("Transaction ID"))
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Amount"))
     payment_date = models.DateTimeField(default=timezone.now, verbose_name=_("Payment Date"))
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending', verbose_name=_("Status"))
+    payment_method = models.CharField(
+        max_length=20,
+        choices=PAYMENT_METHOD_CHOICES,
+        verbose_name=_("Payment Method"),
+        default='esewa'
+    )
 
     def __str__(self):
         return f"eSewa Payment for {self.purchase} ({self.status})"
