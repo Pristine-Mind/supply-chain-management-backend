@@ -239,3 +239,10 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute=0, hour='*/3')
     },
 }
+
+KHALTI_PUBLIC_KEY = 'aaass'
+KHALTI_SECRET_KEY = 'aa'
+
+# Khalti test credentials
+KHALTI_TEST_MOBILE_NUMBER = '9800000001'
+KHALTI_TEST_PIN = '1234'
