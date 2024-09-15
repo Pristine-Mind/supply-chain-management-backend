@@ -109,3 +109,33 @@ class ChatMessage(models.Model):
     class Meta:
         verbose_name = _("Chat Message")
         verbose_name_plural = _("Chat Messages")
+
+
+class ShippingAddress(models.Model):
+    """
+    Represents the shipping address for a purchase.
+    Fields:
+    - payment: The payment associated with the shipping address.
+    - address_line_1: The first line of the shipping address.
+    - address_line_2: The second line of the shipping address (optional).
+    - city: The city of the shipping address.
+    - state: The state of the shipping address.
+    - postal_code: The postal code of the shipping address.
+    """
+
+    payment = models.OneToOneField(Payment, on_delete=models.CASCADE)
+    address_line_1 = models.CharField(max_length=255)
+    address_line_2 = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    postal_code = models.CharField(max_length=20)
+    country = models.CharField(max_length=100)
+    phone_number = models.CharField(max_length=15)
+
+    def __str__(self):
+        return f"{self.address_line_1}, {self.city}, {self.state}, {self.country}"
+
+    class Meta:
+        verbose_name = _("Shipping Address")
+        verbose_name_plural = _("Shipping Addresses")
+
