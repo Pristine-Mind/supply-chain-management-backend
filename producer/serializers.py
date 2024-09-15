@@ -110,6 +110,7 @@ class ProductSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
     customer_details = CustomerSerializer(source='customer', read_only=True)
+    product_details = ProductSerializer(source='product', read_only=True)
 
     class Meta:
         model = Order
@@ -160,8 +161,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
-    customer_details = CustomerSerializer(source='customer', read_only=True)
-    product_details = ProductSerializer(source='product', read_only=True)
+    order_details = OrderSerializer(source='order', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
 
     class Meta:
         model = Sale
