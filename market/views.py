@@ -8,17 +8,26 @@ from producer.models import MarketplaceProduct
 
 from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer
 from .filters import ChatFilter, BidFilter
+import requests
+from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from .models import Payment
 
 
-class PurchaseViewSet(viewsets.ModelViewSet):
-    queryset = Purchase.objects.all()
-    serializer_class = PurchaseSerializer
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        purchase = serializer.save()
-        return Response(self.get_serializer(purchase).data, status=status.HTTP_201_CREATED)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_purchase(request):
+    """
+    API view to create a purchase and generate the eSewa payment URL.
+    """
+    serializer = PurchaseSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        purchase_data = serializer.save()
+        return Response({
+            'purchase': PurchaseSerializer(purchase_data['purchase']).data,
+            'payment_url': purchase_data['payment_url']
+        }, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class BidViewSet(viewsets.ModelViewSet):
@@ -69,3 +78,38 @@ def highest_bidder(request, product_id):
         )
     else:
         return Response({"is_highest_bidder": False})
+
+
+
+@api_view(['GET'])
+def verify_payment(request):
+    # Get the transaction details from the query parameters
+    transaction_id = request.GET.get('oid')  # eSewa's transaction ID (your transaction ID)
+    ref_id = request.GET.get('refId')        # eSewa's reference ID
+
+    # Fetch the corresponding Payment object using the transaction ID
+    payment = get_object_or_404(Payment, transaction_id=transaction_id)
+
+    # Verify the payment with eSewa
+    verification_url = 'https://uat.esewa.com.np/epay/transrec'
+    payload = {
+        'amt': payment.amount,               # The amount from the Payment model
+        'scd': 'EPAYTEST',                   # eSewa Merchant ID for sandbox, replace with your live merchant ID in production
+        'pid': payment.transaction_id,       # Your transaction ID (same as `oid`)
+        'rid': ref_id                        # eSewa's reference ID (refId)
+    }
+
+    # Send a POST request to eSewa to verify the payment
+    response = requests.post(verification_url, data=payload)
+
+    # Check if the response contains "Success"
+    if 'Success' in response.text:
+        # If the payment is verified, update the Payment status to 'completed'
+        payment.status = 'completed'
+        payment.save()
+        return HttpResponse("Payment Verified and Completed")
+    else:
+        # If the verification failed, update the Payment status to 'failed'
+        payment.status = 'failed'
+        payment.save()
+        return HttpResponse("Payment Verification Failed")
