@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 from producer.models import MarketplaceProduct
 
@@ -28,6 +29,38 @@ class Purchase(models.Model):
     class Meta:
         verbose_name = _("Purchase")
         verbose_name_plural = _("Purchases")
+
+
+class Payment(models.Model):
+    """
+    Represents a payment made by a customer for a purchase through eSewa.
+
+    Fields:
+    - purchase: The associated purchase for which payment is being made.
+    - transaction_id: A unique transaction ID for the payment (generated when payment is initiated).
+    - amount: The total amount paid.
+    - payment_date: The date and time when the payment was made.
+    - status: The status of the payment (e.g., pending, completed, failed).
+    """
+
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    purchase = models.OneToOneField('Purchase', on_delete=models.CASCADE, verbose_name=_("Purchase"))
+    transaction_id = models.CharField(max_length=100, unique=True, verbose_name=_("Transaction ID"))
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Amount"))
+    payment_date = models.DateTimeField(default=timezone.now, verbose_name=_("Payment Date"))
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending', verbose_name=_("Status"))
+
+    def __str__(self):
+        return f"eSewa Payment for {self.purchase} ({self.status})"
+
+    class Meta:
+        verbose_name = _("Payment")
+        verbose_name_plural = _("Payments")
 
 
 class Bid(models.Model):
