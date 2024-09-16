@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+import uuid
 
 
 class Producer(models.Model):
@@ -175,6 +176,7 @@ class Order(models.Model):
         verbose_name_plural = _("Orders")
 
     def save(self, *args, **kwargs):
+        self.order_number = f"{uuid.uuid4().hex} - {self.product.name}"
         self.total_price = self.product.price * self.quantity
         super().save(*args, **kwargs)
 

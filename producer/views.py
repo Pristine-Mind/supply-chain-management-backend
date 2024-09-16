@@ -39,6 +39,7 @@ from .filters import (
     CustomerFilter,
     ProductFilter,
     MarketplaceProductFilter,
+    OrderFilter,
 )
 
 
@@ -94,6 +95,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
+    filterset_class = OrderFilter
 
 
 class SaleViewSet(viewsets.ModelViewSet):
@@ -101,7 +103,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing sale instances.
     """
 
-    queryset = Sale.objects.all()
+    queryset = Sale.objects.all().order_by("-created_at")
     serializer_class = SaleSerializer
     filterset_class = SaleFilter
 
