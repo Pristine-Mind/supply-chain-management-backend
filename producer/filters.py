@@ -1,5 +1,5 @@
 import django_filters
-from .models import Sale, Producer, Customer, Product, MarketplaceProduct
+from .models import Sale, Producer, Customer, Product, MarketplaceProduct, Order
 
 
 class ProducerFilter(django_filters.FilterSet):
@@ -75,4 +75,19 @@ class MarketplaceProductFilter(django_filters.FilterSet):
     def filter_search(self, queryset, name, value):
         return queryset.filter(
             product__name__icontains=value
+        ).distinct()
+
+
+class OrderFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method='filter_search', label="Search")
+    customer = django_filters.NumberFilter(field_name="customer__id", lookup_expr='exact')
+    product = django_filters.NumberFilter(field_name="product__id", lookup_expr='exact')
+
+    class Meta:
+        model = Order
+        fields = ['search']
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            order_number__icontains=value
         ).distinct()
