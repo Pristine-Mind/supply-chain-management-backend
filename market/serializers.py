@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from .models import Purchase, Bid, ChatMessage, Payment
 from producer.models import MarketplaceProduct
+from user.models import UserProfile
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
