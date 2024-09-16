@@ -106,19 +106,6 @@ class SaleViewSet(viewsets.ModelViewSet):
     filterset_class = SaleFilter
 
 
-class LoginAPIView(APIView):
-    def post(self, request):
-        username = request.data.get("username")
-        password = request.data.get("password")
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            token, created = Token.objects.get_or_create(user=user)
-            return Response({"token": token.key})
-        else:
-            return Response({"error": "Invalid Credentials"}, status=status.HTTP_400_BAD_REQUEST)
-
-
 class DashboardAPIView(APIView):
     def get(self, request):
         current_year = timezone.now().year

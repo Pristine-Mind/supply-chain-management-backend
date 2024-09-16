@@ -26,7 +26,6 @@ from producer.views import (
     ProductViewSet,
     OrderViewSet,
     SaleViewSet,
-    LoginAPIView,
     DashboardAPIView,
     UserInfoView,
     TopSalesCustomersView,
@@ -44,6 +43,7 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment
 )
+from user.views import RegisterView, LoginAPIView, LogoutAPIView
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -70,6 +70,7 @@ urlpatterns = [
     path('payment/confirmation/<int:payment_id>/', payment_confirmation, name='payment_confirmation'),
     path('shipping/address/<int:payment_id>/', shipping_address_form, name='shipping_address_form'),
     path('khalti/verify/', verify_khalti_payment, name='verify_khalti_payment'),
+    path('register/', RegisterView.as_view(), name='register'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

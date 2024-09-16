@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     # localapps
     "producer",
     "market",
+    "user",
 ]
 
 MIDDLEWARE = [
