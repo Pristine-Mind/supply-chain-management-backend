@@ -6,28 +6,28 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0006_merge_20240916_0034'),
+        ("market", "0006_merge_20240916_0034"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='bid',
-            name='bid_amount',
-            field=models.FloatField(verbose_name='Bid Amount'),
+            model_name="bid",
+            name="bid_amount",
+            field=models.FloatField(verbose_name="Bid Amount"),
         ),
         migrations.AlterField(
-            model_name='bid',
-            name='max_bid_amount',
-            field=models.FloatField(verbose_name='Maximum Bid Amount'),
+            model_name="bid",
+            name="max_bid_amount",
+            field=models.FloatField(verbose_name="Maximum Bid Amount"),
         ),
         migrations.AlterField(
-            model_name='payment',
-            name='amount',
-            field=models.FloatField(verbose_name='Amount'),
+            model_name="payment",
+            name="amount",
+            field=models.FloatField(verbose_name="Amount"),
         ),
         migrations.AlterField(
-            model_name='purchase',
-            name='purchase_price',
-            field=models.FloatField(verbose_name='Purchase Price'),
+            model_name="purchase",
+            name="purchase_price",
+            field=models.FloatField(verbose_name="Purchase Price"),
         ),
     ]
