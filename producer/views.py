@@ -28,7 +28,7 @@ from .serializers import (
     CustomerSalesSerializer,
     CustomerOrdersSerializer,
     StockListSerializer,
-    MarketplaceProductSerializer
+    MarketplaceProductSerializer,
 )
 from .filters import (
     SaleFilter,
@@ -44,7 +44,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing producer instances.
     """
 
-    queryset = Producer.objects.all().order_by('-created_at')
+    queryset = Producer.objects.all().order_by("-created_at")
     serializer_class = ProducerSerializer
     filterset_class = ProducerFilter
 
@@ -54,7 +54,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing customer instances.
     """
 
-    queryset = Customer.objects.all().order_by('-created_at')
+    queryset = Customer.objects.all().order_by("-created_at")
     serializer_class = CustomerSerializer
     filterset_class = CustomerFilter
 
@@ -64,7 +64,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing product instances.
     """
 
-    queryset = Product.objects.all().order_by('-created_at')
+    queryset = Product.objects.all().order_by("-created_at")
     serializer_class = ProductSerializer
     filterset_class = ProductFilter
 
@@ -79,7 +79,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 {
                     "key": key,
                     "value": value,
-                } for key, value in Product.ProductCategory.choices
+                }
+                for key, value in Product.ProductCategory.choices
             ]
         )
 
@@ -89,7 +90,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing order instances.
     """
 
-    queryset = Order.objects.all().order_by('-created_at')
+    queryset = Order.objects.all().order_by("-created_at")
     serializer_class = OrderSerializer
 
 
@@ -98,7 +99,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing sale instances.
     """
 
-    queryset = Sale.objects.all().order_by('-created_at')
+    queryset = Sale.objects.all().order_by("-created_at")
     serializer_class = SaleSerializer
     filterset_class = SaleFilter
 
@@ -146,18 +147,13 @@ class TopSalesCustomersView(APIView):
     def get(self, request, format=None):
         current_year = timezone.now().year
 
-        top_sales_customers = Sale.objects.filter(
-            sale_date__year=current_year
-        ).annotate(
-            total_sales_amount=ExpressionWrapper(F('sale_price') * F('quantity'), output_field=FloatField())
-        ).values(
-            'order__customer__id',
-            'order__customer__name'
-        ).annotate(
-            total_sales=Sum('total_sales_amount'),
-            name=F('order__customer__name'),
-            id=F('order__customer__id')
-        ).order_by('-total_sales')
+        top_sales_customers = (
+            Sale.objects.filter(sale_date__year=current_year)
+            .annotate(total_sales_amount=ExpressionWrapper(F("sale_price") * F("quantity"), output_field=FloatField()))
+            .values("order__customer__id", "order__customer__name")
+            .annotate(total_sales=Sum("total_sales_amount"), name=F("order__customer__name"), id=F("order__customer__id"))
+            .order_by("-total_sales")
+        )
         sales_serializer = CustomerSalesSerializer(top_sales_customers, many=True)
         return Response(sales_serializer.data, status=status.HTTP_200_OK)
 
@@ -165,11 +161,11 @@ class TopSalesCustomersView(APIView):
 class TopOrdersCustomersView(APIView):
     def get(self, request, format=None):
         current_year = timezone.now().year
-        top_orders_customers = Customer.objects.filter(
-            order__order_date__year=current_year
-        ).annotate(
-            total_orders=Count('order')
-        ).order_by('-total_orders')[:10]
+        top_orders_customers = (
+            Customer.objects.filter(order__order_date__year=current_year)
+            .annotate(total_orders=Count("order"))
+            .order_by("-total_orders")[:10]
+        )
 
         orders_serializer = CustomerOrdersSerializer(top_orders_customers, many=True)
         return Response(orders_serializer.data, status=status.HTTP_200_OK)
@@ -179,7 +175,7 @@ class StockListView(viewsets.ModelViewSet):
     queryset = StockList.objects.filter(is_pushed_to_marketplace=False)
     serializer_class = StockListSerializer
 
-    @action(detail=True, methods=['post'], url_path='push-to-marketplace')
+    @action(detail=True, methods=["post"], url_path="push-to-marketplace")
     def push_to_marketplace(self, request, pk=None):
         try:
             stock_item = self.get_object()
@@ -188,26 +184,20 @@ class StockListView(viewsets.ModelViewSet):
 
         if MarketplaceProduct.objects.filter(product=stock_item.product).exists():
             return Response(
-                {
-                    "error": f"Product '{stock_item.product.name}' is already listed in the marketplace."
-                },
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": f"Product '{stock_item.product.name}' is already listed in the marketplace."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         MarketplaceProduct.objects.create(
-            product=stock_item.product,
-            listed_price=stock_item.product.price,
-            is_available=True
+            product=stock_item.product, listed_price=stock_item.product.price, is_available=True
         )
 
         # Update the product to have moved to marketplace
         stock_item.is_pushed_to_marketplace = True
-        stock_item.save(update_fields=['is_pushed_to_marketplace'])
+        stock_item.save(update_fields=["is_pushed_to_marketplace"])
         return Response(
-            {
-                "message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."
-            },
-            status=status.HTTP_200_OK
+            {"message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."},
+            status=status.HTTP_200_OK,
         )
 
 

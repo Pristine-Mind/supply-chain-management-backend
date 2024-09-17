@@ -43,7 +43,7 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment
 )
-from user.views import RegisterView, LoginAPIView, LogoutAPIView
+from user.views import RegisterView, LoginAPIView
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)

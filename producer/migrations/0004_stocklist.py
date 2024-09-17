@@ -7,16 +7,21 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0003_alter_order_total_price'),
+        ("producer", "0003_alter_order_total_price"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='StockList',
+            name="StockList",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('moved_date', models.DateTimeField(auto_now_add=True, verbose_name='Moved Date')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='producer.product', verbose_name='Product')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("moved_date", models.DateTimeField(auto_now_add=True, verbose_name="Moved Date")),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="producer.product", verbose_name="Product"
+                    ),
+                ),
             ],
         ),
     ]

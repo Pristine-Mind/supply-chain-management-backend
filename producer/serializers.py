@@ -53,14 +53,12 @@ class CustomerSerializer(serializers.ModelSerializer):
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'created_at']
+        fields = ["id", "image", "alt_text", "created_at"]
 
 
 class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
-    uploaded_images = serializers.ListField(
-        child=serializers.ImageField(), write_only=True, required=False
-    )
+    uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
 
     class Meta:
         model = Product
@@ -91,7 +89,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        uploaded_images = validated_data.pop('uploaded_images', [])
+        uploaded_images = validated_data.pop("uploaded_images", [])
         product = super().create(validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -99,7 +97,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return product
 
     def update(self, instance, validated_data):
-        uploaded_images = validated_data.pop('uploaded_images', [])
+        uploaded_images = validated_data.pop("uploaded_images", [])
         product = super().update(instance, validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -109,8 +107,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
-    customer_details = CustomerSerializer(source='customer', read_only=True)
-    product_details = ProductSerializer(source='product', read_only=True)
+    customer_details = CustomerSerializer(source="customer", read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
     order_number = serializers.CharField(read_only=True)
 
     class Meta:
@@ -162,8 +160,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
-    order_details = OrderSerializer(source='order', read_only=True)
-    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    order_details = OrderSerializer(source="order", read_only=True)
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
 
     class Meta:
         model = Sale
@@ -201,7 +199,7 @@ class CustomerSalesSerializer(serializers.Serializer):
     id = serializers.IntegerField()
 
     class Meta:
-        fields = ['id', 'name', 'total_sales']
+        fields = ["id", "name", "total_sales"]
 
 
 class CustomerOrdersSerializer(serializers.ModelSerializer):
@@ -209,20 +207,20 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'total_orders']
+        fields = ["id", "name", "total_orders"]
 
 
 class StockListSerializer(serializers.ModelSerializer):
-    product_details = ProductSerializer(source='product', read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
 
     class Meta:
         model = StockList
-        fields = ['product', 'moved_date', 'product_details', 'id', 'is_pushed_to_marketplace']
+        fields = ["product", "moved_date", "product_details", "id", "is_pushed_to_marketplace"]
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
-    product_details = ProductSerializer(source='product', read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
 
     class Meta:
         model = MarketplaceProduct
-        fields = ['product', 'listed_price', 'listed_date', 'is_available', 'id', 'product_details']
+        fields = ["product", "listed_price", "listed_date", "is_available", "id", "product_details"]

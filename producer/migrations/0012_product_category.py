@@ -6,13 +6,32 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0011_stocklist_is_pushed_to_marketplace'),
+        ("producer", "0011_stocklist_is_pushed_to_marketplace"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='product',
-            name='category',
-            field=models.CharField(choices=[('EL', 'Electronics'), ('FA', 'Fashion & Clothing'), ('HB', 'Health & Beauty'), ('HK', 'Home & Kitchen'), ('GR', 'Groceries & Gourmet Food'), ('SO', 'Sports & Outdoors'), ('TK', 'Toys, Kids & Baby Products'), ('BM', 'Books, Music & Movies'), ('AI', 'Automotive & Industrial'), ('PS', 'Pet Supplies'), ('OS', 'Office & Stationery'), ('HF', 'Health & Fitness'), ('JA', 'Jewelry & Accessories'), ('GF', 'Gifts & Flowers')], default='EL', max_length=2),
+            model_name="product",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("EL", "Electronics"),
+                    ("FA", "Fashion & Clothing"),
+                    ("HB", "Health & Beauty"),
+                    ("HK", "Home & Kitchen"),
+                    ("GR", "Groceries & Gourmet Food"),
+                    ("SO", "Sports & Outdoors"),
+                    ("TK", "Toys, Kids & Baby Products"),
+                    ("BM", "Books, Music & Movies"),
+                    ("AI", "Automotive & Industrial"),
+                    ("PS", "Pet Supplies"),
+                    ("OS", "Office & Stationery"),
+                    ("HF", "Health & Fitness"),
+                    ("JA", "Jewelry & Accessories"),
+                    ("GF", "Gifts & Flowers"),
+                ],
+                default="EL",
+                max_length=2,
+            ),
         ),
     ]

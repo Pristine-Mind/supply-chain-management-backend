@@ -89,29 +89,26 @@ class Product(models.Model):
     - updated_at: Timestamp indicating the last update to the product's details.
     - rate: Unit price of each product
     """
+
     class ProductCategory(models.TextChoices):
-        ELECTRONICS = 'EL', _('Electronics')
-        FASHION = 'FA', _('Fashion & Clothing')
-        HEALTH_BEAUTY = 'HB', _('Health & Beauty')
-        HOME_KITCHEN = 'HK', _('Home & Kitchen')
-        GROCERIES = 'GR', _('Groceries & Gourmet Food')
-        SPORTS_OUTDOORS = 'SO', _('Sports & Outdoors')
-        TOYS_KIDS_BABY = 'TK', _('Toys, Kids & Baby Products')
-        BOOKS_MUSIC_MOVIES = 'BM', _('Books, Music & Movies')
-        AUTOMOTIVE_INDUSTRIAL = 'AI', _('Automotive & Industrial')
-        PET_SUPPLIES = 'PS', _('Pet Supplies')
-        OFFICE_STATIONERY = 'OS', _('Office & Stationery')
-        HEALTH_FITNESS = 'HF', _('Health & Fitness')
-        JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
-        GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
+        ELECTRONICS = "EL", _("Electronics")
+        FASHION = "FA", _("Fashion & Clothing")
+        HEALTH_BEAUTY = "HB", _("Health & Beauty")
+        HOME_KITCHEN = "HK", _("Home & Kitchen")
+        GROCERIES = "GR", _("Groceries & Gourmet Food")
+        SPORTS_OUTDOORS = "SO", _("Sports & Outdoors")
+        TOYS_KIDS_BABY = "TK", _("Toys, Kids & Baby Products")
+        BOOKS_MUSIC_MOVIES = "BM", _("Books, Music & Movies")
+        AUTOMOTIVE_INDUSTRIAL = "AI", _("Automotive & Industrial")
+        PET_SUPPLIES = "PS", _("Pet Supplies")
+        OFFICE_STATIONERY = "OS", _("Office & Stationery")
+        HEALTH_FITNESS = "HF", _("Health & Fitness")
+        JEWELRY_ACCESSORIES = "JA", _("Jewelry & Accessories")
+        GIFTS_FLOWERS = "GF", _("Gifts & Flowers")
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"))
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
-    category = models.CharField(
-        max_length=2,
-        choices=ProductCategory.choices,
-        default=ProductCategory.ELECTRONICS
-    )
+    category = models.CharField(max_length=2, choices=ProductCategory.choices, default=ProductCategory.ELECTRONICS)
     description = models.TextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"))
     price = models.FloatField(verbose_name=_("Price"))
@@ -149,6 +146,7 @@ class Order(models.Model):
     - created_at: Timestamp indicating when the order was created.
     - updated_at: Timestamp indicating the last update to the order.
     """
+
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         APPROVED = "approved", _("Approved")
@@ -197,6 +195,7 @@ class Sale(models.Model):
     - created_at: Timestamp indicating when the sale was recorded.
     - updated_at: Timestamp indicating the last update to the sale details.
     """
+
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         APPROVED = "approved", _("Approved")
@@ -211,16 +210,9 @@ class Sale(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     payment_status = models.CharField(
-        max_length=50,
-        choices=Status.choices,
-        default=Status.PENDING,
-        verbose_name=_("Payment Status")
+        max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Payment Status")
     )
-    payment_due_date = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_("Payment Due Date")
-    )
+    payment_due_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Payment Due Date"))
 
     def __str__(self):
         return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
@@ -245,12 +237,10 @@ class StockList(models.Model):
     """
     Represents a list of products that have been moved to the stock list due to threshold conditions.
     """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     moved_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Moved Date"))
-    is_pushed_to_marketplace = models.BooleanField(
-        verbose_name=_('Is Stock moved to marketplace'),
-        default=False
-    )
+    is_pushed_to_marketplace = models.BooleanField(verbose_name=_("Is Stock moved to marketplace"), default=False)
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
@@ -266,6 +256,7 @@ class MarketplaceProduct(models.Model):
     - listed_date: The date when the product was listed in the marketplace.
     - is_available: Indicates whether the product is still available for sale.
     """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     listed_price = models.FloatField(verbose_name=_("Listed Price"))
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
@@ -284,8 +275,9 @@ class ProductImage(models.Model):
     """
     Represents multiple images for a product.
     """
-    product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE)
-    image = models.ImageField(upload_to='product_images/')
+
+    product = models.ForeignKey(Product, related_name="images", on_delete=models.CASCADE)
+    image = models.ImageField(upload_to="product_images/")
     alt_text = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Alternative Text"))
     created_at = models.DateTimeField(auto_now_add=True)
 

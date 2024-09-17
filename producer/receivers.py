@@ -9,8 +9,4 @@ def push_to_marketplace(sender, instance, **kwargs):
     """
     Automatically list product in marketplace when added to stocklist.
     """
-    MarketplaceProduct.objects.create(
-        product=instance.product,
-        listed_price=instance.product.price,
-        is_available=True
-    )
+    MarketplaceProduct.objects.create(product=instance.product, listed_price=instance.product.price, is_available=True)
