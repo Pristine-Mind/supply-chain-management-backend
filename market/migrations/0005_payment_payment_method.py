@@ -6,13 +6,18 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0004_payment'),
+        ("market", "0004_payment"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='payment',
-            name='payment_method',
-            field=models.CharField(choices=[('esewa', 'eSewa'), ('khalti', 'Khalti')], default='esewa', max_length=20, verbose_name='Payment Method'),
+            model_name="payment",
+            name="payment_method",
+            field=models.CharField(
+                choices=[("esewa", "eSewa"), ("khalti", "Khalti")],
+                default="esewa",
+                max_length=20,
+                verbose_name="Payment Method",
+            ),
         ),
     ]

@@ -17,30 +17,30 @@ from .models import Payment
 from .forms import ShippingAddressForm
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_purchase(request):
     """
     API view to create a purchase and generate the payment URL for either eSewa or Khalti.
     """
-    serializer = PurchaseSerializer(data=request.data, context={'request': request})
+    serializer = PurchaseSerializer(data=request.data, context={"request": request})
     if serializer.is_valid():
         purchase_data = serializer.save()
 
         # Return the appropriate payment URL based on the payment method
-        payment_method = request.data.get('payment_method', 'esewa')  # Default to eSewa if not provided
+        payment_method = request.data.get("payment_method", "esewa")  # Default to eSewa if not provided
 
-        if payment_method == 'esewa':
-            payment_url = purchase_data.get('payment_url')
-        elif payment_method == 'khalti':
-            payment_url = purchase_data.get('khalti_payment_url')
+        if payment_method == "esewa":
+            payment_url = purchase_data.get("payment_url")
+        elif payment_method == "khalti":
+            payment_url = purchase_data.get("khalti_payment_url")
         else:
-            return Response({'error': 'Invalid payment method selected.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid payment method selected."}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({
-            'purchase': PurchaseSerializer(purchase_data['purchase']).data,
-            'payment_url': payment_url
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {"purchase": PurchaseSerializer(purchase_data["purchase"]).data, "payment_url": payment_url},
+            status=status.HTTP_201_CREATED,
+        )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -71,7 +71,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(chat_message).data, status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def highest_bidder(request, product_id):
     """
@@ -82,108 +82,99 @@ def highest_bidder(request, product_id):
     except MarketplaceProduct.DoesNotExist:
         return Response({"error": "Product not found"}, status=404)
 
-    highest_bid = Bid.objects.filter(product=product).order_by('-max_bid_amount').first()
+    highest_bid = Bid.objects.filter(product=product).order_by("-max_bid_amount").first()
 
     if highest_bid and highest_bid.bidder == request.user:
-        return Response(
-            {
-                "is_highest_bidder": True,
-                "max_bid_amount": highest_bid.max_bid_amount
-            }
-        )
+        return Response({"is_highest_bidder": True, "max_bid_amount": highest_bid.max_bid_amount})
     else:
         return Response({"is_highest_bidder": False})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def verify_payment(request):
     # Get the transaction details from the query parameters
-    transaction_id = request.GET.get('oid')  # eSewa's transaction ID (your transaction ID)
-    ref_id = request.GET.get('refId')        # eSewa's reference ID
+    transaction_id = request.GET.get("oid")  # eSewa's transaction ID (your transaction ID)
+    ref_id = request.GET.get("refId")  # eSewa's reference ID
 
     # Fetch the corresponding Payment object using the transaction ID
     payment = get_object_or_404(Payment, transaction_id=transaction_id)
 
     # Verify the payment with eSewa
-    verification_url = 'https://uat.esewa.com.np/epay/transrec'
+    verification_url = "https://uat.esewa.com.np/epay/transrec"
     payload = {
-        'amt': payment.amount,               # The amount from the Payment model
-        'scd': 'EPAYTEST',                   # eSewa Merchant ID for sandbox, replace with your live merchant ID in production
-        'pid': payment.transaction_id,       # Your transaction ID (same as `oid`)
-        'rid': ref_id                        # eSewa's reference ID (refId)
+        "amt": payment.amount,  # The amount from the Payment model
+        "scd": "EPAYTEST",  # eSewa Merchant ID for sandbox, replace with your live merchant ID in production
+        "pid": payment.transaction_id,  # Your transaction ID (same as `oid`)
+        "rid": ref_id,  # eSewa's reference ID (refId)
     }
 
     # Send a POST request to eSewa to verify the payment
     response = requests.post(verification_url, data=payload)
 
     # Check if the response contains "Success"
-    if 'Success' in response.text:
+    if "Success" in response.text:
         # If the payment is verified, update the Payment status to 'completed'
-        payment.status = 'completed'
+        payment.status = "completed"
         payment.save()
-        return redirect('payment_confirmation', payment_id=payment.id)
+        return redirect("payment_confirmation", payment_id=payment.id)
     else:
         # If the verification failed, update the Payment status to 'failed'
-        payment.status = 'failed'
+        payment.status = "failed"
         payment.save()
         return HttpResponse("Payment Verification Failed")
 
 
 def payment_confirmation(request, payment_id):
     payment = get_object_or_404(Payment, id=payment_id)
-    if payment.status == 'completed':
-        context = {
-            'payment': payment,
-            'message': "Your payment was successful. Please proceed to the shipping details."
-        }
-        return render(request, 'payment_confirmation.html', context)
+    if payment.status == "completed":
+        context = {"payment": payment, "message": "Your payment was successful. Please proceed to the shipping details."}
+        return render(request, "payment_confirmation.html", context)
     else:
         return HttpResponse("Payment not verified")
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 def shipping_address_form(request, payment_id):
     payment = get_object_or_404(Payment, id=payment_id)
 
-    if request.method == 'POST':
+    if request.method == "POST":
         form = ShippingAddressForm(request.POST)
         if form.is_valid():
             shipping_address = form.save(commit=False)
             shipping_address.payment = payment
             shipping_address.save()
-            return render(request, 'shipping_address_form.html', {
-                'form': form,
-                'payment': payment,
-                'order_success': True,
-            })
+            return render(
+                request,
+                "shipping_address_form.html",
+                {
+                    "form": form,
+                    "payment": payment,
+                    "order_success": True,
+                },
+            )
     else:
         form = ShippingAddressForm()
 
-    return render(request, 'shipping_address_form.html', {'form': form, 'payment': payment})
+    return render(request, "shipping_address_form.html", {"form": form, "payment": payment})
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def verify_khalti_payment(request):
     """
     API view to verify Khalti payment using the payment token.
     """
-    token = request.data.get('token')
-    amount = request.data.get('amount')  # Amount in paisa (1 NPR = 100 paisa)
-    transaction_id = request.data.get('transaction_id')
+    token = request.data.get("token")
+    amount = request.data.get("amount")  # Amount in paisa (1 NPR = 100 paisa)
+    transaction_id = request.data.get("transaction_id")
 
     if not token or not amount or not transaction_id:
-        return Response({'error': 'Missing token, amount, or transaction ID.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Missing token, amount, or transaction ID."}, status=status.HTTP_400_BAD_REQUEST)
 
     # Khalti verification API URL
     url = "https://khalti.com/api/v2/payment/verify/"
-    payload = {
-        'token': token,
-        'amount': amount
-    }
-    headers = {
-        'Authorization': f'Key {settings.KHALTI_SECRET_KEY}'
-    }
+    payload = {"token": token, "amount": amount}
+    headers = {"Authorization": f"Key {settings.KHALTI_SECRET_KEY}"}
 
     # Send a POST request to Khalti's verification API
     response = requests.post(url, data=payload, headers=headers)
@@ -191,15 +182,15 @@ def verify_khalti_payment(request):
         # If the payment is successful, update the payment status
         try:
             payment = Payment.objects.get(transaction_id=transaction_id)
-            payment.status = 'completed'
+            payment.status = "completed"
             payment.save()
 
-            return redirect('payment_confirmation', payment_id=payment.id)
+            return redirect("payment_confirmation", payment_id=payment.id)
         except Payment.DoesNotExist:
-            payment.status = 'failed'
+            payment.status = "failed"
             payment.save()
-            return Response({'error': 'Payment not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Payment not found."}, status=status.HTTP_404_NOT_FOUND)
     else:
-        payment.status = 'failed'
+        payment.status = "failed"
         payment.save()
-        return Response({'error': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)

@@ -11,52 +11,82 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('producer', '0005_marketplaceproduct'),
+        ("producer", "0005_marketplaceproduct"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Purchase',
+            name="Purchase",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('quantity', models.PositiveIntegerField(verbose_name='Quantity')),
-                ('purchase_price', models.DecimalField(decimal_places=2, max_digits=10, verbose_name='Purchase Price')),
-                ('purchase_date', models.DateTimeField(auto_now_add=True, verbose_name='Purchase Date')),
-                ('buyer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='Buyer')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='producer.marketplaceproduct', verbose_name='Product')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("quantity", models.PositiveIntegerField(verbose_name="Quantity")),
+                ("purchase_price", models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Purchase Price")),
+                ("purchase_date", models.DateTimeField(auto_now_add=True, verbose_name="Purchase Date")),
+                (
+                    "buyer",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="Buyer"
+                    ),
+                ),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="producer.marketplaceproduct", verbose_name="Product"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Purchase',
-                'verbose_name_plural': 'Purchases',
+                "verbose_name": "Purchase",
+                "verbose_name_plural": "Purchases",
             },
         ),
         migrations.CreateModel(
-            name='ChatMessage',
+            name="ChatMessage",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('message', models.TextField(verbose_name='Message')),
-                ('timestamp', models.DateTimeField(auto_now_add=True, verbose_name='Timestamp')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='producer.marketplaceproduct', verbose_name='Product')),
-                ('sender', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='Sender')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("message", models.TextField(verbose_name="Message")),
+                ("timestamp", models.DateTimeField(auto_now_add=True, verbose_name="Timestamp")),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="producer.marketplaceproduct", verbose_name="Product"
+                    ),
+                ),
+                (
+                    "sender",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="Sender"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Chat Message',
-                'verbose_name_plural': 'Chat Messages',
+                "verbose_name": "Chat Message",
+                "verbose_name_plural": "Chat Messages",
             },
         ),
         migrations.CreateModel(
-            name='Bid',
+            name="Bid",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('bid_amount', models.DecimalField(decimal_places=2, max_digits=10, verbose_name='Bid Amount')),
-                ('bid_date', models.DateTimeField(auto_now_add=True, verbose_name='Bid Date')),
-                ('bid_end_date', models.DateTimeField(verbose_name='Bid End Date')),
-                ('bidder', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='Bidder')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='producer.marketplaceproduct', verbose_name='Product')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("bid_amount", models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Bid Amount")),
+                ("bid_date", models.DateTimeField(auto_now_add=True, verbose_name="Bid Date")),
+                ("bid_end_date", models.DateTimeField(verbose_name="Bid End Date")),
+                (
+                    "bidder",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="Bidder"
+                    ),
+                ),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="producer.marketplaceproduct", verbose_name="Product"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Bid',
-                'verbose_name_plural': 'Bids',
+                "verbose_name": "Bid",
+                "verbose_name_plural": "Bids",
             },
         ),
     ]
