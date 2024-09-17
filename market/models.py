@@ -17,10 +17,11 @@ class Purchase(models.Model):
     - purchase_price: The price at which the product was purchased.
     - purchase_date: The date of the purchase.
     """
+
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Buyer"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
     quantity = models.PositiveIntegerField(verbose_name=_("Quantity"))
-    purchase_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Purchase Price"))
+    purchase_price = models.FloatField(verbose_name=_("Purchase Price"))
     purchase_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Purchase Date"))
 
     def __str__(self):
@@ -44,25 +45,22 @@ class Payment(models.Model):
     """
 
     PAYMENT_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
     ]
     PAYMENT_METHOD_CHOICES = [
-        ('esewa', 'eSewa'),
-        ('khalti', 'Khalti'),
+        ("esewa", "eSewa"),
+        ("khalti", "Khalti"),
     ]
 
-    purchase = models.OneToOneField('Purchase', on_delete=models.CASCADE, verbose_name=_("Purchase"))
+    purchase = models.OneToOneField("Purchase", on_delete=models.CASCADE, verbose_name=_("Purchase"))
     transaction_id = models.CharField(max_length=100, unique=True, verbose_name=_("Transaction ID"))
-    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Amount"))
+    amount = models.FloatField(verbose_name=_("Amount"))
     payment_date = models.DateTimeField(default=timezone.now, verbose_name=_("Payment Date"))
-    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending', verbose_name=_("Status"))
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default="pending", verbose_name=_("Status"))
     payment_method = models.CharField(
-        max_length=20,
-        choices=PAYMENT_METHOD_CHOICES,
-        verbose_name=_("Payment Method"),
-        default='esewa'
+        max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name=_("Payment Method"), default="esewa"
     )
 
     def __str__(self):
@@ -87,8 +85,8 @@ class Bid(models.Model):
 
     bidder = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Bidder"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
-    bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Bid Amount"))
-    max_bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Maximum Bid Amount"))
+    bid_amount = models.FloatField(verbose_name=_("Bid Amount"))
+    max_bid_amount = models.FloatField(verbose_name=_("Maximum Bid Amount"))
     bid_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Bid Date"))
 
     def __str__(self):
@@ -108,6 +106,7 @@ class ChatMessage(models.Model):
     - message: The content of the message.
     - timestamp: The time the message was sent.
     """
+
     sender = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
     message = models.TextField(verbose_name=_("Message"))
@@ -148,4 +147,3 @@ class ShippingAddress(models.Model):
     class Meta:
         verbose_name = _("Shipping Address")
         verbose_name_plural = _("Shipping Addresses")
-
