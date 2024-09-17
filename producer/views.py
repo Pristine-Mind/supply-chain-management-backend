@@ -1,10 +1,6 @@
-from django.contrib.auth import authenticate
-from django.db.models.functions import Coalesce, Cast
-
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -48,7 +44,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing producer instances.
     """
 
-    queryset = Producer.objects.all()
+    queryset = Producer.objects.all().order_by('-created_at')
     serializer_class = ProducerSerializer
     filterset_class = ProducerFilter
 
@@ -58,7 +54,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing customer instances.
     """
 
-    queryset = Customer.objects.all()
+    queryset = Customer.objects.all().order_by('-created_at')
     serializer_class = CustomerSerializer
     filterset_class = CustomerFilter
 
@@ -68,7 +64,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing product instances.
     """
 
-    queryset = Product.objects.all()
+    queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
     filterset_class = ProductFilter
 
@@ -93,7 +89,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing order instances.
     """
 
-    queryset = Order.objects.all()
+    queryset = Order.objects.all().order_by('-created_at')
     serializer_class = OrderSerializer
 
 
@@ -102,7 +98,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing sale instances.
     """
 
-    queryset = Sale.objects.all()
+    queryset = Sale.objects.all().order_by('-created_at')
     serializer_class = SaleSerializer
     filterset_class = SaleFilter
 
