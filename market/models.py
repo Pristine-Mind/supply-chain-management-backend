@@ -20,7 +20,7 @@ class Purchase(models.Model):
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Buyer"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
     quantity = models.PositiveIntegerField(verbose_name=_("Quantity"))
-    purchase_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Purchase Price"))
+    purchase_price = models.FloatField(verbose_name=_("Purchase Price"))
     purchase_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Purchase Date"))
 
     def __str__(self):
@@ -55,7 +55,7 @@ class Payment(models.Model):
 
     purchase = models.OneToOneField('Purchase', on_delete=models.CASCADE, verbose_name=_("Purchase"))
     transaction_id = models.CharField(max_length=100, unique=True, verbose_name=_("Transaction ID"))
-    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Amount"))
+    amount = models.FloatField(verbose_name=_("Amount"))
     payment_date = models.DateTimeField(default=timezone.now, verbose_name=_("Payment Date"))
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending', verbose_name=_("Status"))
     payment_method = models.CharField(
@@ -87,8 +87,8 @@ class Bid(models.Model):
 
     bidder = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Bidder"))
     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, verbose_name=_("Product"))
-    bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Bid Amount"))
-    max_bid_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Maximum Bid Amount"))
+    bid_amount = models.FloatField(verbose_name=_("Bid Amount"))
+    max_bid_amount = models.FloatField(verbose_name=_("Maximum Bid Amount"))
     bid_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Bid Date"))
 
     def __str__(self):
@@ -148,4 +148,3 @@ class ShippingAddress(models.Model):
     class Meta:
         verbose_name = _("Shipping Address")
         verbose_name_plural = _("Shipping Addresses")
-

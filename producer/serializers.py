@@ -195,11 +195,12 @@ class SaleSerializer(serializers.ModelSerializer):
         return data
 
 
-class CustomerSalesSerializer(serializers.ModelSerializer):
-    total_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+class CustomerSalesSerializer(serializers.Serializer):
+    total_sales = serializers.FloatField()
+    name = serializers.CharField()
+    id = serializers.IntegerField()
 
     class Meta:
-        model = Customer
         fields = ['id', 'name', 'total_sales']
 
 
