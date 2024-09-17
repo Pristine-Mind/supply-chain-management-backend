@@ -58,8 +58,8 @@ class Customer(models.Model):
     email = models.EmailField(verbose_name=_("Email Address"))
     billing_address = models.TextField(verbose_name=_("Billing Address"))
     shipping_address = models.TextField(verbose_name=_("Shipping Address"))
-    credit_limit = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name=_("Credit Limit"))
-    current_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name=_("Current Balance"))
+    credit_limit = models.FloatField(default=0.00, verbose_name=_("Credit Limit"))
+    current_balance = models.FloatField(default=0.00, verbose_name=_("Current Balance"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
 
@@ -114,8 +114,8 @@ class Product(models.Model):
     )
     description = models.TextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"))
-    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Price"))
-    cost_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Cost Price"))
+    price = models.FloatField(verbose_name=_("Price"))
+    cost_price = models.FloatField(verbose_name=_("Cost Price"))
     stock = models.IntegerField(verbose_name=_("Stock Quantity"))
     reorder_level = models.IntegerField(default=10, verbose_name=_("Reorder Level"))
     is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
@@ -163,7 +163,7 @@ class Order(models.Model):
     status = models.CharField(max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Order Status"))
     order_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Order Date"))
     delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivery Date"))
-    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Total Price"), null=True, blank=True)
+    total_price = models.FloatField(verbose_name=_("Total Price"), null=True, blank=True)
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
@@ -206,7 +206,7 @@ class Sale(models.Model):
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, verbose_name=_("Order"))
     quantity = models.IntegerField(verbose_name=_("Quantity Sold"))
-    sale_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Sale Price"))
+    sale_price = models.FloatField(verbose_name=_("Sale Price"))
     sale_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Sale Date"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
@@ -267,7 +267,7 @@ class MarketplaceProduct(models.Model):
     - is_available: Indicates whether the product is still available for sale.
     """
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
-    listed_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Listed Price"))
+    listed_price = models.FloatField(verbose_name=_("Listed Price"))
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
     bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"))

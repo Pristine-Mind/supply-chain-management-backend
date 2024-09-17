@@ -11,7 +11,7 @@ class UserFactory(factory.django.DjangoModelFactory):
         model = User
 
     username = factory.Sequence(lambda n: f"user_{n}")
-    password = factory.PostGenerationMethodCall('set_password', 'password')
+    password = factory.PostGenerationMethodCall("set_password", "password")
 
 
 class MarketplaceProductFactory(factory.django.DjangoModelFactory):
@@ -21,7 +21,7 @@ class MarketplaceProductFactory(factory.django.DjangoModelFactory):
     product = factory.SubFactory(ProductFactory)
     listed_price = 120.00
     is_available = True
-    bid_end_date = factory.Faker('date_time_this_year')
+    bid_end_date = factory.Faker("date_time_this_year")
 
 
 class PurchaseFactory(factory.django.DjangoModelFactory):
