@@ -215,3 +215,61 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceProduct.objects.filter(is_available=True)
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
+
+
+class StatsAPIView(APIView):
+    """
+    API to provide sales statistics with optional filtering.
+    """
+
+    def get(self, request, *args, **kwargs):
+        # Get filter parameters from the query
+        location = request.query_params.get('location', None)
+        category = request.query_params.get('category', None)
+        start_date = request.query_params.get('start_date', None)
+        end_date = request.query_params.get('end_date', None)
+
+        sales_query = Sale.objects.all()
+        if location:
+            sales_query = sales_query.filter(order__customer__city=location)
+        if category:
+            sales_query = sales_query.filter(order__product__category=category)
+        if start_date and end_date:
+            try:
+                start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d")
+                end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d")
+                sales_query = sales_query.filter(sale_date__gte=start_date, sale_date__lte=end_date)
+            except ValueError:
+                pass
+        total_products_sold = sales_query.aggregate(total=Sum('quantity'))['total']
+        total_revenue = sales_query.aggregate(revenue=Sum('sale_price'))['revenue']
+        top_customers = (
+            sales_query.values('order__customer__name', 'order__customer__billing_address')
+            .annotate(total_spent=Sum('sale_price'))
+            .order_by('-total_spent')[:5]
+        )
+        top_products = (
+            sales_query.values('order__product__name')
+            .annotate(total_sold=Sum('quantity'))
+            .order_by('-total_sold')[:5]
+        )
+        top_categories = (
+            sales_query.values('order__product__category')
+            .annotate(total_sold=Sum('quantity'))
+            .order_by('-total_sold')[:5]
+        )
+        monthly_sales = (
+            sales_query.annotate(month=TruncMonth('sale_date'))
+            .values('month')
+            .annotate(total_sold=Sum('quantity'))
+            .order_by('month')
+        )
+        data = {
+            'total_products_sold': total_products_sold,
+            'total_revenue': total_revenue,
+            'top_customers': list(top_customers),
+            'top_products': list(top_products),
+            'top_categories': list(top_categories),
+            'monthly_sales': list(monthly_sales),
+        }
+        return Response(data)
