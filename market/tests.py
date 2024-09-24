@@ -2,7 +2,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .factories import UserFactory, MarketplaceProductFactory, PurchaseFactory, BidFactory, ChatMessageFactory
-from .models import Purchase, Bid, ChatMessage
+from .models import Purchase, Bid, ChatMessage, MarketplaceUserProduct
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 
 class PurchaseAPITestCase(APITestCase):
@@ -79,5 +80,29 @@ class ChatAPITestCase(APITestCase):
         url = "/api/v1/chats/"
         response = self.client.get(url, format="json")
 
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+
+
+class MarketplaceUserProductTests(APITestCase):
+
+    def setUp(self):
+        image = SimpleUploadedFile("test_image.jpg", b"file_content", content_type="image/jpeg")
+
+        self.product_data = {
+            'name': 'Test Product',
+            'description': 'This is a test product.',
+            'price': '10.00',
+            'stock': 100,
+            'category': 'EL',
+            'is_verified': True,
+            'is_sold': False,
+            'image': image,
+        }
+
+    def test_list_user_products(self):
+        MarketplaceUserProduct.objects.create(**self.product_data)
+        url = '/api/v1/marketplace-user-products/'
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)

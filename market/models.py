@@ -147,3 +147,44 @@ class ShippingAddress(models.Model):
     class Meta:
         verbose_name = _("Shipping Address")
         verbose_name_plural = _("Shipping Addresses")
+
+
+class MarketplaceUserProduct(models.Model):
+    class ProductCategory(models.TextChoices):
+        ELECTRONICS = 'EL', _('Electronics')
+        FASHION = 'FA', _('Fashion & Clothing')
+        HEALTH_BEAUTY = 'HB', _('Health & Beauty')
+        HOME_KITCHEN = 'HK', _('Home & Kitchen')
+        GROCERIES = 'GR', _('Groceries & Gourmet Food')
+        SPORTS_OUTDOORS = 'SO', _('Sports & Outdoors')
+        TOYS_KIDS_BABY = 'TK', _('Toys, Kids & Baby Products')
+        BOOKS_MUSIC_MOVIES = 'BM', _('Books, Music & Movies')
+        AUTOMOTIVE_INDUSTRIAL = 'AI', _('Automotive & Industrial')
+        PET_SUPPLIES = 'PS', _('Pet Supplies')
+        OFFICE_STATIONERY = 'OS', _('Office & Stationery')
+        HEALTH_FITNESS = 'HF', _('Health & Fitness')
+        JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
+        GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
+
+    name = models.CharField(_("Name"), max_length=255)
+    description = models.TextField(_("Description"))
+    price = models.DecimalField(_("Price"), max_digits=10, decimal_places=2)
+    stock = models.IntegerField(_("Stock"))
+    category = models.CharField(
+        max_length=2,
+        choices=ProductCategory.choices,
+        default=ProductCategory.ELECTRONICS,
+        verbose_name=_("Category")
+    )
+    created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
+    image = models.ImageField(_("Image"), upload_to='marketplace/products/', null=True, blank=True)
+    is_verified = models.BooleanField(_("Is Verified"), default=False)
+    is_sold = models.BooleanField(_("Is Sold"), default=False)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = _("Marketplace User Product")
+        verbose_name_plural = _("Marketplace User Products")
