@@ -11,9 +11,9 @@ from rest_framework.decorators import api_view, permission_classes
 
 from market.models import Bid, ChatMessage
 from producer.models import MarketplaceProduct
-from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer
+from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer, MarketplaceUserProductSerializer
 from .filters import ChatFilter, BidFilter
-from .models import Payment
+from .models import Payment, MarketplaceUserProduct
 from .forms import ShippingAddressForm
 
 
@@ -194,3 +194,24 @@ def verify_khalti_payment(request):
         payment.status = "failed"
         payment.save()
         return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
+    queryset = MarketplaceUserProduct.objects.filter(is_sold=False, is_verified=True)
+    serializer_class = MarketplaceUserProductSerializer
+
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {
+                "message": "Update action is not allowed."
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {
+                "message": "Delete action is not allowed."
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
