@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 
 from rest_framework import serializers
 
-from .models import Purchase, Bid, ChatMessage, Payment
+from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
 from producer.models import MarketplaceProduct
 
 
@@ -209,3 +209,19 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
 
         return chat_message
+
+
+class MarketplaceUserProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarketplaceUserProduct
+        fields = '__all__'
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(_("Price must be greater than zero."))
+        return value
+
+    def validate_stock(self, value):
+        if value < 0:
+            raise serializers.ValidationError(_("Stock cannot be negative."))
+        return value

@@ -42,7 +42,8 @@ from market.views import (
     verify_payment,
     payment_confirmation,
     shipping_address_form,
-    verify_khalti_payment
+    verify_khalti_payment,
+    MarketplaceUserProductViewSet
 )
 from user.views import RegisterView, LoginAPIView
 
@@ -54,6 +55,7 @@ router.register(r'orders', OrderViewSet)
 router.register(r'sales', SaleViewSet)
 router.register(r'stocklist', StockListView)
 router.register(r'marketplace', MarketplaceProductViewSet)
+router.register(r'marketplace-user-products', MarketplaceUserProductViewSet)
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
 
