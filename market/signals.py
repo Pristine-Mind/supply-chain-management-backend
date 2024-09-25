@@ -1,5 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
+from datetime import timedelta
 from .models import MarketplaceUserProduct
 from producer.models import MarketplaceProduct, Product, ProductImage
 
@@ -25,7 +27,7 @@ def create_marketplace_product(sender, instance, created, **kwargs):
             product=product,
             listed_price=instance.price,
             is_available=not instance.is_sold,
-            bid_end_date=None
+            bid_end_date=timezone.now() + timedelta(days=30),
         )
         # If the MarketplaceUserProduct has an image, create a ProductImage
         if instance.image:
