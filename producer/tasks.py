@@ -1,4 +1,3 @@
-
 from celery import shared_task
 from .models import Product, StockList
 
@@ -11,8 +10,9 @@ def move_large_stock_to_stocklist():
 
     for product in products:
         if product.stock > LARGE_STOCK_THRESHOLD:
-            StockList.objects.create(product=product)
-            product.is_active = False
-            product.save()
+            if not StockList.objects.filter(product=product).exists():
+                StockList.objects.create(product=product)
+                product.is_active = False
+                product.save()
 
     return f"{len(products)} products checked."

@@ -106,7 +106,7 @@ class SaleViewSet(viewsets.ModelViewSet):
 class DashboardAPIView(APIView):
     def get(self, request):
         current_year = timezone.now().year
-        total_products = Product.objects.filter(is_active=True).aggregate(total_stock=Sum("stock"))["total_stock"] or 0
+        total_products = Product.objects.filter(is_active=True).count() or 0
         total_orders = Order.objects.count()
         total_sales = Sale.objects.count()
         total_customers = Customer.objects.count()
