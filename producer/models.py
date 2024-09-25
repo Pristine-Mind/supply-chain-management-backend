@@ -105,7 +105,7 @@ class Product(models.Model):
         JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
         GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
 
-    producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"))
+    producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
     category = models.CharField(
         max_length=2,
@@ -121,6 +121,7 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+    is_marketplace_created = models.BooleanField(default=False, verbose_name=_("Marketplace Created"))
 
     def __str__(self):
         return self.name
