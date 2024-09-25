@@ -199,6 +199,7 @@ def verify_khalti_payment(request):
 class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceUserProduct.objects.filter(is_sold=False, is_verified=True)
     serializer_class = MarketplaceUserProductSerializer
+    permission_classes = [IsAuthenticated]
 
     def update(self, request, *args, **kwargs):
         return Response(
