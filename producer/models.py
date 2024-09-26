@@ -113,7 +113,7 @@ class Product(models.Model):
         default=ProductCategory.ELECTRONICS
     )
     description = models.TextField(verbose_name=_("Product Description"))
-    sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"))
+    sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
     price = models.FloatField(verbose_name=_("Price"))
     cost_price = models.FloatField(verbose_name=_("Cost Price"))
     stock = models.IntegerField(verbose_name=_("Stock Quantity"))
