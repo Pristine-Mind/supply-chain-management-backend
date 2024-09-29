@@ -88,6 +88,7 @@ class Bid(models.Model):
     bid_amount = models.FloatField(verbose_name=_("Bid Amount"))
     max_bid_amount = models.FloatField(verbose_name=_("Maximum Bid Amount"))
     bid_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Bid Date"))
+    suggested_bid = models.FloatField(null=True, blank=True, verbose_name=_("Suggested Bid Amount"))
 
     def __str__(self):
         return f"{self.bidder.username} bid {self.bid_amount} on {self.product.product.name}"
