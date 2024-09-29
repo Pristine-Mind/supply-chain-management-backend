@@ -1,6 +1,7 @@
-from django.db import models
 from django.utils.translation import gettext_lazy as _
 import uuid
+
+from django.contrib.gis.db import models
 
 
 class Producer(models.Model):
@@ -24,6 +25,7 @@ class Producer(models.Model):
     registration_number = models.CharField(max_length=100, unique=True, verbose_name=_("Registration Number"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+    location = models.PointField(srid=4326, help_text="Local Unit Location", null=True, blank=True)
 
     def __str__(self):
         return self.name
