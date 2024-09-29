@@ -176,7 +176,7 @@ class TopOrdersCustomersView(APIView):
 
 
 class StockListView(viewsets.ModelViewSet):
-    queryset = StockList.objects.filter(is_pushed_to_marketplace=False)
+    queryset = StockList.objects.filter(is_pushed_to_marketplace=False).distinct()
     serializer_class = StockListSerializer
 
     @action(detail=True, methods=['post'], url_path='push-to-marketplace')

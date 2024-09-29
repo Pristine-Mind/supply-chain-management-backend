@@ -117,7 +117,7 @@ WSGI_APPLICATION = "main.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
         "HOST": env("DB_HOST"),
         "PORT": "5432",
         "NAME": env("DB_NAME"),

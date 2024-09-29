@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+from django.contrib.gis.geos import Point
 
 from rest_framework import serializers
 
@@ -15,9 +17,16 @@ from .models import (
 
 
 class ProducerSerializer(serializers.ModelSerializer):
+    location_details = serializers.SerializerMethodField()
+
     class Meta:
         model = Producer
         fields = "__all__"
+
+    def get_location_details(self, producer) -> dict:
+        if producer and producer.location:
+            return json.loads(producer.location.geojson)
+        return None
 
     def validate_registration_number(self, value):
         """
@@ -26,6 +35,26 @@ class ProducerSerializer(serializers.ModelSerializer):
         if not value.isalnum():
             raise serializers.ValidationError("Registration number must be alphanumeric.")
         return value
+
+    def create(self, validated_data):
+        location_data = self.initial_data.get('location')
+        if location_data:
+            latitude = location_data.get('latitude')
+            longitude = location_data.get('longitude')
+
+            if latitude is not None and longitude is not None:
+                validated_data['location'] = Point(longitude, latitude)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        location_data = self.initial_data.get('location')
+        if location_data:
+            latitude = location_data.get('latitude')
+            longitude = location_data.get('longitude')
+
+            if latitude is not None and longitude is not None:
+                validated_data['location'] = Point(longitude, latitude)
+        return super().update(instance, validated_data)
 
 
 class CustomerSerializer(serializers.ModelSerializer):
