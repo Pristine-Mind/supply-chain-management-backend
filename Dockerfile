@@ -27,4 +27,6 @@ RUN apt-get update -y \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
+RUN  pip install accelerate -U
+
 COPY . /code/

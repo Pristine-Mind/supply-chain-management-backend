@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
 from producer.models import MarketplaceProduct
+from market.generator import get_local_llm_price_suggestion
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -147,8 +148,8 @@ class BidSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bid
-        fields = ["bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount"]
-        read_only_fields = ["bid_date", "bidder"]
+        fields = ["bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "suggested_bid"]
+        read_only_fields = ["bid_date", "bidder", "suggested_bid"]
 
     def validate(self, data):
         try:
@@ -168,14 +169,32 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         bid_amount = validated_data["bid_amount"]
         bidder = self.context["request"].user
+        past_bids_count = Bid.objects.filter(product=product).count()
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
+
         if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
             max_bid_amount = bid_amount
         else:
             max_bid_amount = highest_bid.max_bid_amount
 
-        bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
+        time_since_listing = (timezone.now() - product.listed_date).days
 
+        suggested_bid = get_local_llm_price_suggestion(
+            product_name=product.product.name,
+            category=product.product.category,
+            listed_price=product.listed_price,
+            current_bid=max_bid_amount,
+            past_bids_count=past_bids_count,
+            time_since_listing=time_since_listing
+        )
+
+        bid = Bid.objects.create(
+            bidder=bidder,
+            product=product,
+            bid_amount=bid_amount,
+            max_bid_amount=max_bid_amount,
+            suggested_bid=suggested_bid
+        )
         return bid
 
 

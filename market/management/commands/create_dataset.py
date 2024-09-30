@@ -14,7 +14,7 @@ class Command(BaseCommand):
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['product_id', 'listed_price', 'current_bid', 'past_bids_count', 'time_since_listing', 'suggested_bid'])
-            
+
             for product in MarketplaceProduct.objects.all():
                 listed_price = product.listed_price
                 time_since_listing = (timezone.now() - product.listed_date).days

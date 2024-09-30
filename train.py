@@ -17,6 +17,9 @@ output_file = 'bid_suggestion_data.txt'
 
 with open(output_file, 'w') as f:
     for _, row in data.iterrows():
+        if row['suggested_bid'] <= row['current_bid']:
+            row['suggested_bid'] = row['current_bid'] * 1.05
+
         prompt = (
             f"Product ID: {row['product_id']}, Listed Price: {row['listed_price']}, "
             f"Current Bid: {row['current_bid']}, Number of Past Bids: {row['past_bids_count']}, "
