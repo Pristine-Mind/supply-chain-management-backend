@@ -62,4 +62,4 @@ class MarketplaceProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductImage)
 class ProductImageAdmin(admin.ModelAdmin):
-    autocomplete_fields = ['product']
+    autocomplete_fields = ['product',]
