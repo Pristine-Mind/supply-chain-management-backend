@@ -77,9 +77,18 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         fields = ['search', 'category']
 
     def filter_search(self, queryset, name, value):
-        return queryset.filter(
-            product__name__icontains=value
-        ).distinct()
+        if value:
+            return queryset.filter(
+                product__name__icontains=value
+            ).distinct()
+        return queryset
+
+    def filter_category(self, queryset, name, value):
+        if value:
+            return queryset.filter(
+                product__category=value
+            ).distinct()
+        return queryset
 
 
 class OrderFilter(django_filters.FilterSet):
