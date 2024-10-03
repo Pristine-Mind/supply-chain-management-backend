@@ -1,10 +1,12 @@
+from django.db.models.query import QuerySet
 import requests
 
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
 from django.conf import settings
+from django.db.models import Subquery, OuterRef
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
@@ -12,7 +14,7 @@ from rest_framework.decorators import api_view, permission_classes
 from market.models import Bid, ChatMessage
 from producer.models import MarketplaceProduct
 from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer, MarketplaceUserProductSerializer
-from .filters import ChatFilter, BidFilter
+from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
 from .forms import ShippingAddressForm
 
@@ -46,16 +48,29 @@ def create_purchase(request):
 
 
 class BidViewSet(viewsets.ModelViewSet):
-    queryset = Bid.objects.all()
     serializer_class = BidSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = BidFilter
+
+    def get_queryset(self) -> QuerySet:
+        return Bid.objects.all()
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         bid = serializer.save()
         return Response(self.get_serializer(bid).data, status=status.HTTP_201_CREATED)
+
+
+class UserBidViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = BidSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_class = UserBidFilter
+
+    def get_queryset(self) -> QuerySet:
+        latest_bids = Bid.objects.filter(product=OuterRef('product')).order_by('-bid_date')
+        queryset = Bid.objects.filter(id=Subquery(latest_bids.values('id')[:1]), bidder=self.request.user)
+        return queryset
 
 
 class ChatMessageViewSet(viewsets.ModelViewSet):
@@ -165,21 +180,18 @@ def verify_khalti_payment(request):
     API view to verify Khalti payment using the payment token.
     """
     token = request.data.get("token")
-    amount = request.data.get("amount")  # Amount in paisa (1 NPR = 100 paisa)
+    amount = request.data.get("amount")
     transaction_id = request.data.get("transaction_id")
 
     if not token or not amount or not transaction_id:
         return Response({"error": "Missing token, amount, or transaction ID."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Khalti verification API URL
     url = "https://khalti.com/api/v2/payment/verify/"
     payload = {"token": token, "amount": amount}
     headers = {"Authorization": f"Key {settings.KHALTI_SECRET_KEY}"}
 
-    # Send a POST request to Khalti's verification API
     response = requests.post(url, data=payload, headers=headers)
     if response.status_code == 200:
-        # If the payment is successful, update the payment status
         try:
             payment = Payment.objects.get(transaction_id=transaction_id)
             payment.status = "completed"
@@ -216,3 +228,12 @@ class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+
+class ProductBidsView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, product_id):
+        bids = Bid.objects.filter(product__id=product_id).order_by('-bid_date')
+        serializer = BidSerializer(bids, many=True)
+        return Response(serializer.data)

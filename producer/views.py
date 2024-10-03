@@ -139,7 +139,10 @@ class UserInfoView(APIView):
 
     def get(self, request):
         user = request.user
-        return Response({"username": user.username})
+        return Response({
+            "username": user.username,
+            "id": user.id
+        })
 
 
 class TopSalesCustomersView(APIView):
