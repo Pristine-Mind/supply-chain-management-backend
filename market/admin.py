@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
+from .models import Purchase, Bid, ChatMessage, Payment
 
 
 @admin.register(Purchase)

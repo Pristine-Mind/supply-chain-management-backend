@@ -9,7 +9,8 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
-from producer.models import MarketplaceProduct, ProductImage
+from producer.models import MarketplaceProduct
+from producer.serializers import MarketplaceProductSerializer
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -144,10 +145,14 @@ class BidSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    product_details = MarketplaceProductSerializer(
+        source='product',
+        read_only=True
+    )
 
     class Meta:
         model = Bid
-        fields = ["bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount"]
+        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product", "product_details"]
         read_only_fields = ["bid_date", "bidder"]
 
     def validate(self, data):
