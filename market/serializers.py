@@ -2,6 +2,8 @@ from urllib.parse import urlencode
 import time
 import requests
 import json
+import torch
+import torch.nn as nn
 
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -10,7 +12,26 @@ from rest_framework import serializers
 
 from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
 from producer.models import MarketplaceProduct
-from market.generator import get_local_llm_price_suggestion
+
+
+class TransformerBidPredictor(nn.Module):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dropout=0.1):
+        super(TransformerBidPredictor, self).__init__()
+        self.embedding = nn.Linear(input_dim, d_model)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, dropout=dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.fc_out = nn.Linear(d_model, 1)
+
+    def forward(self, x):
+        x = self.embedding(x.unsqueeze(-1))
+        x = self.transformer_encoder(x)
+        x = self.fc_out(x[-1])
+        return x
+
+
+model = TransformerBidPredictor(input_dim=1, d_model=32, num_heads=4, num_layers=2)
+model.load_state_dict(torch.load('path/to/your/trained_model.pth'))
+model.eval()
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -145,6 +166,7 @@ class BidSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    suggested_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Bid
@@ -156,8 +178,10 @@ class BidSerializer(serializers.ModelSerializer):
             product = MarketplaceProduct.objects.get(id=data["product_id"])
         except MarketplaceProduct.DoesNotExist:
             raise serializers.ValidationError("Product not found.")
+
         if data["bid_amount"] <= product.listed_price:
             raise serializers.ValidationError("Bid amount must be higher than the listed price.")
+
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid and data["bid_amount"] <= highest_bid.bid_amount:
             raise serializers.ValidationError("Your bid must be higher than the current highest bid.")
@@ -169,25 +193,35 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         bid_amount = validated_data["bid_amount"]
         bidder = self.context["request"].user
-        past_bids_count = Bid.objects.filter(product=product).count()
-        highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
 
+        # Get recent bids for this product
+        recent_bids = Bid.objects.filter(product=product).order_by('-bid_date')[:5]
+
+        # Prepare the input sequence for prediction
+        if recent_bids.exists():
+            bid_sequence = [float(bid.bid_amount) for bid in recent_bids]
+            bid_sequence.reverse()  # Ensure sequence is in the correct order (oldest to newest)
+
+            # If less than 5 bids, pad with the initial listed price
+            while len(bid_sequence) < 5:
+                bid_sequence.insert(0, float(product.listed_price))
+
+            # Convert to tensor and make prediction
+            input_sequence = torch.tensor(bid_sequence, dtype=torch.float32).unsqueeze(0)
+            with torch.no_grad():
+                suggested_bid = model(input_sequence).item()
+        else:
+            # Default suggestion if no previous bids: start slightly above the listed price
+            suggested_bid = float(product.listed_price) * 1.05
+
+        # Determine max_bid_amount
+        highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
             max_bid_amount = bid_amount
         else:
             max_bid_amount = highest_bid.max_bid_amount
 
-        time_since_listing = (timezone.now() - product.listed_date).days
-
-        suggested_bid = get_local_llm_price_suggestion(
-            product_name=product.product.name,
-            category=product.product.category,
-            listed_price=product.listed_price,
-            current_bid=max_bid_amount,
-            past_bids_count=past_bids_count,
-            time_since_listing=time_since_listing
-        )
-
+        # Create the bid instance
         bid = Bid.objects.create(
             bidder=bidder,
             product=product,
@@ -196,6 +230,7 @@ class BidSerializer(serializers.ModelSerializer):
             suggested_bid=suggested_bid
         )
         return bid
+
 
 
 class UserSerializer(serializers.ModelSerializer):

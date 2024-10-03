@@ -1,76 +1,67 @@
-from transformers import (
-    GPT2Tokenizer,
-    GPT2LMHeadModel,
-    Trainer,
-    TrainingArguments,
-    TextDataset,
-    DataCollatorForLanguageModeling,
-)
-
-
 import pandas as pd
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+import torch.optim as optim
 
-file_path_old = 'bid_data.csv'
-data = pd.read_csv(file_path_old)
-
-output_file = 'bid_suggestion_data.txt'
-
-with open(output_file, 'w') as f:
-    for _, row in data.iterrows():
-        if row['suggested_bid'] <= row['current_bid']:
-            row['suggested_bid'] = row['current_bid'] * 1.05
-
-        prompt = (
-            f"Product ID: {row['product_id']}, Listed Price: {row['listed_price']}, "
-            f"Current Bid: {row['current_bid']}, Number of Past Bids: {row['past_bids_count']}, "
-            f"Time Since Listing: {row['time_since_listing']} days. "
-            f"Suggested Bid: {row['suggested_bid']}\n"
-        )
-        f.write(prompt)
-
-print(f"Data successfully converted to text format and saved at {output_file}")
+# Load sequences
+data = pd.read_csv('bid_sequences.csv').values
 
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+class BidDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        sequence = torch.tensor(self.data[idx, :-1], dtype=torch.float32)
+        target = torch.tensor(self.data[idx, -1], dtype=torch.float32)
+        return sequence, target
 
 
-def load_dataset(file_path, tokenizer):
-    return TextDataset(
-        tokenizer=tokenizer,
-        file_path=file_path,
-        block_size=128
-    )
+# Create dataset and dataloader
+dataset = BidDataset(data)
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
 
-def get_data_collator(tokenizer):
-    return DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False,
-    )
+class TransformerBidPredictor(nn.Module):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dropout=0.1):
+        super(TransformerBidPredictor, self).__init__()
+        self.embedding = nn.Linear(input_dim, d_model)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, dropout=dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.fc_out = nn.Linear(d_model, 1)
+
+    def forward(self, x):
+        x = self.embedding(x.unsqueeze(-1))
+        x = self.transformer_encoder(x)
+        x = self.fc_out(x[-1])
+        return x
 
 
-file_path = "bid_suggestion_data.txt"
-train_dataset = load_dataset(file_path, tokenizer)
-data_collator = get_data_collator(tokenizer)
+# Initialize model
+input_dim = 1
+d_model = 32
+num_heads = 4
+num_layers = 2
+model = TransformerBidPredictor(input_dim, d_model, num_heads, num_layers)
 
-training_args = TrainingArguments(
-    output_dir="./gpt2-bid-finetuned",
-    overwrite_output_dir=True,
-    num_train_epochs=3,
-    per_device_train_batch_size=4,
-    save_steps=10_000,
-    save_total_limit=2,
-)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    data_collator=data_collator,
-    train_dataset=train_dataset,
-)
+# Training loop
+epochs = 10
+for epoch in range(epochs):
+    model.train()
+    for sequences, targets in dataloader:
+        optimizer.zero_grad()
+        outputs = model(sequences)
+        loss = criterion(outputs, targets)
+        loss.backward()
+        optimizer.step()
+    print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item()}")
 
-trainer.train()
-
-model.save_pretrained("./gpt2-bid-finetuned")
-tokenizer.save_pretrained("./gpt2-bid-finetuned")
+# Save the trained model
+torch.save(model.state_dict(), 'transformer_bid_model.pth')
