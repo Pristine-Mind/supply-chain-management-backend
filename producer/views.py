@@ -139,7 +139,10 @@ class UserInfoView(APIView):
 
     def get(self, request):
         user = request.user
-        return Response({"username": user.username})
+        return Response({
+            "username": user.username,
+            "id": user.id
+        })
 
 
 class TopSalesCustomersView(APIView):
@@ -212,7 +215,7 @@ class StockListView(viewsets.ModelViewSet):
 
 
 class MarketplaceProductViewSet(viewsets.ModelViewSet):
-    queryset = MarketplaceProduct.objects.filter(is_available=True)
+    queryset = MarketplaceProduct.objects.filter(is_available=True).order_by('-listed_date')
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
 

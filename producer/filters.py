@@ -50,10 +50,14 @@ class SaleFilter(django_filters.FilterSet):
 
 class ProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method='filter_search', label="Search")
+    category = django_filters.MultipleChoiceFilter(
+        choices=Product.ProductCategory.choices,
+        field_name='category',
+    )
 
     class Meta:
         model = Product
-        fields = ['search']
+        fields = ['search', 'category']
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(
@@ -73,9 +77,18 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         fields = ['search', 'category']
 
     def filter_search(self, queryset, name, value):
-        return queryset.filter(
-            product__name__icontains=value
-        ).distinct()
+        if value:
+            return queryset.filter(
+                product__name__icontains=value
+            ).distinct()
+        return queryset
+
+    def filter_category(self, queryset, name, value):
+        if value:
+            return queryset.filter(
+                product__category=value
+            ).distinct()
+        return queryset
 
 
 class OrderFilter(django_filters.FilterSet):

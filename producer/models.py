@@ -20,7 +20,7 @@ class Producer(models.Model):
 
     name = models.CharField(max_length=100, verbose_name=_("Producer Name"))
     contact = models.CharField(max_length=100, verbose_name=_("Contact Information"))
-    email = models.EmailField(verbose_name=_("Email Address"))
+    email = models.EmailField(verbose_name=_("Email Address"), null=True, blank=True)
     address = models.TextField(verbose_name=_("Physical Address"))
     registration_number = models.CharField(max_length=100, unique=True, verbose_name=_("Registration Number"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
@@ -92,27 +92,24 @@ class Product(models.Model):
     - rate: Unit price of each product
     """
     class ProductCategory(models.TextChoices):
-        ELECTRONICS = 'EL', _('Electronics')
-        FASHION = 'FA', _('Fashion & Clothing')
-        HEALTH_BEAUTY = 'HB', _('Health & Beauty')
-        HOME_KITCHEN = 'HK', _('Home & Kitchen')
-        GROCERIES = 'GR', _('Groceries & Gourmet Food')
-        SPORTS_OUTDOORS = 'SO', _('Sports & Outdoors')
-        TOYS_KIDS_BABY = 'TK', _('Toys, Kids & Baby Products')
-        BOOKS_MUSIC_MOVIES = 'BM', _('Books, Music & Movies')
-        AUTOMOTIVE_INDUSTRIAL = 'AI', _('Automotive & Industrial')
-        PET_SUPPLIES = 'PS', _('Pet Supplies')
-        OFFICE_STATIONERY = 'OS', _('Office & Stationery')
-        HEALTH_FITNESS = 'HF', _('Health & Fitness')
-        JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
-        GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
+        FRUITS = 'FR', 'Fruits'
+        VEGETABLES = 'VG', 'Vegetables'
+        GRAINS_AND_CEREALS = 'GR', 'Grains & Cereals'
+        PULSES_AND_LEGUMES = 'PL', 'Pulses & Legumes'
+        SPICES_AND_HERBS = 'SP', 'Spices & Herbs'
+        NUTS_AND_SEEDS = 'NT', 'Nuts & Seeds'
+        DAIRY_AND_ANIMAL_PRODUCTS = 'DF', 'Dairy & Animal Products'
+        FODDER_AND_FORAGE = 'FM', 'Fodder & Forage'
+        FLOWERS_AND_ORNAMENTAL_PLANTS = 'FL', 'Flowers & Ornamental Plants'
+        HERBS_AND_MEDICINAL_PLANTS = 'HR', 'Herbs & Medicinal Plants'
+        OTHER = 'OT', 'Other'
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
     category = models.CharField(
         max_length=2,
         choices=ProductCategory.choices,
-        default=ProductCategory.ELECTRONICS
+        default=ProductCategory.FRUITS,
     )
     description = models.TextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)

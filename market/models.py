@@ -151,20 +151,17 @@ class ShippingAddress(models.Model):
 
 class MarketplaceUserProduct(models.Model):
     class ProductCategory(models.TextChoices):
-        ELECTRONICS = 'EL', _('Electronics')
-        FASHION = 'FA', _('Fashion & Clothing')
-        HEALTH_BEAUTY = 'HB', _('Health & Beauty')
-        HOME_KITCHEN = 'HK', _('Home & Kitchen')
-        GROCERIES = 'GR', _('Groceries & Gourmet Food')
-        SPORTS_OUTDOORS = 'SO', _('Sports & Outdoors')
-        TOYS_KIDS_BABY = 'TK', _('Toys, Kids & Baby Products')
-        BOOKS_MUSIC_MOVIES = 'BM', _('Books, Music & Movies')
-        AUTOMOTIVE_INDUSTRIAL = 'AI', _('Automotive & Industrial')
-        PET_SUPPLIES = 'PS', _('Pet Supplies')
-        OFFICE_STATIONERY = 'OS', _('Office & Stationery')
-        HEALTH_FITNESS = 'HF', _('Health & Fitness')
-        JEWELRY_ACCESSORIES = 'JA', _('Jewelry & Accessories')
-        GIFTS_FLOWERS = 'GF', _('Gifts & Flowers')
+        FRUITS = 'FR', 'Fruits'
+        VEGETABLES = 'VG', 'Vegetables'
+        GRAINS_AND_CEREALS = 'GR', 'Grains & Cereals'
+        PULSES_AND_LEGUMES = 'PL', 'Pulses & Legumes'
+        SPICES_AND_HERBS = 'SP', 'Spices & Herbs'
+        NUTS_AND_SEEDS = 'NT', 'Nuts & Seeds'
+        DAIRY_AND_ANIMAL_PRODUCTS = 'DF', 'Dairy & Animal Products'
+        FODDER_AND_FORAGE = 'FM', 'Fodder & Forage'
+        FLOWERS_AND_ORNAMENTAL_PLANTS = 'FL', 'Flowers & Ornamental Plants'
+        HERBS_AND_MEDICINAL_PLANTS = 'HR', 'Herbs & Medicinal Plants'
+        OTHER = 'OT', 'Other'
 
     name = models.CharField(_("Name"), max_length=255)
     description = models.TextField(_("Description"))
@@ -173,7 +170,7 @@ class MarketplaceUserProduct(models.Model):
     category = models.CharField(
         max_length=2,
         choices=ProductCategory.choices,
-        default=ProductCategory.ELECTRONICS,
+        default=ProductCategory.VEGETABLES,
         verbose_name=_("Category")
     )
     created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
