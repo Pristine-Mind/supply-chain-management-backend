@@ -1,67 +1,80 @@
-import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.optim as optim
-
-# Load sequences
-data = pd.read_csv('bid_sequences.csv').values
-
-
-class BidDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        sequence = torch.tensor(self.data[idx, :-1], dtype=torch.float32)
-        target = torch.tensor(self.data[idx, -1], dtype=torch.float32)
-        return sequence, target
-
-
-# Create dataset and dataloader
-dataset = BidDataset(data)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
+import joblib
 
 
 class TransformerBidPredictor(nn.Module):
     def __init__(self, input_dim, d_model, num_heads, num_layers, dropout=0.1):
         super(TransformerBidPredictor, self).__init__()
         self.embedding = nn.Linear(input_dim, d_model)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, dropout=dropout)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads, dropout=dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.fc_out = nn.Linear(d_model, 1)
 
     def forward(self, x):
-        x = self.embedding(x.unsqueeze(-1))
+        x = self.embedding(x)
+        x = x.unsqueeze(1)
         x = self.transformer_encoder(x)
-        x = self.fc_out(x[-1])
-        return x
+        x = x[:, -1, :]
+        output = self.fc_out(x)
+        return output
 
 
-# Initialize model
-input_dim = 1
-d_model = 32
-num_heads = 4
-num_layers = 2
-model = TransformerBidPredictor(input_dim, d_model, num_heads, num_layers)
+df = pd.read_csv('bid_sequences.csv', header=None)
+
+input_sequences = df.iloc[:, :-1].values
+target_values = df.iloc[:, -1].values
+
+scaler_x = MinMaxScaler()
+scaler_y = MinMaxScaler()
+X_scaled = scaler_x.fit_transform(input_sequences)
+y_scaled = scaler_y.fit_transform(target_values.reshape(-1, 1))
+
+joblib.dump(scaler_x, 'scaler_x.pkl')
+joblib.dump(scaler_y, 'scaler_y.pkl')
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
+
+X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+
+batch_size = 64
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+input_dim = input_sequences.shape[1]
+d_model = 64
+num_heads = 8
+num_layers = 4
+dropout = 0.1
+
+model = TransformerBidPredictor(input_dim=input_dim, d_model=d_model, num_heads=num_heads, num_layers=num_layers, dropout=dropout)
 
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-# Training loop
-epochs = 10
-for epoch in range(epochs):
+num_epochs = 100
+for epoch in range(num_epochs):
     model.train()
-    for sequences, targets in dataloader:
+    epoch_loss = 0
+
+    for batch_X, batch_y in train_loader:
+        predictions = model(batch_X)
+        loss = criterion(predictions, batch_y)
         optimizer.zero_grad()
-        outputs = model(sequences)
-        loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
-    print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item()}")
 
-# Save the trained model
+        epoch_loss += loss.item()
+
+    avg_loss = epoch_loss / len(train_loader)
+    if (epoch + 1) % 10 == 0:
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}')
+
 torch.save(model.state_dict(), 'transformer_bid_model.pth')
+print('Model saved to transformer_bid_model.pth')
