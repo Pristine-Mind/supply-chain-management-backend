@@ -4,7 +4,7 @@ from .models import Product, StockList
 
 @shared_task
 def move_large_stock_to_stocklist():
-    LARGE_STOCK_THRESHOLD = 100
+    LARGE_STOCK_THRESHOLD = 25
 
     products = Product.objects.filter(is_active=True)
 
