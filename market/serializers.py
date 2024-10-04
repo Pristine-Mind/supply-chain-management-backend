@@ -2,6 +2,10 @@ from urllib.parse import urlencode
 import time
 import requests
 import json
+import torch
+import joblib
+import os
+import numpy as np
 
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -10,6 +14,35 @@ from rest_framework import serializers
 
 from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
 from producer.models import MarketplaceProduct
+from .transformer import TransformerBidPredictor
+
+model_path = 'transformer_bid_model.pth'
+scaler_x_path = 'scaler_x.pkl'
+scaler_y_path = 'scaler_y.pkl'
+
+# Check if files exist and load them if available
+if not os.path.exists(model_path):
+    raise FileNotFoundError(f"Model file '{model_path}' not found.")
+if not os.path.exists(scaler_x_path):
+    raise FileNotFoundError(f"Scaler file '{scaler_x_path}' not found.")
+if not os.path.exists(scaler_y_path):
+    raise FileNotFoundError(f"Scaler file '{scaler_y_path}' not found.")
+
+# Load the trained model and scalers
+scaler_x = joblib.load(scaler_x_path)
+scaler_y = joblib.load(scaler_y_path)
+
+# Model Configuration (must match training setup)
+input_dim = 2  # This should match the input_dim used during training
+d_model = 64
+num_heads = 8
+num_layers = 4
+dropout = 0.1
+
+# Instantiate and load the trained model
+model = TransformerBidPredictor(input_dim=input_dim, d_model=d_model, num_heads=num_heads, num_layers=num_layers, dropout=dropout)
+model.load_state_dict(torch.load(model_path))
+model.eval()
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -144,19 +177,22 @@ class BidSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    suggested_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Bid
-        fields = ["bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount"]
-        read_only_fields = ["bid_date", "bidder"]
+        fields = ["bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "suggested_bid"]
+        read_only_fields = ["bid_date", "bidder", "suggested_bid"]
 
     def validate(self, data):
         try:
             product = MarketplaceProduct.objects.get(id=data["product_id"])
         except MarketplaceProduct.DoesNotExist:
             raise serializers.ValidationError("Product not found.")
+
         if data["bid_amount"] <= product.listed_price:
             raise serializers.ValidationError("Bid amount must be higher than the listed price.")
+
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid and data["bid_amount"] <= highest_bid.bid_amount:
             raise serializers.ValidationError("Your bid must be higher than the current highest bid.")
@@ -168,14 +204,48 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         bid_amount = validated_data["bid_amount"]
         bidder = self.context["request"].user
+
+        # Get recent bids for this product
+        recent_bids = Bid.objects.filter(product=product).order_by('-bid_date')[:2]
+
+        # Prepare the input sequence for prediction
+        if recent_bids.exists():
+            bid_sequence = [float(bid.max_bid_amount) for bid in recent_bids]
+            bid_sequence.reverse()  # Ensure sequence is in the correct order (oldest to newest)
+            print(bid_sequence, "seq")
+            # Convert to numpy array and scale the input sequence
+            bid_sequence_array = np.array([bid_sequence], dtype=np.float32)  # Shape: (1, input_dim)
+            bid_sequence_scaled = scaler_x.transform(bid_sequence_array)  # Scale the input sequence
+
+            # Convert to PyTorch tensor
+            input_sequence_tensor = torch.tensor(bid_sequence_scaled, dtype=torch.float32)
+
+            # Make prediction using the model
+            with torch.no_grad():
+                suggested_bid_scaled = model(input_sequence_tensor).item()
+                print(suggested_bid_scaled, "sss")
+            # Inverse scale the predicted bid to get the actual bid value
+            suggested_bid = scaler_y.inverse_transform([[suggested_bid_scaled]])[0][0]
+        else:
+            # Default suggestion if no previous bids: start slightly above the listed price
+            suggested_bid = float(product.listed_price) * 1.05
+            print(suggested_bid, "nnnnnnn")
+
+        # Determine max_bid_amount
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
             max_bid_amount = bid_amount
         else:
             max_bid_amount = highest_bid.max_bid_amount
 
-        bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
-
+        # Create the bid instance
+        bid = Bid.objects.create(
+            bidder=bidder,
+            product=product,
+            bid_amount=bid_amount,
+            max_bid_amount=max_bid_amount,
+            suggested_bid=suggested_bid
+        )
         return bid
 
 

@@ -131,3 +131,7 @@ dmypy.json
 .idea/
 
 assets/
+
+gpt2-bid-finetuned/
+*.txt
+*.txt.lock
