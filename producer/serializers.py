@@ -89,6 +89,9 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
     category_details = serializers.CharField(source="get_category_display", read_only=True)
+    deleted_images = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
 
     class Meta:
         model = Product
@@ -128,9 +131,13 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         uploaded_images = validated_data.pop('uploaded_images', [])
+        deleted_images = validated_data.pop('deleted_images', [])
         product = super().update(instance, validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
+
+        if deleted_images:
+            ProductImage.objects.filter(id__in=deleted_images, product=product).delete()
 
         return product
 

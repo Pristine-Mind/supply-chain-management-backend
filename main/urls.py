@@ -43,7 +43,9 @@ from market.views import (
     payment_confirmation,
     shipping_address_form,
     verify_khalti_payment,
-    MarketplaceUserProductViewSet
+    MarketplaceUserProductViewSet,
+    ProductBidsView,
+    UserBidViewSet
 )
 from user.views import RegisterView, LoginAPIView
 
@@ -58,6 +60,7 @@ router.register(r'marketplace', MarketplaceProductViewSet)
 router.register(r'marketplace-user-products', MarketplaceUserProductViewSet)
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
+router.register(r'user-bids', UserBidViewSet, basename='user-bids')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -75,6 +78,7 @@ urlpatterns = [
     path('khalti/verify/', verify_khalti_payment, name='verify_khalti_payment'),
     path('register/', RegisterView.as_view(), name='register'),
     path('api/v1/stats/', StatsAPIView.as_view(), name='stats-api'),
+    path('api/v1/bids/product/<int:product_id>/', ProductBidsView.as_view(), name='product-bids'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
