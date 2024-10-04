@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -200,7 +202,8 @@ class StockListView(viewsets.ModelViewSet):
         MarketplaceProduct.objects.create(
             product=stock_item.product,
             listed_price=stock_item.product.price,
-            is_available=True
+            is_available=True,
+            bid_end_date=timezone.now() + timedelta(days=7)
         )
 
         # Update the product to have moved to marketplace
