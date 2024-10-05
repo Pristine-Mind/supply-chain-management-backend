@@ -229,26 +229,56 @@ class StatsAPIView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
-        # Get filter parameters from the query
-        location = request.query_params.get('location', None)
-        category = request.query_params.get('category', None)
-        start_date = request.query_params.get('start_date', None)
-        end_date = request.query_params.get('end_date', None)
+        filter_params = self.get_filter_params(request)
+        sales_query = self.get_filtered_sales(filter_params)
+        data = self.get_sales_statistics(sales_query)
+        return Response(data, status=status.HTTP_200_OK)
 
-        sales_query = Sale.objects.all()
-        if location:
-            sales_query = sales_query.filter(order__customer__city=location)
-        if category:
-            sales_query = sales_query.filter(order__product__category=category)
+    def get_filter_params(self, request):
+        """Get and parse filter parameters from the request."""
+        location = request.query_params.get('location')
+        category = request.query_params.get('category')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        parsed_start_date, parsed_end_date = None, None
         if start_date and end_date:
             try:
-                start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d")
-                end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d")
-                sales_query = sales_query.filter(sale_date__gte=start_date, sale_date__lte=end_date)
+                parsed_start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d")
+                parsed_end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d")
             except ValueError:
-                pass
-        total_products_sold = sales_query.aggregate(total=Sum('quantity'))['total']
-        total_revenue = sales_query.aggregate(revenue=Sum('sale_price'))['revenue']
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return {
+            'location': location,
+            'category': category,
+            'start_date': parsed_start_date,
+            'end_date': parsed_end_date
+        }
+
+    def get_filtered_sales(self, filter_params):
+        """Filter the sales query based on the provided parameters."""
+        sales_query = Sale.objects.all()
+
+        if filter_params['location']:
+            sales_query = sales_query.filter(order__customer__city=filter_params['location'])
+        if filter_params['category']:
+            sales_query = sales_query.filter(order__product__category=filter_params['category'])
+        if filter_params['start_date'] and filter_params['end_date']:
+            sales_query = sales_query.filter(
+                sale_date__gte=filter_params['start_date'],
+                sale_date__lte=filter_params['end_date']
+            )
+
+        return sales_query
+
+    def get_sales_statistics(self, sales_query):
+        """Calculate sales statistics."""
+        total_products_sold = sales_query.aggregate(total=Sum('quantity'))['total'] or 0
+        total_revenue = sales_query.aggregate(revenue=Sum('sale_price'))['revenue'] or 0
         top_customers = (
             sales_query.values('order__customer__name', 'order__customer__billing_address')
             .annotate(total_spent=Sum('sale_price'))
@@ -270,7 +300,8 @@ class StatsAPIView(APIView):
             .annotate(total_sold=Sum('quantity'))
             .order_by('month')
         )
-        data = {
+
+        return {
             'total_products_sold': total_products_sold,
             'total_revenue': total_revenue,
             'top_customers': list(top_customers),
@@ -278,4 +309,3 @@ class StatsAPIView(APIView):
             'top_categories': list(top_categories),
             'monthly_sales': list(monthly_sales),
         }
-        return Response(data)
