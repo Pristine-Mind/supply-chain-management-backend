@@ -152,7 +152,7 @@ class BidSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bid
-        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product", "product_details"]
+        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product_details"]
         read_only_fields = ["bid_date", "bidder"]
 
     def validate(self, data):
@@ -182,6 +182,21 @@ class BidSerializer(serializers.ModelSerializer):
         bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
 
         return bid
+
+
+class BidUserSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField(write_only=True)
+    bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    product_details = MarketplaceProductSerializer(
+        source='product',
+        read_only=True
+    )
+
+    class Meta:
+        model = Bid
+        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product", "product_details"]
+        read_only_fields = ["bid_date", "bidder"]
 
 
 class UserSerializer(serializers.ModelSerializer):
