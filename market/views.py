@@ -13,7 +13,13 @@ from rest_framework.decorators import api_view, permission_classes
 
 from market.models import Bid, ChatMessage
 from producer.models import MarketplaceProduct
-from .serializers import PurchaseSerializer, BidSerializer, ChatMessageSerializer, MarketplaceUserProductSerializer
+from .serializers import (
+    PurchaseSerializer,
+    BidSerializer,
+    ChatMessageSerializer,
+    MarketplaceUserProductSerializer,
+    BidUserSerializer,
+)
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
 from .forms import ShippingAddressForm
@@ -63,7 +69,7 @@ class BidViewSet(viewsets.ModelViewSet):
 
 
 class UserBidViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = BidSerializer
+    serializer_class = BidUserSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = UserBidFilter
 
@@ -235,5 +241,5 @@ class ProductBidsView(views.APIView):
 
     def get(self, request, product_id):
         bids = Bid.objects.filter(product__id=product_id).order_by('-bid_date')
-        serializer = BidSerializer(bids, many=True)
+        serializer = BidUserSerializer(bids, many=True)
         return Response(serializer.data)
