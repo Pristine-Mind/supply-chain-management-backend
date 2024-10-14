@@ -260,4 +260,5 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MarketplaceProduct
-        fields = ['product', 'listed_price', 'listed_date', 'is_available', 'id', 'product_details']
+        fields = [
+            'product', 'listed_price', 'listed_date', 'is_available', 'id', 'product_details', 'bid_end_date']
