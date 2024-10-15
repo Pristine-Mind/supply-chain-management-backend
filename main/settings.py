@@ -239,6 +239,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'producer.tasks.move_large_stock_to_stocklist',
         'schedule': crontab(minute=0, hour='*/3')
     },
+    'update-bid-end-dates-every-hour': {
+        'task': 'producer.tasks.update_bid_end_dates',
+        'schedule': crontab(minute=0, hour='*'),  # Runs every hour
+    },
 }
 
 KHALTI_PUBLIC_KEY = 'aaass'

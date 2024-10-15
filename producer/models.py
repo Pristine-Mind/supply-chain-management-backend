@@ -1,7 +1,8 @@
 from django.utils.translation import gettext_lazy as _
 import uuid
-
+from datetime import timedelta
 from django.contrib.gis.db import models
+from django.utils import timezone
 
 
 class Producer(models.Model):
@@ -278,6 +279,27 @@ class MarketplaceProduct(models.Model):
     class Meta:
         verbose_name = _("Marketplace Product")
         verbose_name_plural = _("Marketplace Products")
+
+    def update_bid_end_date(self, bids_last_hour, bids_last_day):
+        """
+        Dynamically updates the bid_end_date based on heuristic rules.
+        """
+        time_left = self.bid_end_date - timezone.now()
+
+        # Rule 1: Extend by 12 hours if no bids in the last 24 hours and < 6 hours remaining
+        if bids_last_day == 0 and time_left <= timedelta(hours=6):
+            self.bid_end_date += timedelta(hours=12)
+
+        # Rule 2: Extend by 6 hours if bids are slow (e.g. fewer than 5 bids in the last 24 hours)
+        elif bids_last_day < 5 and bids_last_hour == 0:
+            self.bid_end_date += timedelta(hours=6)
+
+        # Rule 3: Shorten the bid if bids are frequent (e.g. more than 3 in the last hour)
+        elif bids_last_hour > 3:
+            self.bid_end_date -= timedelta(hours=2)
+
+        # Save the updated bid_end_date
+        self.save()
 
 
 class ProductImage(models.Model):
