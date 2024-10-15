@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.conf.urls.i18n import i18n_patterns
 
 from rest_framework.routers import DefaultRouter
 from producer.views import (
@@ -62,8 +63,11 @@ router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
 router.register(r'user-bids', UserBidViewSet, basename='user-bids')
 
-urlpatterns = [
+urlpatterns = i18n_patterns(
     path('admin/', admin.site.urls),
+)
+
+urlpatterns += [
     path('api/v1/', include(router.urls)),
     path("login/", LoginAPIView.as_view()),
     path('api/v1/dashboard/', DashboardAPIView.as_view(), name='dashboard'),

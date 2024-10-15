@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from celery.schedules import crontab
 import environ
+from django.utils.translation import gettext_lazy as _
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -74,6 +75,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "django_celery_beat",
+    "modeltranslation",
     # localapps
     "producer",
     "market",
@@ -84,6 +86,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    'django.middleware.locale.LocaleMiddleware',
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -251,3 +254,25 @@ KHALTI_SECRET_KEY = 'aa'
 # Khalti test credentials
 KHALTI_TEST_MOBILE_NUMBER = '9800000001'
 KHALTI_TEST_PIN = '1234'
+
+USE_I18N = True
+USE_L10N = True
+LOCALEURL_USE_ACCEPT_LANGUAGE = True
+LANGUAGES = [
+    ('en', _('English')),
+    ('ne', _('Nepali')),
+]
+MODELTRANSLATION_DEFAULT_LANGUAGE = 'en'
+MODELTRANSLATION_LANGUAGES = ('en', 'ne')
+
+LOCALE_PATHS = [
+    os.path.join(BASE_DIR, 'locale'),
+]
+
+LANGUAGE_CODE = 'en-us'
+
+TIME_ZONE = 'UTC'
+
+USE_I18N = True
+
+USE_TZ = True

@@ -1,0 +1,414 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-10-15 06:47+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+#: main/settings.py:262
+msgid "English"
+msgstr ""
+
+#: main/settings.py:263
+msgid "Nepali"
+msgstr ""
+
+#: market/models.py:21
+msgid "Buyer"
+msgstr ""
+
+#: market/models.py:22 market/models.py:87 market/models.py:111
+#: producer/models.py:130 producer/models.py:162 producer/models.py:249
+#: producer/models.py:270
+msgid "Product"
+msgstr ""
+
+#: market/models.py:23 producer/models.py:163
+msgid "Quantity"
+msgstr ""
+
+#: market/models.py:24
+msgid "Purchase Price"
+msgstr ""
+
+#: market/models.py:25
+msgid "Purchase Date"
+msgstr ""
+
+#: market/models.py:31 market/models.py:57
+msgid "Purchase"
+msgstr ""
+
+#: market/models.py:32
+msgid "Purchases"
+msgstr ""
+
+#: market/models.py:58
+msgid "Transaction ID"
+msgstr ""
+
+#: market/models.py:59
+msgid "Amount"
+msgstr ""
+
+#: market/models.py:60
+msgid "Payment Date"
+msgstr ""
+
+#: market/models.py:61
+msgid "Status"
+msgstr ""
+
+#: market/models.py:63
+msgid "Payment Method"
+msgstr ""
+
+#: market/models.py:70
+msgid "Payment"
+msgstr ""
+
+#: market/models.py:71
+msgid "Payments"
+msgstr ""
+
+#: market/models.py:86
+msgid "Bidder"
+msgstr ""
+
+#: market/models.py:88
+msgid "Bid Amount"
+msgstr ""
+
+#: market/models.py:89
+msgid "Maximum Bid Amount"
+msgstr ""
+
+#: market/models.py:90
+msgid "Bid Date"
+msgstr ""
+
+#: market/models.py:96
+msgid "Bid"
+msgstr ""
+
+#: market/models.py:97
+msgid "Bids"
+msgstr ""
+
+#: market/models.py:110
+msgid "Sender"
+msgstr ""
+
+#: market/models.py:112
+msgid "Message"
+msgstr ""
+
+#: market/models.py:113
+msgid "Timestamp"
+msgstr ""
+
+#: market/models.py:119
+msgid "Chat Message"
+msgstr ""
+
+#: market/models.py:120
+msgid "Chat Messages"
+msgstr ""
+
+#: market/models.py:148 producer/models.py:63
+msgid "Shipping Address"
+msgstr ""
+
+#: market/models.py:149
+msgid "Shipping Addresses"
+msgstr ""
+
+#: market/models.py:166
+msgid "Name"
+msgstr "नाम"
+
+#: market/models.py:167
+msgid "Description"
+msgstr ""
+
+#: market/models.py:168 producer/models.py:117
+msgid "Price"
+msgstr ""
+
+#: market/models.py:169
+msgid "Stock"
+msgstr ""
+
+#: market/models.py:174
+msgid "Category"
+msgstr ""
+
+#: market/models.py:176
+msgid "Created At"
+msgstr ""
+
+#: market/models.py:177
+msgid "Updated At"
+msgstr ""
+
+#: market/models.py:178
+msgid "Image"
+msgstr ""
+
+#: market/models.py:179
+msgid "Is Verified"
+msgstr ""
+
+#: market/models.py:180
+msgid "Is Sold"
+msgstr ""
+
+#: market/models.py:186
+msgid "Marketplace User Product"
+msgstr ""
+
+#: market/models.py:187
+msgid "Marketplace User Products"
+msgstr ""
+
+#: producer/models.py:22
+msgid "Producer Name"
+msgstr ""
+
+#: producer/models.py:23 producer/models.py:60
+msgid "Contact Information"
+msgstr ""
+
+#: producer/models.py:24 producer/models.py:61
+msgid "Email Address"
+msgstr ""
+
+#: producer/models.py:25
+msgid "Physical Address"
+msgstr ""
+
+#: producer/models.py:26
+msgid "Registration Number"
+msgstr ""
+
+#: producer/models.py:27 producer/models.py:66 producer/models.py:122
+#: producer/models.py:169 producer/models.py:212
+msgid "Creation Time"
+msgstr ""
+
+#: producer/models.py:28 producer/models.py:67 producer/models.py:123
+#: producer/models.py:170 producer/models.py:213
+msgid "Last Update Time"
+msgstr ""
+
+#: producer/models.py:35 producer/models.py:108
+msgid "Producer"
+msgstr ""
+
+#: producer/models.py:36
+msgid "Producers"
+msgstr ""
+
+#: producer/models.py:56
+msgid "Retailer"
+msgstr ""
+
+#: producer/models.py:56
+msgid "Wholesaler"
+msgstr ""
+
+#: producer/models.py:56
+msgid "Distributor"
+msgstr ""
+
+#: producer/models.py:58
+msgid "Customer Name"
+msgstr ""
+
+#: producer/models.py:59
+msgid "Customer Type"
+msgstr ""
+
+#: producer/models.py:62
+msgid "Billing Address"
+msgstr ""
+
+#: producer/models.py:64
+msgid "Credit Limit"
+msgstr ""
+
+#: producer/models.py:65
+msgid "Current Balance"
+msgstr ""
+
+#: producer/models.py:73 producer/models.py:160
+msgid "Customer"
+msgstr ""
+
+#: producer/models.py:74
+msgid "Customers"
+msgstr ""
+
+#: producer/models.py:109
+msgid "Product Name"
+msgstr ""
+
+#: producer/models.py:115
+msgid "Product Description"
+msgstr ""
+
+#: producer/models.py:116
+msgid "Stock Keeping Unit (SKU)"
+msgstr ""
+
+#: producer/models.py:118
+msgid "Cost Price"
+msgstr ""
+
+#: producer/models.py:119
+msgid "Stock Quantity"
+msgstr ""
+
+#: producer/models.py:120
+msgid "Reorder Level"
+msgstr ""
+
+#: producer/models.py:121
+msgid "Active Status"
+msgstr ""
+
+#: producer/models.py:124
+msgid "Marketplace Created"
+msgstr ""
+
+#: producer/models.py:131
+msgid "Products"
+msgstr ""
+
+#: producer/models.py:154 producer/models.py:202
+msgid "Pending"
+msgstr ""
+
+#: producer/models.py:155 producer/models.py:203
+msgid "Approved"
+msgstr ""
+
+#: producer/models.py:156 producer/models.py:204
+msgid "Shipped"
+msgstr ""
+
+#: producer/models.py:157 producer/models.py:205
+msgid "Delivered"
+msgstr ""
+
+#: producer/models.py:158 producer/models.py:206
+msgid "Cancelled"
+msgstr ""
+
+#: producer/models.py:161
+msgid "Order Number"
+msgstr ""
+
+#: producer/models.py:164
+msgid "Order Status"
+msgstr ""
+
+#: producer/models.py:165
+msgid "Order Date"
+msgstr ""
+
+#: producer/models.py:166
+msgid "Delivery Date"
+msgstr ""
+
+#: producer/models.py:167
+msgid "Total Price"
+msgstr ""
+
+#: producer/models.py:168
+msgid "Notes"
+msgstr ""
+
+#: producer/models.py:176 producer/models.py:208
+msgid "Order"
+msgstr ""
+
+#: producer/models.py:177
+msgid "Orders"
+msgstr ""
+
+#: producer/models.py:209
+msgid "Quantity Sold"
+msgstr ""
+
+#: producer/models.py:210
+msgid "Sale Price"
+msgstr ""
+
+#: producer/models.py:211
+msgid "Sale Date"
+msgstr ""
+
+#: producer/models.py:218
+msgid "Payment Status"
+msgstr ""
+
+#: producer/models.py:223
+msgid "Payment Due Date"
+msgstr ""
+
+#: producer/models.py:230
+msgid "Sale"
+msgstr ""
+
+#: producer/models.py:231
+msgid "Sales"
+msgstr ""
+
+#: producer/models.py:250
+msgid "Moved Date"
+msgstr ""
+
+#: producer/models.py:252
+msgid "Is Stock moved to marketplace"
+msgstr ""
+
+#: producer/models.py:271
+msgid "Listed Price"
+msgstr ""
+
+#: producer/models.py:272
+msgid "Listed Date"
+msgstr ""
+
+#: producer/models.py:273
+msgid "Is Available"
+msgstr ""
+
+#: producer/models.py:274
+msgid "Bid End Date"
+msgstr ""
+
+#: producer/models.py:280
+msgid "Marketplace Product"
+msgstr ""
+
+#: producer/models.py:281
+msgid "Marketplace Products"
+msgstr ""
+
+#: producer/models.py:311
+msgid "Alternative Text"
+msgstr ""

@@ -15,6 +15,7 @@ RUN apt-get update -y \
         # Helper packages
         wait-for-it \
         wkhtmltopdf \
+        gettext \
     # Upgrade pip and install python packages for code
     && pip install --upgrade --no-cache-dir pip poetry \
     && poetry --version \
@@ -26,5 +27,6 @@ RUN apt-get update -y \
     && apt-get remove -y gcc libc-dev libproj-dev \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
 
 COPY . /code/
