@@ -44,6 +44,7 @@ class ProducerSerializer(serializers.ModelSerializer):
 
             if latitude is not None and longitude is not None:
                 validated_data['location'] = Point(longitude, latitude)
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
@@ -54,6 +55,7 @@ class ProducerSerializer(serializers.ModelSerializer):
 
             if latitude is not None and longitude is not None:
                 validated_data['location'] = Point(longitude, latitude)
+        validated_data['user'] = self.context['request'].user
         return super().update(instance, validated_data)
 
 
@@ -78,11 +80,27 @@ class CustomerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Current balance cannot be negative.")
         return value
 
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().update(instance, validated_data)
+
 
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
         fields = ['id', 'image', 'alt_text', 'created_at']
+    
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().update(instance, validated_data)
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -123,6 +141,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         uploaded_images = validated_data.pop('uploaded_images', [])
+        validated_data['user'] = self.context['request'].user
         product = super().create(validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -132,6 +151,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         uploaded_images = validated_data.pop('uploaded_images', [])
         deleted_images = validated_data.pop('deleted_images', [])
+        validated_data['user'] = self.context['request'].user
         product = super().update(instance, validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -195,6 +215,14 @@ class OrderSerializer(serializers.ModelSerializer):
 
         return data
 
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().update(instance, validated_data)
+
 
 class SaleSerializer(serializers.ModelSerializer):
     order_details = OrderSerializer(source='order', read_only=True)
@@ -228,6 +256,14 @@ class SaleSerializer(serializers.ModelSerializer):
         if data["sale_price"] > product.price:
             raise serializers.ValidationError("Sale price cannot be greater than the original product price.")
         return data
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().update(instance, validated_data)
 
 
 class CustomerSalesSerializer(serializers.Serializer):

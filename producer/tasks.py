@@ -15,7 +15,7 @@ def move_large_stock_to_stocklist():
     for product in products:
         if product.stock > LARGE_STOCK_THRESHOLD:
             if not StockList.objects.filter(product=product).exists():
-                StockList.objects.create(product=product)
+                StockList.objects.create(product=product, user=product.user)
                 product.is_active = False
                 product.save()
 
