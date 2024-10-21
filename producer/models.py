@@ -1,8 +1,11 @@
 from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import User
+
 import uuid
 from datetime import timedelta
 from django.contrib.gis.db import models
 from django.utils import timezone
+from main.manager import ShopSpecificQuerySet
 
 
 class Producer(models.Model):
@@ -27,6 +30,12 @@ class Producer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     location = models.PointField(srid=4326, help_text="Local Unit Location", null=True, blank=True)
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return self.name
@@ -65,6 +74,12 @@ class Customer(models.Model):
     current_balance = models.FloatField(default=0.00, verbose_name=_("Current Balance"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"{self.name} ({self.customer_type})"
@@ -122,6 +137,12 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     is_marketplace_created = models.BooleanField(default=False, verbose_name=_("Marketplace Created"))
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return self.name
@@ -168,6 +189,12 @@ class Order(models.Model):
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"Order {self.order_number} by {self.customer.name}"
@@ -222,6 +249,12 @@ class Sale(models.Model):
         blank=True,
         verbose_name=_("Payment Due Date")
     )
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
@@ -252,6 +285,12 @@ class StockList(models.Model):
         verbose_name=_('Is Stock moved to marketplace'),
         default=False
     )
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
@@ -310,6 +349,12 @@ class ProductImage(models.Model):
     image = models.ImageField(upload_to='product_images/')
     alt_text = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Alternative Text"))
     created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(
+        User,
+        verbose_name=_('User'),
+        on_delete=models.CASCADE
+    )
+    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return self.alt_text or f"Image for {self.product.name}"

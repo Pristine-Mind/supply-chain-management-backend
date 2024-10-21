@@ -49,6 +49,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
     queryset = Producer.objects.all().order_by('-created_at')
     serializer_class = ProducerSerializer
     filterset_class = ProducerFilter
+    permission_classes = [IsAuthenticated]
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -59,6 +60,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all().order_by('-created_at')
     serializer_class = CustomerSerializer
     filterset_class = CustomerFilter
+    permission_classes = [IsAuthenticated]
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -69,6 +71,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
     filterset_class = ProductFilter
+    permission_classes = [IsAuthenticated]
 
     @action(
         detail=False,
@@ -93,6 +96,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     queryset = Order.objects.all().order_by('-created_at')
     serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class SaleViewSet(viewsets.ModelViewSet):
@@ -103,6 +107,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
     serializer_class = SaleSerializer
     filterset_class = SaleFilter
+    permission_classes = [IsAuthenticated]
 
 
 class DashboardAPIView(APIView):
@@ -183,6 +188,7 @@ class TopOrdersCustomersView(APIView):
 class StockListView(viewsets.ModelViewSet):
     queryset = StockList.objects.filter(is_pushed_to_marketplace=False).distinct()
     serializer_class = StockListSerializer
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['post'], url_path='push-to-marketplace')
     def push_to_marketplace(self, request, pk=None):
