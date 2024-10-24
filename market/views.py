@@ -5,6 +5,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
 from django.conf import settings
 from django.db.models import Subquery, OuterRef
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
 from rest_framework import viewsets, status, views
 from rest_framework.response import Response
@@ -243,3 +245,22 @@ class ProductBidsView(views.APIView):
         bids = Bid.objects.filter(product__id=product_id).order_by('-bid_date')
         serializer = BidUserSerializer(bids, many=True)
         return Response(serializer.data)
+
+
+class UserBidsForProductView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, product_id):
+        product = get_object_or_404(MarketplaceProduct, id=product_id)
+        user_bids = Bid.objects.filter(bidder=request.user, product=product).order_by('-bid_date')
+
+        bids_data = [
+            {
+                "bid_amount": bid.bid_amount,
+                "max_bid_amount": bid.max_bid_amount,
+                "bid_date": bid.bid_date
+            }
+            for bid in user_bids
+        ]
+
+        return Response(bids_data)

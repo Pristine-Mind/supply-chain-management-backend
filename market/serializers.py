@@ -192,10 +192,24 @@ class BidUserSerializer(serializers.ModelSerializer):
         source='product',
         read_only=True
     )
+    bidder_username = serializers.CharField(
+        source='bidder.username',
+        read_only=True
+    )
 
     class Meta:
         model = Bid
-        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product", "product_details"]
+        fields = [
+            "id",
+            "bidder",
+            "product_id",
+            "bid_amount",
+            "bid_date",
+            "max_bid_amount",
+            "product",
+            "product_details",
+            "bidder_username",
+        ]
         read_only_fields = ["bid_date", "bidder"]
 
 

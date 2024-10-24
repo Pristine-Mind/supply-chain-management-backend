@@ -45,7 +45,8 @@ from market.views import (
     verify_khalti_payment,
     MarketplaceUserProductViewSet,
     ProductBidsView,
-    UserBidViewSet
+    UserBidViewSet,
+    UserBidsForProductView,
 )
 from user.views import RegisterView, LoginAPIView
 
@@ -79,6 +80,7 @@ urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('api/v1/stats/', StatsAPIView.as_view(), name='stats-api'),
     path('api/v1/bids/product/<int:product_id>/', ProductBidsView.as_view(), name='product-bids'),
+    path('api/v1/bids/user/<int:product_id>/', UserBidsForProductView.as_view(), name='user_bids_for_product'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
