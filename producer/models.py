@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.contrib.gis.db import models
 from django.utils import timezone
 from main.manager import ShopSpecificQuerySet
+from typing import Optional
 
 
 class Producer(models.Model):
@@ -35,7 +36,6 @@ class Producer(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return self.name
@@ -79,7 +79,7 @@ class Customer(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
+    
 
     def __str__(self):
         return f"{self.name} ({self.customer_type})"
@@ -142,7 +142,7 @@ class Product(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
+    
 
     def __str__(self):
         return self.name
@@ -194,7 +194,6 @@ class Order(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"Order {self.order_number} by {self.customer.name}"
@@ -254,8 +253,7 @@ class Sale(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
-
+    
     def __str__(self):
         return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
 
@@ -271,8 +269,8 @@ class Sale(models.Model):
         """
         Reduce the stock of the product after a sale is made.
         """
-        self.product.stock -= self.quantity
-        self.product.save()
+        self.order.product.stock -= self.quantity
+        self.order.product.save()
 
 
 class StockList(models.Model):
@@ -290,7 +288,6 @@ class StockList(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
@@ -319,25 +316,20 @@ class MarketplaceProduct(models.Model):
         verbose_name = _("Marketplace Product")
         verbose_name_plural = _("Marketplace Products")
 
-    def update_bid_end_date(self, bids_last_hour, bids_last_day):
+    def update_bid_end_date(self, bids_last_hour: int, bids_last_day: int) -> None:
         """
         Dynamically updates the bid_end_date based on heuristic rules.
         """
-        time_left = self.bid_end_date - timezone.now()
+        if self.bid_end_date is None:
+            self.bid_end_date = timezone.now() + timedelta(days=1)
 
-        # Rule 1: Extend by 12 hours if no bids in the last 24 hours and < 6 hours remaining
+        time_left = self.bid_end_date - timezone.now()
         if bids_last_day == 0 and time_left <= timedelta(hours=6):
             self.bid_end_date += timedelta(hours=12)
-
-        # Rule 2: Extend by 6 hours if bids are slow (e.g. fewer than 5 bids in the last 24 hours)
         elif bids_last_day < 5 and bids_last_hour == 0:
             self.bid_end_date += timedelta(hours=6)
-
-        # Rule 3: Shorten the bid if bids are frequent (e.g. more than 3 in the last hour)
         elif bids_last_hour > 3:
             self.bid_end_date -= timedelta(hours=2)
-
-        # Save the updated bid_end_date
         self.save()
 
 
@@ -349,12 +341,6 @@ class ProductImage(models.Model):
     image = models.ImageField(upload_to='product_images/')
     alt_text = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Alternative Text"))
     created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
-    objects = ShopSpecificQuerySet.as_manager()
 
     def __str__(self):
         return self.alt_text or f"Image for {self.product.name}"
