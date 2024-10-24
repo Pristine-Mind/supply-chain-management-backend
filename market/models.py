@@ -178,6 +178,7 @@ class MarketplaceUserProduct(models.Model):
     image = models.ImageField(_("Image"), upload_to='marketplace/products/', null=True, blank=True)
     is_verified = models.BooleanField(_("Is Verified"), default=False)
     is_sold = models.BooleanField(_("Is Sold"), default=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
 
     def __str__(self):
         return self.name

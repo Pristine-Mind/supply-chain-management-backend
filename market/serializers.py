@@ -224,11 +224,12 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        product = validated_data["product"]
-        message = validated_data["message"]
-        chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
-
-        return chat_message
+        # product = validated_data["product"]
+        # message = validated_data["message"]
+        validated_data['sender'] = self.context['request'].user
+        # chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
+        return super().create(validated_data)
+        # return chat_message
 
 
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
@@ -245,3 +246,8 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Stock cannot be negative.")
         return value
+
+    def create(self, validated_data):
+        print(self.context['request'].user, 'ggggggmaeeuqtttttttttt')
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
