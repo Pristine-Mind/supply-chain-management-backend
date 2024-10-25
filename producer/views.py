@@ -20,6 +20,7 @@ from .models import (
     Sale,
     StockList,
     MarketplaceProduct,
+    City,
 )
 from .serializers import (
     ProducerSerializer,
@@ -31,6 +32,7 @@ from .serializers import (
     CustomerOrdersSerializer,
     StockListSerializer,
     MarketplaceProductSerializer,
+    CitySerializer,
 )
 from .filters import (
     SaleFilter,
@@ -116,7 +118,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=False,
-        url_path="catgeory",
+        url_path="catgeories",
         methods=("get",),
     )
     def get_category(self, request, pk=None):
@@ -365,3 +367,10 @@ class StatsAPIView(APIView):
             "top_categories": list(top_categories),
             "monthly_sales": list(monthly_sales),
         }
+
+
+class CityListView(APIView):
+    def get(self, request):
+        cities = City.objects.all()
+        serializer = CitySerializer(cities, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

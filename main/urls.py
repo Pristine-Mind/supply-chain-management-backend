@@ -33,6 +33,7 @@ from producer.views import (
     StockListView,
     MarketplaceProductViewSet,
     StatsAPIView,
+    CityListView,
 )
 from market.views import (
     BidViewSet,
@@ -87,6 +88,7 @@ urlpatterns = [
     path('api/v1/seller/', SellerProductsView.as_view(), name='seller-products'),
     path('api/v1/notifications/', NotificationListView.as_view(), name='notification-list'),
     path('api/v1/notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
+    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
