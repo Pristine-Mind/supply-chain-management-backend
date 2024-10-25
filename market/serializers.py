@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 
 from rest_framework import serializers
 
-from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
+from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct, Notification
 from producer.models import MarketplaceProduct
 from producer.serializers import MarketplaceProductSerializer
 
@@ -128,7 +128,6 @@ class PurchaseSerializer(serializers.ModelSerializer):
                 "Content-Type": "application/json",
             }
             response = requests.post(khalti_payment_url, headers=headers, data=json.dumps(khalti_payload))
-            print(response.json(), "hhhhhhh")
             if response.status_code == 200:
                 # Extracting the payment URL from the response
                 response_data = response.json()
@@ -192,10 +191,24 @@ class BidUserSerializer(serializers.ModelSerializer):
         source='product',
         read_only=True
     )
+    bidder_username = serializers.CharField(
+        source='bidder.username',
+        read_only=True
+    )
 
     class Meta:
         model = Bid
-        fields = ["id", "bidder", "product_id", "bid_amount", "bid_date", "max_bid_amount", "product", "product_details"]
+        fields = [
+            "id",
+            "bidder",
+            "product_id",
+            "bid_amount",
+            "bid_date",
+            "max_bid_amount",
+            "product",
+            "product_details",
+            "bidder_username",
+        ]
         read_only_fields = ["bid_date", "bidder"]
 
 
@@ -224,11 +237,12 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        product = validated_data["product"]
-        message = validated_data["message"]
-        chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
-
-        return chat_message
+        # product = validated_data["product"]
+        # message = validated_data["message"]
+        validated_data['sender'] = self.context['request'].user
+        # chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
+        return super().create(validated_data)
+        # return chat_message
 
 
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
@@ -245,3 +259,30 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Stock cannot be negative.")
         return value
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class SellerProductSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='product.name', read_only=True)
+    description = serializers.CharField(source='product.description', read_only=True)
+
+    class Meta:
+        model = MarketplaceProduct
+        fields = ['id', 'name', 'description']
+
+
+class SellerBidSerializer(serializers.ModelSerializer):
+    bidder_username = serializers.CharField(source='bidder.username', read_only=True)
+
+    class Meta:
+        model = Bid
+        fields = ['bidder_username', 'bid_amount']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'is_read', 'created_at']

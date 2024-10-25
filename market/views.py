@@ -5,13 +5,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
 from django.conf import settings
 from django.db.models import Subquery, OuterRef
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
 from rest_framework import viewsets, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 
-from market.models import Bid, ChatMessage
+from market.models import Bid, ChatMessage, Notification
 from producer.models import MarketplaceProduct
 from .serializers import (
     PurchaseSerializer,
@@ -19,6 +21,9 @@ from .serializers import (
     ChatMessageSerializer,
     MarketplaceUserProductSerializer,
     BidUserSerializer,
+    SellerProductSerializer,
+    SellerBidSerializer,
+    NotificationSerializer
 )
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
@@ -243,3 +248,53 @@ class ProductBidsView(views.APIView):
         bids = Bid.objects.filter(product__id=product_id).order_by('-bid_date')
         serializer = BidUserSerializer(bids, many=True)
         return Response(serializer.data)
+
+
+class UserBidsForProductView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, product_id):
+        product = get_object_or_404(MarketplaceProduct, id=product_id)
+        user_bids = Bid.objects.filter(bidder=request.user, product=product).order_by('-bid_date')
+
+        bids_data = [
+            {
+                "bid_amount": bid.bid_amount,
+                "max_bid_amount": bid.max_bid_amount,
+                "bid_date": bid.bid_date
+            }
+            for bid in user_bids
+        ]
+
+        return Response(bids_data)
+
+
+class SellerProductsView(views.APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        products = MarketplaceProduct.objects.filter(product__user=request.user).distinct()
+        serialized_products = []
+        for product in products:
+            bids = Bid.objects.filter(product=product).order_by('-bid_amount')
+            serialized_product = SellerProductSerializer(product).data
+            serialized_product['bids'] = SellerBidSerializer(bids, many=True).data
+            serialized_products.append(serialized_product)
+        return Response(serialized_products)
+
+
+class NotificationListView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MarkNotificationsReadView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({'message': 'All notifications marked as read.'}, status=status.HTTP_200_OK)

@@ -11,6 +11,7 @@ def get_current_shop():
 class ShopSpecificQuerySet(models.QuerySet):
     def _filter_by_shop(self):
         shop_id = get_current_shop()
+        print(f"Current shop_id in queryset: {shop_id}")
         if shop_id:
             return self.filter(user__userprofile__shop_id=shop_id)
         return self.none()
