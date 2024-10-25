@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 
-from market.models import Bid, ChatMessage
+from market.models import Bid, ChatMessage, Notification
 from producer.models import MarketplaceProduct
 from .serializers import (
     PurchaseSerializer,
@@ -21,6 +21,9 @@ from .serializers import (
     ChatMessageSerializer,
     MarketplaceUserProductSerializer,
     BidUserSerializer,
+    SellerProductSerializer,
+    SellerBidSerializer,
+    NotificationSerializer
 )
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
@@ -264,3 +267,35 @@ class UserBidsForProductView(views.APIView):
         ]
 
         return Response(bids_data)
+
+
+class SellerProductsView(views.APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        products = MarketplaceProduct.objects.filter(product__user=request.user).distinct()
+        serialized_products = []
+        for product in products:
+            bids = Bid.objects.filter(product=product).order_by('-bid_amount')
+            serialized_product = SellerProductSerializer(product).data
+            serialized_product['bids'] = SellerBidSerializer(bids, many=True).data
+            serialized_products.append(serialized_product)
+        return Response(serialized_products)
+
+
+class NotificationListView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        print(notifications)
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MarkNotificationsReadView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({'message': 'All notifications marked as read.'}, status=status.HTTP_200_OK)

@@ -92,6 +92,14 @@ class Bid(models.Model):
     def __str__(self):
         return f"{self.bidder.username} bid {self.bid_amount} on {self.product.product.name}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Notify the seller about the new bid
+        Notification.objects.create(
+            user=self.product.product.user,
+            message=f'New bid of NPR {self.bid_amount} by {self.bidder.username} on your product {self.product.product.name}'
+        )
+
     class Meta:
         verbose_name = _("Bid")
         verbose_name_plural = _("Bids")
@@ -186,3 +194,10 @@ class MarketplaceUserProduct(models.Model):
     class Meta:
         verbose_name = _("Marketplace User Product")
         verbose_name_plural = _("Marketplace User Products")
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 
 from rest_framework import serializers
 
-from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct
+from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct, Notification
 from producer.models import MarketplaceProduct
 from producer.serializers import MarketplaceProductSerializer
 
@@ -262,6 +262,28 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        print(self.context['request'].user, 'ggggggmaeeuqtttttttttt')
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class SellerProductSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='product.name', read_only=True)
+    description = serializers.CharField(source='product.description', read_only=True)
+
+    class Meta:
+        model = MarketplaceProduct
+        fields = ['id', 'name', 'description']
+
+
+class SellerBidSerializer(serializers.ModelSerializer):
+    bidder_username = serializers.CharField(source='bidder.username', read_only=True)
+
+    class Meta:
+        model = Bid
+        fields = ['bidder_username', 'bid_amount']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'is_read', 'created_at']
