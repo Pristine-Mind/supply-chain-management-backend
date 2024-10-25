@@ -22,6 +22,7 @@ def create_marketplace_product(sender, instance, created, **kwargs):
             category=instance.category,
             is_marketplace_created=True,
             user=instance.user,
+            location=instance.location
         )
 
         MarketplaceProduct.objects.create(

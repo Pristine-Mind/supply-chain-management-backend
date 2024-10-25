@@ -71,10 +71,11 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         choices=Product.ProductCategory.choices,
         field_name='product__category',
     )
+    city = django_filters.CharFilter(field_name="product__location__name", lookup_expr='exact')
 
     class Meta:
         model = MarketplaceProduct
-        fields = ['search', 'category']
+        fields = ['search', 'category', 'city']
 
     def filter_search(self, queryset, name, value):
         if value:

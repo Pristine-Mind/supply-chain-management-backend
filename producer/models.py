@@ -142,7 +142,14 @@ class Product(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    
+    location = models.ForeignKey(
+        "City",
+        on_delete=models.CASCADE,
+        verbose_name="Location",
+        help_text="Location of the product",
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return self.name
@@ -344,3 +351,10 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return self.alt_text or f"Image for {self.product.name}"
+
+
+class City(models.Model):
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
