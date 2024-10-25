@@ -134,7 +134,6 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         uploaded_images = validated_data.pop("uploaded_images", [])
-        print(self.context["request"].user, "gggggggggggg")
         validated_data["user"] = self.context["request"].user
         product = super().create(validated_data)
         for image in uploaded_images:

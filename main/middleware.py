@@ -7,9 +7,6 @@ class ShopIDMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        auth_header = request.headers.get('Authorization')
-        print(f"Authorization Header: {auth_header}")
-        print(f"Request User: {request.user}")
         if request.user and request.user.is_authenticated:
             try:
                 user_profile = UserProfile.objects.filter(user=request.user).first()

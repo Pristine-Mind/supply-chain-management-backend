@@ -128,7 +128,6 @@ class PurchaseSerializer(serializers.ModelSerializer):
                 "Content-Type": "application/json",
             }
             response = requests.post(khalti_payment_url, headers=headers, data=json.dumps(khalti_payload))
-            print(response.json(), "hhhhhhh")
             if response.status_code == 200:
                 # Extracting the payment URL from the response
                 response_data = response.json()
