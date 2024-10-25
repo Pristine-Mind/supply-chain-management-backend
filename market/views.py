@@ -12,6 +12,7 @@ from rest_framework import viewsets, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework import serializers
 
 from market.models import Bid, ChatMessage, Notification
 from producer.models import MarketplaceProduct
@@ -261,7 +262,8 @@ class UserBidsForProductView(views.APIView):
             {
                 "bid_amount": bid.bid_amount,
                 "max_bid_amount": bid.max_bid_amount,
-                "bid_date": bid.bid_date
+                "bid_date": bid.bid_date,
+                "id": bid.id,
             }
             for bid in user_bids
         ]
@@ -298,3 +300,17 @@ class MarkNotificationsReadView(views.APIView):
     def post(self, request):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'message': 'All notifications marked as read.'}, status=status.HTTP_200_OK)
+
+
+class WithdrawBidView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, bid_id):
+        bid = get_object_or_404(Bid, id=bid_id, bidder=request.user)   
+        serializer = BidSerializer()
+        try:
+            serializer.delete(bid)
+        except serializers.ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"detail": "Bid withdrawn successfully."}, status=status.HTTP_204_NO_CONTENT)
