@@ -22,6 +22,7 @@ class ProducerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Producer
         fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
 
     def get_location_details(self, producer) -> dict:
         if producer and producer.location:
@@ -37,25 +38,25 @@ class ProducerSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        location_data = self.initial_data.get('location')
+        location_data = self.initial_data.get("location")
         if location_data:
-            latitude = location_data.get('latitude')
-            longitude = location_data.get('longitude')
+            latitude = location_data.get("latitude")
+            longitude = location_data.get("longitude")
 
             if latitude is not None and longitude is not None:
-                validated_data['location'] = Point(longitude, latitude)
-        validated_data['user'] = self.context['request'].user
+                validated_data["location"] = Point(longitude, latitude)
+        validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        location_data = self.initial_data.get('location')
+        location_data = self.initial_data.get("location")
         if location_data:
-            latitude = location_data.get('latitude')
-            longitude = location_data.get('longitude')
+            latitude = location_data.get("latitude")
+            longitude = location_data.get("longitude")
 
             if latitude is not None and longitude is not None:
-                validated_data['location'] = Point(longitude, latitude)
-        validated_data['user'] = self.context['request'].user
+                validated_data["location"] = Point(longitude, latitude)
+        validated_data["user"] = self.context["request"].user
         return super().update(instance, validated_data)
 
 
@@ -63,6 +64,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
 
     def validate_credit_limit(self, value):
         """
@@ -81,39 +83,30 @@ class CustomerSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().update(instance, validated_data)
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'created_at']
-    
-    def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        validated_data['user'] = self.context['request'].user
-        return super().update(instance, validated_data)
+        fields = ["id", "image", "alt_text", "created_at"]
 
 
 class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
     category_details = serializers.CharField(source="get_category_display", read_only=True)
-    deleted_images = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True, required=False
-    )
+    deleted_images = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
 
     class Meta:
         model = Product
         fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
 
     def validate_price(self, value):
         """
@@ -140,8 +133,8 @@ class ProductSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        uploaded_images = validated_data.pop('uploaded_images', [])
-        validated_data['user'] = self.context['request'].user
+        uploaded_images = validated_data.pop("uploaded_images", [])
+        validated_data["user"] = self.context["request"].user
         product = super().create(validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -149,9 +142,9 @@ class ProductSerializer(serializers.ModelSerializer):
         return product
 
     def update(self, instance, validated_data):
-        uploaded_images = validated_data.pop('uploaded_images', [])
-        deleted_images = validated_data.pop('deleted_images', [])
-        validated_data['user'] = self.context['request'].user
+        uploaded_images = validated_data.pop("uploaded_images", [])
+        deleted_images = validated_data.pop("deleted_images", [])
+        validated_data["user"] = self.context["request"].user
         product = super().update(instance, validated_data)
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
@@ -164,13 +157,14 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
-    customer_details = CustomerSerializer(source='customer', read_only=True)
-    product_details = ProductSerializer(source='product', read_only=True)
+    customer_details = CustomerSerializer(source="customer", read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
     order_number = serializers.CharField(read_only=True)
 
     class Meta:
         model = Order
         fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
 
     def validate_quantity(self, value):
         """
@@ -216,21 +210,22 @@ class OrderSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().update(instance, validated_data)
 
 
 class SaleSerializer(serializers.ModelSerializer):
-    order_details = OrderSerializer(source='order', read_only=True)
-    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    order_details = OrderSerializer(source="order", read_only=True)
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
 
     class Meta:
         model = Sale
         fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
 
     def validate_quantity(self, value):
         """
@@ -252,17 +247,17 @@ class SaleSerializer(serializers.ModelSerializer):
         """
         Ensure that the sale price does not exceed the original product price.
         """
-        product = data["product"]
-        if data["sale_price"] > product.price:
+        product = data["order"]
+        if data["sale_price"] > product.product.price:
             raise serializers.ValidationError("Sale price cannot be greater than the original product price.")
         return data
 
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().update(instance, validated_data)
 
 
@@ -272,7 +267,7 @@ class CustomerSalesSerializer(serializers.Serializer):
     id = serializers.IntegerField()
 
     class Meta:
-        fields = ['id', 'name', 'total_sales']
+        fields = ["id", "name", "total_sales"]
 
 
 class CustomerOrdersSerializer(serializers.ModelSerializer):
@@ -280,21 +275,20 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'total_orders']
+        fields = ["id", "name", "total_orders"]
 
 
 class StockListSerializer(serializers.ModelSerializer):
-    product_details = ProductSerializer(source='product', read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
 
     class Meta:
         model = StockList
-        fields = ['product', 'moved_date', 'product_details', 'id', 'is_pushed_to_marketplace']
+        fields = ["product", "moved_date", "product_details", "id", "is_pushed_to_marketplace"]
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
-    product_details = ProductSerializer(source='product', read_only=True)
+    product_details = ProductSerializer(source="product", read_only=True)
 
     class Meta:
         model = MarketplaceProduct
-        fields = [
-            'product', 'listed_price', 'listed_date', 'is_available', 'id', 'product_details', 'bid_end_date']
+        fields = ["product", "listed_price", "listed_date", "is_available", "id", "product_details", "bid_end_date"]
