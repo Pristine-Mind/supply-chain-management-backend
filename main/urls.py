@@ -33,6 +33,8 @@ from producer.views import (
     StockListView,
     MarketplaceProductViewSet,
     StatsAPIView,
+    CityListView,
+    withdraw_product,
 )
 from market.views import (
     BidViewSet,
@@ -50,6 +52,7 @@ from market.views import (
     SellerProductsView,
     NotificationListView,
     MarkNotificationsReadView,
+    WithdrawBidView,
 )
 from user.views import RegisterView, LoginAPIView
 
@@ -87,6 +90,9 @@ urlpatterns = [
     path('api/v1/seller/', SellerProductsView.as_view(), name='seller-products'),
     path('api/v1/notifications/', NotificationListView.as_view(), name='notification-list'),
     path('api/v1/notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
+    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
+    path('api/v1/seller/<int:product_id>/withdraw/', withdraw_product, name='withdraw_product'),
+    path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

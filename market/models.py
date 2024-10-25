@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
-from producer.models import MarketplaceProduct
+from producer.models import MarketplaceProduct, City
 
 
 class Purchase(models.Model):
@@ -187,6 +187,14 @@ class MarketplaceUserProduct(models.Model):
     is_verified = models.BooleanField(_("Is Verified"), default=False)
     is_sold = models.BooleanField(_("Is Sold"), default=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
+    location = models.ForeignKey(
+        City,
+        on_delete=models.CASCADE,
+        verbose_name="Location",
+        help_text="Location of the product",
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return self.name
