@@ -47,6 +47,9 @@ from market.views import (
     ProductBidsView,
     UserBidViewSet,
     UserBidsForProductView,
+    SellerProductsView,
+    NotificationListView,
+    MarkNotificationsReadView,
 )
 from user.views import RegisterView, LoginAPIView
 
@@ -80,7 +83,10 @@ urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('api/v1/stats/', StatsAPIView.as_view(), name='stats-api'),
     path('api/v1/bids/product/<int:product_id>/', ProductBidsView.as_view(), name='product-bids'),
-    path('api/v1/bids/user/<int:product_id>/', UserBidsForProductView.as_view(), name='user_bids_for_product'),
+    path('api/v1/bids/user/<int:product_id>/', UserBidsForProductView.as_view(), name='user-bids-for-product'),
+    path('api/v1/seller/', SellerProductsView.as_view(), name='seller-products'),
+    path('api/v1/notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('api/v1/notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
