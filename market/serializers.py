@@ -249,6 +249,7 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketplaceUserProduct
         fields = '__all__'
+        extra_kwargs = {"user": {"read_only": True}}
 
     def validate_price(self, value):
         if value <= 0:
