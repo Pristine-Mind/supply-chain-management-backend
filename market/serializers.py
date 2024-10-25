@@ -180,7 +180,22 @@ class BidSerializer(serializers.ModelSerializer):
 
         bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
 
+        # Check if the request user is the highest bidder, and send a notification if so
+        if highest_bid is None or bid.bid_amount > highest_bid.bid_amount:
+            Notification.objects.create(
+                user=bid.bidder,
+                message=f"You are the highest bidder for the product '{product.product.name}'"
+            )
+
         return bid
+
+    def delete(self, instance):
+        if instance.product.bid_end_date < timezone.now():
+            raise serializers.ValidationError("Cannot withdraw bid after bidding has ended.")
+        # TODO: Check on this
+        # if instance == Bid.objects.filter(product=instance.product).order_by('-bid_amount').first():
+        #     raise serializers.ValidationError("Cannot withdraw the highest bid.") 
+        instance.delete()
 
 
 class BidUserSerializer(serializers.ModelSerializer):

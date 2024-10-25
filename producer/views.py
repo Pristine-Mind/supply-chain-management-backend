@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
+from rest_framework.decorators import api_view, permission_classes
+
 
 from django.db.models import Sum, Q, Count, F, FloatField, ExpressionWrapper
 from django.utils import timezone
@@ -374,3 +376,23 @@ class CityListView(APIView):
         cities = City.objects.all()
         serializer = CitySerializer(cities, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def withdraw_product(request, product_id):
+    try:
+        product = MarketplaceProduct.objects.get(pk=product_id, product__user=request.user)
+
+        # Ensure that the bid end date has not expired
+        if product.bid_end_date and product.bid_end_date < timezone.now():
+            return Response({'error': 'Cannot withdraw product. The bidding period has ended.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Withdraw the product
+        product.is_available = False
+        product.save()
+
+        return Response({'message': 'Product withdrawn successfully.'}, status=status.HTTP_200_OK)
+
+    except MarketplaceProduct.DoesNotExist:
+        return Response({'error': 'Product not found or you do not have permission to withdraw this product.'}, status=status.HTTP_404_NOT_FOUND)
