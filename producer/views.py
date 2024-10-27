@@ -179,23 +179,42 @@ class SaleViewSet(viewsets.ModelViewSet):
 
 
 class DashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+
+        user_profile = getattr(user, "userprofile", None)
+        if not user_profile:
+            return Response({"detail": "User profile not found"}, status=404)
+
+        # Filter data based on the shop_id of the user's profile
+        shop_id = user_profile.shop_id
         current_year = timezone.now().year
-        total_products = Product.objects.filter(is_active=True).count() or 0
-        total_orders = Order.objects.count()
-        total_sales = Sale.objects.count()
-        total_customers = Customer.objects.count()
-        pending_orders = Order.objects.filter(Q(status=Order.Status.PENDING) | Q(status=Order.Status.APPROVED)).count()
-        total_revenue = Sale.objects.aggregate(total_revenue=Sum("sale_price"))["total_revenue"] or 0
+
+        total_products = Product.objects.filter(user__userprofile__shop_id=shop_id).distinct().count() or 0
+        total_orders = Order.objects.filter(user__userprofile__shop_id=shop_id).count()
+        total_sales = Sale.objects.filter(user__userprofile__shop_id=shop_id).count()
+        total_customers = Customer.objects.filter(user__userprofile__shop_id=shop_id).count()
+        pending_orders = Order.objects.filter(
+            Q(status=Order.Status.PENDING) | Q(status=Order.Status.APPROVED),
+            user__userprofile__shop_id=shop_id
+        ).count()
+        total_revenue = Sale.objects.filter(user__userprofile__shop_id=shop_id).aggregate(
+            total_revenue=Sum("sale_price")
+        )["total_revenue"] or 0
 
         # Group sales by month for the current year
         sales_trends = (
-            Sale.objects.filter(sale_date__year=current_year)
+            Sale.objects.filter(user__userprofile__shop_id=shop_id, sale_date__year=current_year)
             .annotate(month=TruncMonth("sale_date"))
             .values("month")
             .annotate(total_sales=Sum("sale_price"))
             .order_by("month")
         )
+
         data = {
             "totalProducts": total_products,
             "totalOrders": total_orders,
@@ -218,11 +237,23 @@ class UserInfoView(APIView):
 
 
 class TopSalesCustomersView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         current_year = timezone.now().year
+        user = request.user
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+
+        user_profile = getattr(user, "userprofile", None)
+        if not user_profile:
+            return Response({"detail": "User profile not found"}, status=404)
+
+        # Filter data based on the shop_id of the user's profile
+        shop_id = user_profile.shop_id
 
         top_sales_customers = (
-            Sale.objects.filter(sale_date__year=current_year)
+            Sale.objects.filter(user__userprofile__shop_id=shop_id, sale_date__year=current_year)
             .annotate(total_sales_amount=ExpressionWrapper(F("sale_price") * F("quantity"), output_field=FloatField()))
             .values("order__customer__id", "order__customer__name")
             .annotate(total_sales=Sum("total_sales_amount"), name=F("order__customer__name"), id=F("order__customer__id"))
@@ -233,10 +264,23 @@ class TopSalesCustomersView(APIView):
 
 
 class TopOrdersCustomersView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         current_year = timezone.now().year
+        user = request.user
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+
+        user_profile = getattr(user, "userprofile", None)
+        if not user_profile:
+            return Response({"detail": "User profile not found"}, status=404)
+
+        # Filter data based on the shop_id of the user's profile
+        shop_id = user_profile.shop_id
+
         top_orders_customers = (
-            Customer.objects.filter(order__order_date__year=current_year)
+            Customer.objects.filter(user__userprofile__shop_id=shop_id, order__order_date__year=current_year)
             .annotate(total_orders=Count("order"))
             .order_by("-total_orders")[:10]
         )
@@ -300,10 +344,12 @@ class StatsAPIView(APIView):
     """
     API to provide sales statistics with optional filtering.
     """
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        user = request.user
         filter_params = self.get_filter_params(request)
-        sales_query = self.get_filtered_sales(filter_params)
+        sales_query = self.get_filtered_sales(filter_params, user)
         data = self.get_sales_statistics(sales_query)
         return Response(data, status=status.HTTP_200_OK)
 
@@ -324,9 +370,18 @@ class StatsAPIView(APIView):
 
         return {"location": location, "category": category, "start_date": parsed_start_date, "end_date": parsed_end_date}
 
-    def get_filtered_sales(self, filter_params):
+    def get_filtered_sales(self, filter_params, user):
         """Filter the sales query based on the provided parameters."""
-        sales_query = Sale.objects.all()
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+
+        user_profile = getattr(user, "userprofile", None)
+        if not user_profile:
+            return Response({"detail": "User profile not found"}, status=404)
+
+        # Filter data based on the shop_id of the user's profile
+        shop_id = user_profile.shop_id
+        sales_query = Sale.objects.filter(user__userprofile__shop_id=shop_id)
 
         if filter_params["location"]:
             sales_query = sales_query.filter(order__customer__city=filter_params["location"])
