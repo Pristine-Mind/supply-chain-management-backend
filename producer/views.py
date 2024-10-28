@@ -43,6 +43,7 @@ from .filters import (
     ProductFilter,
     MarketplaceProductFilter,
 )
+from user.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +234,17 @@ class UserInfoView(APIView):
 
     def get(self, request):
         user = request.user
-        return Response({"username": user.username, "id": user.id})
+        try:
+            user_profile = UserProfile.objects.get(user=user)
+            has_access_to_marketplace = user_profile.has_access_to_marketplace
+        except UserProfile.DoesNotExist:
+            has_access_to_marketplace = False
+
+        return Response({
+            "username": user.username,
+            "id": user.id,
+            "has_access_to_marketplace": has_access_to_marketplace,
+        })
 
 
 class TopSalesCustomersView(APIView):
