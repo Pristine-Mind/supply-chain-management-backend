@@ -1,6 +1,8 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import User
-import uuid
+from django.utils.translation import gettext_lazy as _
 
 
 class UserProfile(models.Model):
@@ -14,6 +16,10 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     shop_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    has_access_to_marketplace = models.BooleanField(
+        verbose_name=_("Has Access to Marketplace"),
+        default=False
+    )
 
     def __str__(self):
         return f"Shop profile for {self.user.username} with Shop ID {self.shop_id}"
