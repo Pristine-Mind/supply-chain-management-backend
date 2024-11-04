@@ -54,7 +54,7 @@ from market.views import (
     MarkNotificationsReadView,
     WithdrawBidView,
 )
-from user.views import RegisterView, LoginAPIView
+from user.views import RegisterView, LoginAPIView, PretrainedChatbotAPIView
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -93,6 +93,7 @@ urlpatterns = [
     path('api/v1/cities/', CityListView.as_view(), name='city-list'),
     path('api/v1/seller/<int:product_id>/withdraw/', withdraw_product, name='withdraw_product'),
     path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
+    path('api/v1/pretrained-chatbot/', PretrainedChatbotAPIView.as_view(), name='pretrained-chatbot'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

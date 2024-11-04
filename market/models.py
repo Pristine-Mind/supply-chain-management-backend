@@ -171,6 +171,10 @@ class MarketplaceUserProduct(models.Model):
         HERBS_AND_MEDICINAL_PLANTS = 'HR', 'Herbs & Medicinal Plants'
         OTHER = 'OT', 'Other'
 
+    class ProductUnit(models.TextChoices):
+        KILOGRAM = "KG", "KiloGram"
+        LITER = "LT", "Liter"
+
     name = models.CharField(_("Name"), max_length=255)
     description = models.TextField(_("Description"))
     price = models.DecimalField(_("Price"), max_digits=10, decimal_places=2)
@@ -180,6 +184,12 @@ class MarketplaceUserProduct(models.Model):
         choices=ProductCategory.choices,
         default=ProductCategory.VEGETABLES,
         verbose_name=_("Category")
+    )
+    unit = models.CharField(
+        max_length=2,
+        choices=ProductUnit.choices,
+        verbose_name=_("unit"),
+        default=ProductUnit.KILOGRAM,
     )
     created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
@@ -195,6 +205,7 @@ class MarketplaceUserProduct(models.Model):
         null=True,
         blank=True
     )
+    bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"), null=True, blank=True)
 
     def __str__(self):
         return self.name

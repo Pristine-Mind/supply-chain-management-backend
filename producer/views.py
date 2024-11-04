@@ -452,7 +452,10 @@ def withdraw_product(request, product_id):
 
         # Ensure that the bid end date has not expired
         if product.bid_end_date and product.bid_end_date < timezone.now():
-            return Response({'error': 'Cannot withdraw product. The bidding period has ended.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Cannot withdraw product. The bidding period has ended.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Withdraw the product
         product.is_available = False
