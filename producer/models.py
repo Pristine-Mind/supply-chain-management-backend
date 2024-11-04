@@ -260,7 +260,7 @@ class Sale(models.Model):
         verbose_name=_('User'),
         on_delete=models.CASCADE
     )
-    
+
     def __str__(self):
         return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
 
