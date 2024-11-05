@@ -164,7 +164,8 @@ class BidSerializer(serializers.ModelSerializer):
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid and data["bid_amount"] <= highest_bid.bid_amount:
             raise serializers.ValidationError("Your bid must be higher than the current highest bid.")
-
+        if product.product.user == self.context["request"].user:
+            raise serializers.ValidationError("Product Owner can't bid in their product")
         data["product"] = product
         return data
 
