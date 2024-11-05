@@ -294,12 +294,19 @@ class NotificationListView(views.APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class MarkNotificationsReadView(views.APIView):
+class MarkNotificationAsReadView(views.APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response({'message': 'All notifications marked as read.'}, status=status.HTTP_200_OK)
+    def post(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, user=request.user)
+
+        if notification.is_read:
+            return Response({"detail": "Notification is already marked as read."}, status=status.HTTP_400_BAD_REQUEST)
+
+        notification.is_read = True
+        notification.save()
+
+        return Response({"detail": "Notification marked as read."}, status=status.HTTP_200_OK)
 
 
 class WithdrawBidView(views.APIView):

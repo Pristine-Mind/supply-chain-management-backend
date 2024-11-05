@@ -51,7 +51,7 @@ from market.views import (
     UserBidsForProductView,
     SellerProductsView,
     NotificationListView,
-    MarkNotificationsReadView,
+    MarkNotificationAsReadView,
     WithdrawBidView,
 )
 from user.views import RegisterView, LoginAPIView, PretrainedChatbotAPIView
@@ -89,8 +89,7 @@ urlpatterns = [
     path('api/v1/bids/user/<int:product_id>/', UserBidsForProductView.as_view(), name='user-bids-for-product'),
     path('api/v1/seller/', SellerProductsView.as_view(), name='seller-products'),
     path('api/v1/notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('api/v1/notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
-    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
+    path('api/v1/notifications/<int:pk>/mark-read/', MarkNotificationAsReadView.as_view(), name='mark-notification-as-read'),    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
     path('api/v1/seller/<int:product_id>/withdraw/', withdraw_product, name='withdraw_product'),
     path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
     path('api/v1/pretrained-chatbot/', PretrainedChatbotAPIView.as_view(), name='pretrained-chatbot'),
