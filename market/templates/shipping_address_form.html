@@ -1,54 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shipping Address Form</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body>
     <div class="container mt-5">
         <div class="row justify-content-center">
-            <div class="col-md-6">
-                <div class="card">
+            <div class="col-md-8 col-lg-6">
+                <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">
-                        <h4 class="card-title text-center">Shipping Address</h4>
+                        <h4 class="card-title text-center my-2">Shipping Address</h4>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-4">
                         <form id="shipping-form" method="post">
                             {% csrf_token %}
-                            <div class="mb-3">
-                                <label for="id_address_line_1" class="form-label fw-bold">Address Line 1</label>
+                            <div class="mb-4">
+                                <label for="id_address_line_1" class="form-label fw-bold text-dark">Address Line 1</label>
                                 {{ form.address_line_1 }}
                             </div>
-                            <div class="mb-3">
-                                <label for="id_address_line_2" class="form-label fw-bold">Address Line 2</label>
+                            <div class="mb-4">
+                                <label for="id_address_line_2" class="form-label fw-bold text-dark">Address Line 2</label>
                                 {{ form.address_line_2 }}
                             </div>
-                            <div class="mb-3">
-                                <label for="id_city" class="form-label fw-bold">City</label>
+                            <div class="mb-4">
+                                <label for="id_city" class="form-label fw-bold text-dark">City</label>
                                 {{ form.city }}
                             </div>
-                            <div class="mb-3">
-                                <label for="id_state" class="form-label fw-bold">State</label>
+                            <div class="mb-4">
+                                <label for="id_state" class="form-label fw-bold text-dark">State</label>
                                 {{ form.state }}
                             </div>
-                            <div class="mb-3">
-                                <label for="id_postal_code" class="form-label fw-bold">Postal Code</label>
+                            <div class="mb-4">
+                                <label for="id_postal_code" class="form-label fw-bold text-dark">Postal Code</label>
                                 {{ form.postal_code }}
                             </div>
-
-                            <div class="mb-3">
-                                <label for="id_country" class="form-label fw-bold">Country</label>
+                            <div class="mb-4">
+                                <label for="id_country" class="form-label fw-bold text-dark">Country</label>
                                 {{ form.country }}
                             </div>
-
-                            <div class="mb-3">
-                                <label for="id_phone_number" class="form-label fw-bold">Phone Number</label>
+                            <div class="mb-4">
+                                <label for="id_phone_number" class="form-label fw-bold text-dark">Phone Number</label>
                                 {{ form.phone_number }}
                             </div>
-
-                            <button type="submit" class="btn btn-success w-100 mt-3">Submit Shipping Details</button>
+                            <button type="submit" class="btn btn-success w-100 py-2 mt-4">Submit Shipping Details</button>
                         </form>
                     </div>
                 </div>
@@ -57,31 +56,38 @@
     </div>
 
     <div class="modal fade" id="orderSuccessModal" tabindex="-1" aria-labelledby="orderSuccessModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="orderSuccessModalLabel">Order Placed Successfully</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p>Your order has been placed successfully! Thank you for shopping with us.</p>
-          </div>
-          <div class="modal-footer">
-            <a href="http://localhost:5173/" class="btn btn-primary">Go to Home Page</a>
-          </div>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="orderSuccessModalLabel">Order Placed Successfully</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Your order has been placed successfully! Thank you for shopping with us.</p>
+                </div>
+                <div class="modal-footer">
+                    <a href="http://localhost:5173/" class="btn btn-primary">Go to Home Page</a>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Assuming form submission is successful, trigger the modal
         document.getElementById('shipping-form').onsubmit = function(event) {
             event.preventDefault();
             var orderSuccessModal = new bootstrap.Modal(document.getElementById('orderSuccessModal'));
             orderSuccessModal.show();
         };
+        document.getElementById("id_address_line_1").setAttribute("required", "");
+        document.getElementById("id_address_line_2").setAttribute("required", "");
+        document.getElementById("id_city").setAttribute("required", "");
+        document.getElementById("id_state").setAttribute("required", "");
+        document.getElementById("id_postal_code").setAttribute("required", "");
+        document.getElementById("id_country").setAttribute("required", "");
+        document.getElementById("id_phone_number").setAttribute("required", "");
     </script>
 </body>
+
 </html>
