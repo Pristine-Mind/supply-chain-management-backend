@@ -5,8 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
 from django.conf import settings
 from django.db.models import Subquery, OuterRef
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import viewsets, status, views
 from rest_framework.response import Response
@@ -151,6 +150,7 @@ def verify_payment(request):
         return HttpResponse("Payment Verification Failed")
 
 
+@csrf_exempt
 def payment_confirmation(request, payment_id):
     payment = get_object_or_404(Payment, id=payment_id)
     if payment.status == "completed":
@@ -160,7 +160,7 @@ def payment_confirmation(request, payment_id):
         return HttpResponse("Payment not verified")
 
 
-@api_view(["POST"])
+@csrf_exempt
 def shipping_address_form(request, payment_id):
     payment = get_object_or_404(Payment, id=payment_id)
 
@@ -294,12 +294,19 @@ class NotificationListView(views.APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class MarkNotificationsReadView(views.APIView):
+class MarkNotificationAsReadView(views.APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response({'message': 'All notifications marked as read.'}, status=status.HTTP_200_OK)
+    def post(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, user=request.user)
+
+        if notification.is_read:
+            return Response({"detail": "Notification is already marked as read."}, status=status.HTTP_400_BAD_REQUEST)
+
+        notification.is_read = True
+        notification.save()
+
+        return Response({"detail": "Notification marked as read."}, status=status.HTTP_200_OK)
 
 
 class WithdrawBidView(views.APIView):
