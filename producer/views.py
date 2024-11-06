@@ -4,7 +4,7 @@ from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.decorators import api_view, permission_classes
 
@@ -123,6 +123,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         detail=False,
         url_path="catgeories",
         methods=("get",),
+        permission_classes=[AllowAny]
     )
     def get_category(self, request, pk=None):
         return Response(
