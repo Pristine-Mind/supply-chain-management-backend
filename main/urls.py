@@ -35,6 +35,7 @@ from producer.views import (
     StatsAPIView,
     CityListView,
     withdraw_product,
+    MarketplaceUserRecommendedProductViewSet
 )
 from market.views import (
     BidViewSet,
@@ -68,6 +69,7 @@ router.register(r'marketplace-user-products', MarketplaceUserProductViewSet)
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
 router.register(r'user-bids', UserBidViewSet, basename='user-bids')
+router.register(r'user-recommendation', MarketplaceUserRecommendedProductViewSet, basename="user-recommendation")
 
 urlpatterns = [
     path('admin/', admin.site.urls),

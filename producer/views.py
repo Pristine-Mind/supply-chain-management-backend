@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db.models.query import QuerySet
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -350,6 +351,30 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceProduct.objects.filter(is_available=True).order_by("-listed_date")
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
+
+
+class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
+    serializer_class = MarketplaceProductSerializer
+    # filterset_class = MarketplaceProductFilter
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet:
+        user = self.request.user
+        try:
+            user_profile = UserProfile.objects.get(user=user)
+            print(user_profile, "uuuuuu")
+            location = user_profile.location
+        except UserProfile.DoesNotExist:
+            return MarketplaceProduct.objects.none()
+
+        if not location:
+            return MarketplaceProduct.objects.none()
+
+        return MarketplaceProduct.objects.filter(
+            is_available=True,
+            bid_end_date__gte=timezone.now(),
+            product__location=location
+        ).order_by("-listed_date")
 
 
 class StatsAPIView(APIView):

@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
+from producer.models import City
 
 
 class UserProfile(models.Model):
@@ -19,6 +20,14 @@ class UserProfile(models.Model):
     has_access_to_marketplace = models.BooleanField(
         verbose_name=_("Has Access to Marketplace"),
         default=False
+    )
+    location = models.ForeignKey(
+        City,
+        on_delete=models.CASCADE,
+        verbose_name="Location",
+        help_text="Location of the product",
+        null=True,
+        blank=True
     )
 
     def __str__(self):
