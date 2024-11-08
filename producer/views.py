@@ -348,9 +348,15 @@ class StockListView(viewsets.ModelViewSet):
 
 
 class MarketplaceProductViewSet(viewsets.ModelViewSet):
-    queryset = MarketplaceProduct.objects.filter(is_available=True).order_by("-listed_date")
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return MarketplaceProduct.objects.filter(
+            is_available=True,
+            bid_end_date__gte=timezone.now()
+        ).exclude(product__user=self.request.user).order_by("-listed_date").distinct()
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
@@ -362,7 +368,6 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
         try:
             user_profile = UserProfile.objects.get(user=user)
-            print(user_profile, "uuuuuu")
             location = user_profile.location
         except UserProfile.DoesNotExist:
             return MarketplaceProduct.objects.none()
@@ -373,8 +378,8 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
         return MarketplaceProduct.objects.filter(
             is_available=True,
             bid_end_date__gte=timezone.now(),
-            product__location=location
-        ).order_by("-listed_date")
+            product__location=location,
+        ).exclude(product__user=user).order_by("-listed_date")
 
 
 class StatsAPIView(APIView):
