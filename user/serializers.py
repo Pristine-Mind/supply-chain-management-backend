@@ -3,6 +3,7 @@ from .models import UserProfile
 from django.contrib.auth.models import User
 
 from producer.models import City
+from user.models import Contact
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -42,3 +43,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             location=location
         )
         return user
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contact
+        fields = '__all__'

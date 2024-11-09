@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from django.contrib.auth import authenticate
 
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, ContactSerializer
+from .models import Contact
 
 
 class RegisterView(generics.CreateAPIView):
@@ -76,3 +77,8 @@ class PretrainedChatbotAPIView(APIView):
         # Decode the model output to text
         response = self.tokenizer.decode(chat_history_ids[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
         return response
+
+
+class ContactCreateView(generics.CreateAPIView):
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
