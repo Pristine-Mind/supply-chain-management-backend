@@ -55,7 +55,12 @@ from market.views import (
     MarkNotificationAsReadView,
     WithdrawBidView,
 )
-from user.views import RegisterView, LoginAPIView, PretrainedChatbotAPIView
+from user.views import (
+    RegisterView,
+    LoginAPIView,
+    PretrainedChatbotAPIView,
+    ContactCreateView,
+)
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -64,8 +69,8 @@ router.register(r'products', ProductViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'sales', SaleViewSet)
 router.register(r'stocklist', StockListView)
-router.register(r'marketplace', MarketplaceProductViewSet)
-router.register(r'marketplace-user-products', MarketplaceUserProductViewSet)
+router.register(r'marketplace', MarketplaceProductViewSet, basename="marketplace")
+router.register(r'marketplace-user-products', MarketplaceUserProductViewSet, basename="marketplace-user-products")
 router.register(r'bids', BidViewSet, basename='bids')
 router.register(r'chats', ChatMessageViewSet, basename='chats')
 router.register(r'user-bids', UserBidViewSet, basename='user-bids')
@@ -91,10 +96,12 @@ urlpatterns = [
     path('api/v1/bids/user/<int:product_id>/', UserBidsForProductView.as_view(), name='user-bids-for-product'),
     path('api/v1/seller/', SellerProductsView.as_view(), name='seller-products'),
     path('api/v1/notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('api/v1/notifications/<int:pk>/mark-read/', MarkNotificationAsReadView.as_view(), name='mark-notification-as-read'),    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
+    path('api/v1/notifications/<int:pk>/mark-read/', MarkNotificationAsReadView.as_view(), name='mark-notification-as-read'),
+    path('api/v1/cities/', CityListView.as_view(), name='city-list'),
     path('api/v1/seller/<int:product_id>/withdraw/', withdraw_product, name='withdraw_product'),
     path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
     path('api/v1/pretrained-chatbot/', PretrainedChatbotAPIView.as_view(), name='pretrained-chatbot'),
+    path('api/v1/contact/', ContactCreateView.as_view(), name='contact-create'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

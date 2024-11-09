@@ -2,6 +2,7 @@ from urllib.parse import urlencode
 import time
 import requests
 import json
+from datetime import datetime
 
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -173,12 +174,19 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         bid_amount = validated_data["bid_amount"]
         bidder = self.context["request"].user
+        validated_data['bid_date'] = timezone.now()
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
             max_bid_amount = bid_amount
         else:
             max_bid_amount = highest_bid.max_bid_amount
-
+        bid_end_date = product.bid_end_date
+        if bid_end_date.tzinfo is None:
+            bid_end_date = timezone.make_aware(bid_end_date, timezone.get_current_timezone())
+        if validated_data['bid_date'] > bid_end_date:
+            raise serializers.ValidationError({
+                "bid_date": "Can't bid for this product, Time Expired!!!!!"
+            })
         bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
 
         # Check if the request user is the highest bidder, and send a notification if so
@@ -276,6 +284,11 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Stock cannot be negative.")
         return value
+
+    def validate_bid_end_date(self, bid_end_date):
+        if bid_end_date < datetime.now():
+            raise serializers.ValidationError("Bid end date cannot be in the past.")
+        return bid_end_date
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
