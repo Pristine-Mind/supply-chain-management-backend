@@ -7,11 +7,18 @@ from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from django.contrib.auth import authenticate
+from drf_spectacular.utils import extend_schema_view, extend_schema
 
-from .serializers import RegisterSerializer, ContactSerializer
+from .serializers import (
+    RegisterSerializer,
+    ContactSerializer,
+    LoginResponseSerializer,
+    LoginSerializer,
+)
 from .models import Contact
 
 
+@extend_schema_view(request=RegisterSerializer, responses=RegisterSerializer)
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
@@ -27,6 +34,7 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LoginAPIView(APIView):
+    @extend_schema(request=LoginSerializer, responses=LoginResponseSerializer)
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")

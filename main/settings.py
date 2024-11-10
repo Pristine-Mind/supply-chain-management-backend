@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "producer",
     "market",
     "user",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -229,6 +230,7 @@ REST_FRAMEWORK = {
     # 'DEFAULT_PERMISSION_CLASSES': (
     #     'rest_framework.permissions.IsAuthenticated',
     # ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 CELERY_REDIS_URL = env("CELERY_REDIS_URL")
@@ -255,3 +257,11 @@ KHALTI_SECRET_KEY = 'aa'
 # Khalti test credentials
 KHALTI_TEST_MOBILE_NUMBER = '9800000001'
 KHALTI_TEST_PIN = '1234'
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Mulya Bazzar API',
+    'DESCRIPTION': 'Mulya Bazzar API Documenation',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
