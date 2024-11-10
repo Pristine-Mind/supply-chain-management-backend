@@ -61,6 +61,7 @@ from user.views import (
     PretrainedChatbotAPIView,
     ContactCreateView,
 )
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 router = DefaultRouter()
 router.register(r'producers', ProducerViewSet)
@@ -102,6 +103,10 @@ urlpatterns = [
     path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
     path('api/v1/pretrained-chatbot/', PretrainedChatbotAPIView.as_view(), name='pretrained-chatbot'),
     path('api/v1/contact/', ContactCreateView.as_view(), name='contact-create'),
+    # Docs
+    path("docs/", SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path("api-docs/", SpectacularAPIView.as_view(), name='schema'),
+    path("api-docs/swagger-ui/", SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

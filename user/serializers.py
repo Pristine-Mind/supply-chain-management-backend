@@ -49,3 +49,13 @@ class ContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contact
         fields = '__all__'
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    error = serializers.CharField()
