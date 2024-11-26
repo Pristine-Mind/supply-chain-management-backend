@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema
 
 from market.models import Bid, ChatMessage, Notification
 from producer.models import MarketplaceProduct
@@ -28,6 +29,7 @@ from .serializers import (
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
 from .forms import ShippingAddressForm
+from main.enums import GlobalEnumSerializer, get_enum_values
 
 
 @api_view(["POST"])
@@ -321,3 +323,16 @@ class WithdrawBidView(views.APIView):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"detail": "Bid withdrawn successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+
+class GlobalEnumView(views.APIView):
+    """
+    Provide a single endpoint to fetch enum metadata
+    """
+
+    @extend_schema(responses=GlobalEnumSerializer)
+    def get(self, _):
+        """
+        Return a list of all enums.
+        """
+        return Response(get_enum_values())
