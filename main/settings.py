@@ -264,4 +264,6 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Mulya Bazzar API Documenation',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    "ENUM_NAME_OVERRIDES": {},
+    "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
 }

@@ -54,6 +54,7 @@ from market.views import (
     NotificationListView,
     MarkNotificationAsReadView,
     WithdrawBidView,
+    GlobalEnumView,
 )
 from user.views import (
     RegisterView,
@@ -103,6 +104,7 @@ urlpatterns = [
     path('api/v1/bids/<int:bid_id>/withdraw/', WithdrawBidView.as_view(), name='withdraw-bid'),
     path('api/v1/pretrained-chatbot/', PretrainedChatbotAPIView.as_view(), name='pretrained-chatbot'),
     path('api/v1/contact/', ContactCreateView.as_view(), name='contact-create'),
+    path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
     # Docs
     path("docs/", SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path("api-docs/", SpectacularAPIView.as_view(), name='schema'),
