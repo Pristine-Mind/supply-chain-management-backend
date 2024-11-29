@@ -1,6 +1,9 @@
 from datetime import timedelta
 
 from django.db.models.query import QuerySet
+from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,7 +11,6 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.decorators import api_view, permission_classes
-
 
 from django.db.models import Sum, Q, Count, F, FloatField, ExpressionWrapper
 from django.utils import timezone
@@ -44,6 +46,7 @@ from .filters import (
     ProductFilter,
     MarketplaceProductFilter,
 )
+from .utils import export_queryset_to_excel
 from user.models import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -496,3 +499,209 @@ def withdraw_product(request, product_id):
 
     except MarketplaceProduct.DoesNotExist:
         return Response({'error': 'Product not found or you do not have permission to withdraw this product.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_producers_to_excel(request):
+    field_names = [
+        'name',
+        'contact',
+        'email',
+        'address',
+        'registration_number',
+        'created_at',
+        'updated_at',
+    ]
+    user = request.user
+    if not user.is_authenticated:
+        return
+
+    user_profile = getattr(user, "userprofile", None)
+    if user_profile:
+        queryset = Producer.objects.filter(
+            user__userprofile__shop_id=user_profile.shop_id
+        )
+    wb = export_queryset_to_excel(queryset, field_names)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=producers.xlsx'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_customers_to_excel(request):
+    field_names = [
+        'name',
+        'customer_type',
+        'contact',
+        'email',
+        'billing_address',
+        'shipping_address',
+        'credit_limit',
+        'current_balance',
+        'created_at',
+        'updated_at',
+    ]
+    user = request.user
+    if not user.is_authenticated:
+        return
+
+    user_profile = getattr(user, "userprofile", None)
+    if user_profile:
+        queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+    wb = export_queryset_to_excel(queryset, field_names)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=customers.xlsx'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_products_to_excel(request):
+    field_names = [
+        'name',
+        'get_category_display',
+        'description',
+        'sku',
+        'price',
+        'cost_price',
+        'stock',
+        'reorder_level',
+        'is_active',
+        'created_at',
+        'updated_at',
+    ]
+    headers = [
+        'Name',
+        'Category',
+        'Description',
+        'SKU',
+        'Price',
+        'Cost Price',
+        'Stock',
+        'Reorder Level',
+        'Is Active',
+        'Created At',
+        'Updated At',
+    ]
+
+    user = request.user
+    if not user.is_authenticated:
+        return
+
+    user_profile = getattr(user, "userprofile", None)
+    if user_profile:
+        queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+    wb = export_queryset_to_excel(queryset, field_names, headers)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=products.xlsx'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_orders_to_excel(request):
+    field_names = [
+        'order_number',
+        'customer_name',
+        'product_name',
+        'quantity',
+        'get_status_display',
+        'order_date',
+        'delivery_date',
+        'total_price',
+        'created_at',
+        'updated_at',
+    ]
+    headers = [
+        'Order Number',
+        'Customer',
+        'Product',
+        'Quantity',
+        'Status',
+        'Order Date',
+        'Delivery Date',
+        'Total Price',
+        'Created At',
+        'Updated At',
+    ]
+
+    user = request.user
+    if not user.is_authenticated:
+        return
+
+    user_profile = getattr(user, "userprofile", None)
+    if user_profile:
+        queryset = Order.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related('customer', 'product')
+    for obj in queryset:
+        obj.customer_name = obj.customer.name
+        obj.product_name = obj.product.name
+
+    wb = export_queryset_to_excel(queryset, field_names, headers)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=orders.xlsx'
+    wb.save(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_sales_to_excel(request):
+    field_names = [
+        'order_number',
+        'product_name',
+        'quantity',
+        'sale_price',
+        'sale_date',
+        'get_payment_status_display',
+        'payment_due_date',
+        'created_at',
+        'updated_at',
+    ]
+    headers = [
+        'Order Number',
+        'Product',
+        'Quantity',
+        'Sale Price',
+        'Sale Date',
+        'Payment Status',
+        'Payment Due Date',
+        'Created At',
+        'Updated At',
+    ]
+
+    user = request.user
+    if not user.is_authenticated:
+        return
+
+    user_profile = getattr(user, "userprofile", None)
+    if user_profile:
+        queryset = Sale.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related('order__product')
+    for obj in queryset:
+        obj.order_number = obj.order.order_number
+        obj.product_name = obj.order.product.name
+
+    wb = export_queryset_to_excel(queryset, field_names, headers)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=sales.xlsx'
+    wb.save(response)
+    return response
