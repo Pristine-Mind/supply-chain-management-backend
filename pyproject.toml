@@ -31,6 +31,7 @@ django-celery-beat = "*"
 pillow = "*"
 transformers = "*"
 torch = "*"
+openpyxl = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
