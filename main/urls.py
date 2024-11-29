@@ -35,7 +35,12 @@ from producer.views import (
     StatsAPIView,
     CityListView,
     withdraw_product,
-    MarketplaceUserRecommendedProductViewSet
+    MarketplaceUserRecommendedProductViewSet,
+    export_producers_to_excel,
+    export_customers_to_excel,
+    export_products_to_excel,
+    export_sales_to_excel,
+    export_orders_to_excel,
 )
 from market.views import (
     BidViewSet,
@@ -109,6 +114,12 @@ urlpatterns = [
     path("docs/", SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path("api-docs/", SpectacularAPIView.as_view(), name='schema'),
     path("api-docs/swagger-ui/", SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # export
+    path('export/producers/', export_producers_to_excel, name='export_producers'),
+    path('export/customers/', export_customers_to_excel, name='export_customers'),
+    path('export/products/', export_products_to_excel, name='export_products'),
+    path('export/orders/', export_orders_to_excel, name='export_orders'),
+    path('export/sales/', export_sales_to_excel, name='export_sales'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
