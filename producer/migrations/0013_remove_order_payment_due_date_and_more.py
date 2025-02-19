@@ -7,48 +7,61 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0012_product_category'),
+        ("producer", "0012_product_category"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='order',
-            name='payment_due_date',
+            model_name="order",
+            name="payment_due_date",
         ),
         migrations.RemoveField(
-            model_name='order',
-            name='payment_status',
+            model_name="order",
+            name="payment_status",
         ),
         migrations.RemoveField(
-            model_name='sale',
-            name='customer',
+            model_name="sale",
+            name="customer",
         ),
         migrations.RemoveField(
-            model_name='sale',
-            name='customer_contact',
+            model_name="sale",
+            name="customer_contact",
         ),
         migrations.RemoveField(
-            model_name='sale',
-            name='customer_name',
+            model_name="sale",
+            name="customer_name",
         ),
         migrations.RemoveField(
-            model_name='sale',
-            name='product',
+            model_name="sale",
+            name="product",
         ),
         migrations.AddField(
-            model_name='sale',
-            name='order',
-            field=models.ForeignKey(default=503, on_delete=django.db.models.deletion.CASCADE, to='producer.order', verbose_name='Order'),
+            model_name="sale",
+            name="order",
+            field=models.ForeignKey(
+                default=503, on_delete=django.db.models.deletion.CASCADE, to="producer.order", verbose_name="Order"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='sale',
-            name='payment_due_date',
-            field=models.DateTimeField(blank=True, null=True, verbose_name='Payment Due Date'),
+            model_name="sale",
+            name="payment_due_date",
+            field=models.DateTimeField(blank=True, null=True, verbose_name="Payment Due Date"),
         ),
         migrations.AddField(
-            model_name='sale',
-            name='payment_status',
-            field=models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('shipped', 'Shipped'), ('delivered', 'Delivered'), ('cancelled', 'Cancelled')], default='pending', max_length=50, verbose_name='Payment Status'),
+            model_name="sale",
+            name="payment_status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending"),
+                    ("approved", "Approved"),
+                    ("shipped", "Shipped"),
+                    ("delivered", "Delivered"),
+                    ("cancelled", "Cancelled"),
+                ],
+                default="pending",
+                max_length=50,
+                verbose_name="Payment Status",
+            ),
         ),
     ]

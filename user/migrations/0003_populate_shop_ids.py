@@ -3,16 +3,18 @@
 from django.db import migrations
 import uuid
 
+
 def populate_shop_ids(apps, schema_editor):
-    UserProfile = apps.get_model('user', 'UserProfile')
+    UserProfile = apps.get_model("user", "UserProfile")
     for profile in UserProfile.objects.filter(shop_id__isnull=True):
         profile.shop_id = uuid.uuid4()  # Assign a unique UUID if shop_id is null
         profile.save()
 
+
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('user', '0002_userprofile_shop_id'),
+        ("user", "0002_userprofile_shop_id"),
     ]
 
     operations = [

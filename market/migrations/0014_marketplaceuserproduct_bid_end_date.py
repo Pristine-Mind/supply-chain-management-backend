@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0013_marketplaceuserproduct_unit'),
+        ("market", "0013_marketplaceuserproduct_unit"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketplaceuserproduct',
-            name='bid_end_date',
-            field=models.DateTimeField(blank=True, null=True, verbose_name='Bid End Date'),
+            model_name="marketplaceuserproduct",
+            name="bid_end_date",
+            field=models.DateTimeField(blank=True, null=True, verbose_name="Bid End Date"),
         ),
     ]
