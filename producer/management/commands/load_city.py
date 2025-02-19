@@ -3,7 +3,7 @@ from producer.models import City
 
 
 class Command(BaseCommand):
-    help = 'Load cities of Nepal into the City model'
+    help = "Load cities of Nepal into the City model"
 
     def handle(self, *args, **kwargs):
         cities = [
@@ -26,10 +26,10 @@ class Command(BaseCommand):
             "Ilam",
             "Lumbini",
             "Palpa",
-            "Syangja"
+            "Syangja",
         ]
 
         for city_name in cities:
             City.objects.get_or_create(name=city_name)
 
-        self.stdout.write(self.style.SUCCESS('Successfully loaded cities of Nepal'))
+        self.stdout.write(self.style.SUCCESS("Successfully loaded cities of Nepal"))

@@ -97,7 +97,7 @@ class Bid(models.Model):
         # Notify the seller about the new bid
         Notification.objects.create(
             user=self.product.product.user,
-            message=f'New bid of NPR {self.bid_amount} by {self.bidder.username} on your product {self.product.product.name}'
+            message=f"New bid of NPR {self.bid_amount} by {self.bidder.username} on your product {self.product.product.name}",
         )
 
     class Meta:
@@ -159,17 +159,17 @@ class ShippingAddress(models.Model):
 
 class MarketplaceUserProduct(models.Model):
     class ProductCategory(models.TextChoices):
-        FRUITS = 'FR', 'Fruits'
-        VEGETABLES = 'VG', 'Vegetables'
-        GRAINS_AND_CEREALS = 'GR', 'Grains & Cereals'
-        PULSES_AND_LEGUMES = 'PL', 'Pulses & Legumes'
-        SPICES_AND_HERBS = 'SP', 'Spices & Herbs'
-        NUTS_AND_SEEDS = 'NT', 'Nuts & Seeds'
-        DAIRY_AND_ANIMAL_PRODUCTS = 'DF', 'Dairy & Animal Products'
-        FODDER_AND_FORAGE = 'FM', 'Fodder & Forage'
-        FLOWERS_AND_ORNAMENTAL_PLANTS = 'FL', 'Flowers & Ornamental Plants'
-        HERBS_AND_MEDICINAL_PLANTS = 'HR', 'Herbs & Medicinal Plants'
-        OTHER = 'OT', 'Other'
+        FRUITS = "FR", "Fruits"
+        VEGETABLES = "VG", "Vegetables"
+        GRAINS_AND_CEREALS = "GR", "Grains & Cereals"
+        PULSES_AND_LEGUMES = "PL", "Pulses & Legumes"
+        SPICES_AND_HERBS = "SP", "Spices & Herbs"
+        NUTS_AND_SEEDS = "NT", "Nuts & Seeds"
+        DAIRY_AND_ANIMAL_PRODUCTS = "DF", "Dairy & Animal Products"
+        FODDER_AND_FORAGE = "FM", "Fodder & Forage"
+        FLOWERS_AND_ORNAMENTAL_PLANTS = "FL", "Flowers & Ornamental Plants"
+        HERBS_AND_MEDICINAL_PLANTS = "HR", "Herbs & Medicinal Plants"
+        OTHER = "OT", "Other"
 
     class ProductUnit(models.TextChoices):
         KILOGRAM = "KG", "KiloGram"
@@ -180,10 +180,7 @@ class MarketplaceUserProduct(models.Model):
     price = models.DecimalField(_("Price"), max_digits=10, decimal_places=2)
     stock = models.IntegerField(_("Stock"))
     category = models.CharField(
-        max_length=2,
-        choices=ProductCategory.choices,
-        default=ProductCategory.VEGETABLES,
-        verbose_name=_("Category")
+        max_length=2, choices=ProductCategory.choices, default=ProductCategory.VEGETABLES, verbose_name=_("Category")
     )
     unit = models.CharField(
         max_length=2,
@@ -193,17 +190,12 @@ class MarketplaceUserProduct(models.Model):
     )
     created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
-    image = models.ImageField(_("Image"), upload_to='marketplace/products/', null=True, blank=True)
+    image = models.ImageField(_("Image"), upload_to="marketplace/products/", null=True, blank=True)
     is_verified = models.BooleanField(_("Is Verified"), default=False)
     is_sold = models.BooleanField(_("Is Sold"), default=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
     location = models.ForeignKey(
-        City,
-        on_delete=models.CASCADE,
-        verbose_name="Location",
-        help_text="Location of the product",
-        null=True,
-        blank=True
+        City, on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
     )
     bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"), null=True, blank=True)
 
@@ -220,3 +212,34 @@ class Notification(models.Model):
     message = models.TextField()
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+# class Feedback(models.Model):
+#     """
+#     This model collects user feedback (e.g., rating or comment) on recommended products.
+#     """
+#     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feedbacks')
+#     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, related_name='feedbacks')
+#     rating = models.IntegerField(default=1)  # For example, 1 to 5 stars
+#     comment = models.TextField(blank=True, null=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+
+#     def __str__(self):
+#         return f"Feedback by {self.user.username} on {self.product.name}"
+
+
+class UserInteraction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    event_type = models.CharField(
+        max_length=100,
+        help_text="Type of event (e.g., 'click', 'page_view')"
+    )
+    data = models.JSONField(
+        blank=True,
+        null=True,
+        help_text="Additional event details (e.g., element info, coordinates)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event_type} at {self.created_at}"

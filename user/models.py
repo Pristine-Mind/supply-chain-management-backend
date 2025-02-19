@@ -14,20 +14,13 @@ class UserProfile(models.Model):
     - user: One-to-one relationship with the User model.
     - phone_number: Phone number of the user.
     """
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     shop_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    has_access_to_marketplace = models.BooleanField(
-        verbose_name=_("Has Access to Marketplace"),
-        default=False
-    )
+    has_access_to_marketplace = models.BooleanField(verbose_name=_("Has Access to Marketplace"), default=False)
     location = models.ForeignKey(
-        City,
-        on_delete=models.CASCADE,
-        verbose_name="Location",
-        help_text="Location of the product",
-        null=True,
-        blank=True
+        City, on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
     )
 
     def __str__(self):

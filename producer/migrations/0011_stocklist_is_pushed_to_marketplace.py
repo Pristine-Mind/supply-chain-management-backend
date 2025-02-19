@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0010_remove_product_rate'),
+        ("producer", "0010_remove_product_rate"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='stocklist',
-            name='is_pushed_to_marketplace',
-            field=models.BooleanField(default=False, verbose_name='Is Stock moved to marketplace'),
+            model_name="stocklist",
+            name="is_pushed_to_marketplace",
+            field=models.BooleanField(default=False, verbose_name="Is Stock moved to marketplace"),
         ),
     ]

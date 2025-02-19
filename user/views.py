@@ -28,9 +28,12 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({
-            "message": "User Created Successfully. Now perform Login to get your token",
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "User Created Successfully. Now perform Login to get your token",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class LoginAPIView(APIView):
@@ -71,7 +74,7 @@ class PretrainedChatbotAPIView(APIView):
 
     def generate_response(self, user_message):
         # Encode the user's message
-        input_ids = self.tokenizer.encode(user_message + self.tokenizer.eos_token, return_tensors='pt')
+        input_ids = self.tokenizer.encode(user_message + self.tokenizer.eos_token, return_tensors="pt")
 
         # Generate a response using the model
         chat_history_ids = self.model.generate(
@@ -79,11 +82,11 @@ class PretrainedChatbotAPIView(APIView):
             max_length=1000,
             pad_token_id=self.tokenizer.eos_token_id,
             num_return_sequences=1,
-            temperature=0.7  # Adding some randomness to responses
+            temperature=0.7,  # Adding some randomness to responses
         )
 
         # Decode the model output to text
-        response = self.tokenizer.decode(chat_history_ids[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
+        response = self.tokenizer.decode(chat_history_ids[:, input_ids.shape[-1] :][0], skip_special_tokens=True)
         return response
 
 

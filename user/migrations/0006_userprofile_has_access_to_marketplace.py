@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('user', '0005_alter_userprofile_phone_number'),
+        ("user", "0005_alter_userprofile_phone_number"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='userprofile',
-            name='has_access_to_marketplace',
-            field=models.BooleanField(default=False, verbose_name='Has Access to Marketplace'),
+            model_name="userprofile",
+            name="has_access_to_marketplace",
+            field=models.BooleanField(default=False, verbose_name="Has Access to Marketplace"),
         ),
     ]

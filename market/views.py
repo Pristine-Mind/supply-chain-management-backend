@@ -9,12 +9,12 @@ from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import viewsets, status, views
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
 
-from market.models import Bid, ChatMessage, Notification
+from market.models import Bid, ChatMessage, Notification, UserInteraction
 from producer.models import MarketplaceProduct
 from .serializers import (
     PurchaseSerializer,
@@ -24,7 +24,7 @@ from .serializers import (
     BidUserSerializer,
     SellerProductSerializer,
     SellerBidSerializer,
-    NotificationSerializer
+    NotificationSerializer,
 )
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
@@ -81,8 +81,8 @@ class UserBidViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = UserBidFilter
 
     def get_queryset(self) -> QuerySet:
-        latest_bids = Bid.objects.filter(product=OuterRef('product')).order_by('-bid_date')
-        queryset = Bid.objects.filter(id=Subquery(latest_bids.values('id')[:1]), bidder=self.request.user)
+        latest_bids = Bid.objects.filter(product=OuterRef("product")).order_by("-bid_date")
+        queryset = Bid.objects.filter(id=Subquery(latest_bids.values("id")[:1]), bidder=self.request.user)
         return queryset
 
 
@@ -228,27 +228,17 @@ class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def update(self, request, *args, **kwargs):
-        return Response(
-            {
-                "message": "Update action is not allowed."
-            },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+        return Response({"message": "Update action is not allowed."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def destroy(self, request, *args, **kwargs):
-        return Response(
-            {
-                "message": "Delete action is not allowed."
-            },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+        return Response({"message": "Delete action is not allowed."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class ProductBidsView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, product_id):
-        bids = Bid.objects.filter(product__id=product_id).order_by('-bid_date')
+        bids = Bid.objects.filter(product__id=product_id).order_by("-bid_date")
         serializer = BidUserSerializer(bids, many=True)
         return Response(serializer.data)
 
@@ -258,7 +248,7 @@ class UserBidsForProductView(views.APIView):
 
     def get(self, request, product_id):
         product = get_object_or_404(MarketplaceProduct, id=product_id)
-        user_bids = Bid.objects.filter(bidder=request.user, product=product).order_by('-bid_date')
+        user_bids = Bid.objects.filter(bidder=request.user, product=product).order_by("-bid_date")
 
         bids_data = [
             {
@@ -280,9 +270,9 @@ class SellerProductsView(views.APIView):
         products = MarketplaceProduct.objects.filter(product__user=request.user).distinct()
         serialized_products = []
         for product in products:
-            bids = Bid.objects.filter(product=product).order_by('-bid_amount')
+            bids = Bid.objects.filter(product=product).order_by("-bid_amount")
             serialized_product = SellerProductSerializer(product).data
-            serialized_product['bids'] = SellerBidSerializer(bids, many=True).data
+            serialized_product["bids"] = SellerBidSerializer(bids, many=True).data
             serialized_products.append(serialized_product)
         return Response(serialized_products)
 
@@ -291,7 +281,7 @@ class NotificationListView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        notifications = Notification.objects.filter(user=request.user).order_by("-created_at")
         serializer = NotificationSerializer(notifications, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -315,7 +305,7 @@ class WithdrawBidView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, bid_id):
-        bid = get_object_or_404(Bid, id=bid_id, bidder=request.user)   
+        bid = get_object_or_404(Bid, id=bid_id, bidder=request.user)
         serializer = BidSerializer()
         try:
             serializer.delete(bid)
@@ -336,3 +326,26 @@ class GlobalEnumView(views.APIView):
         Return a list of all enums.
         """
         return Response(get_enum_values())
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def log_interaction(request):
+    """
+    Logs user interaction events.
+    Expected JSON payload:
+    {
+      "event_type": "click",
+      "data": { ... }  // Arbitrary event details
+    }
+    """
+    event_type = request.data.get('event_type')
+    data = request.data.get('data', {})
+
+    if not event_type:
+        return Response({"error": "Event type is required."}, status=400)
+    
+    user = request.user if request.user.is_authenticated else None
+
+    UserInteraction.objects.create(user=user, event_type=event_type, data=data)
+    return Response({'message': 'Interaction logged successfully.'})

@@ -90,19 +90,19 @@ class MarketplaceUserProductTests(APITestCase):
         image = SimpleUploadedFile("test_image.jpg", b"file_content", content_type="image/jpeg")
 
         self.product_data = {
-            'name': 'Test Product',
-            'description': 'This is a test product.',
-            'price': '10.00',
-            'stock': 100,
-            'category': 'EL',
-            'is_verified': True,
-            'is_sold': False,
-            'image': image,
+            "name": "Test Product",
+            "description": "This is a test product.",
+            "price": "10.00",
+            "stock": 100,
+            "category": "EL",
+            "is_verified": True,
+            "is_sold": False,
+            "image": image,
         }
 
     def test_list_user_products(self):
         MarketplaceUserProduct.objects.create(**self.product_data)
-        url = '/api/v1/marketplace-user-products/'
+        url = "/api/v1/marketplace-user-products/"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)

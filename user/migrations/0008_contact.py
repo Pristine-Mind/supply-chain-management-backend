@@ -6,19 +6,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('user', '0007_userprofile_location'),
+        ("user", "0007_userprofile_location"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Contact',
+            name="Contact",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255, verbose_name='Full Name')),
-                ('email', models.EmailField(max_length=254, verbose_name='Email Address')),
-                ('subject', models.CharField(max_length=255, verbose_name='Subject')),
-                ('message', models.TextField(verbose_name='Message')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("name", models.CharField(max_length=255, verbose_name="Full Name")),
+                ("email", models.EmailField(max_length=254, verbose_name="Email Address")),
+                ("subject", models.CharField(max_length=255, verbose_name="Subject")),
+                ("message", models.TextField(verbose_name="Message")),
+                ("created_at", models.DateTimeField(auto_now_add=True, verbose_name="Created At")),
             ],
         ),
     ]
