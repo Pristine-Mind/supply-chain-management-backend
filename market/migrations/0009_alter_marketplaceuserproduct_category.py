@@ -6,13 +6,30 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0008_marketplaceuserproduct'),
+        ("market", "0008_marketplaceuserproduct"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='marketplaceuserproduct',
-            name='category',
-            field=models.CharField(choices=[('FR', 'Fruits'), ('VG', 'Vegetables'), ('GR', 'Grains & Cereals'), ('PL', 'Pulses & Legumes'), ('SP', 'Spices & Herbs'), ('NT', 'Nuts & Seeds'), ('DF', 'Dairy & Animal Products'), ('FM', 'Fodder & Forage'), ('FL', 'Flowers & Ornamental Plants'), ('HR', 'Herbs & Medicinal Plants'), ('OT', 'Other')], default='VG', max_length=2, verbose_name='Category'),
+            model_name="marketplaceuserproduct",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("FR", "Fruits"),
+                    ("VG", "Vegetables"),
+                    ("GR", "Grains & Cereals"),
+                    ("PL", "Pulses & Legumes"),
+                    ("SP", "Spices & Herbs"),
+                    ("NT", "Nuts & Seeds"),
+                    ("DF", "Dairy & Animal Products"),
+                    ("FM", "Fodder & Forage"),
+                    ("FL", "Flowers & Ornamental Plants"),
+                    ("HR", "Herbs & Medicinal Plants"),
+                    ("OT", "Other"),
+                ],
+                default="VG",
+                max_length=2,
+                verbose_name="Category",
+            ),
         ),
     ]

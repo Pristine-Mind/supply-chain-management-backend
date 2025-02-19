@@ -31,11 +31,7 @@ class Producer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     location = models.PointField(srid=4326, help_text="Local Unit Location", null=True, blank=True)
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name
@@ -74,11 +70,7 @@ class Customer(models.Model):
     current_balance = models.FloatField(default=0.00, verbose_name=_("Current Balance"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.name} ({self.customer_type})"
@@ -106,18 +98,19 @@ class Product(models.Model):
     - updated_at: Timestamp indicating the last update to the product's details.
     - rate: Unit price of each product
     """
+
     class ProductCategory(models.TextChoices):
-        FRUITS = 'FR', 'Fruits'
-        VEGETABLES = 'VG', 'Vegetables'
-        GRAINS_AND_CEREALS = 'GR', 'Grains & Cereals'
-        PULSES_AND_LEGUMES = 'PL', 'Pulses & Legumes'
-        SPICES_AND_HERBS = 'SP', 'Spices & Herbs'
-        NUTS_AND_SEEDS = 'NT', 'Nuts & Seeds'
-        DAIRY_AND_ANIMAL_PRODUCTS = 'DF', 'Dairy & Animal Products'
-        FODDER_AND_FORAGE = 'FM', 'Fodder & Forage'
-        FLOWERS_AND_ORNAMENTAL_PLANTS = 'FL', 'Flowers & Ornamental Plants'
-        HERBS_AND_MEDICINAL_PLANTS = 'HR', 'Herbs & Medicinal Plants'
-        OTHER = 'OT', 'Other'
+        FRUITS = "FR", "Fruits"
+        VEGETABLES = "VG", "Vegetables"
+        GRAINS_AND_CEREALS = "GR", "Grains & Cereals"
+        PULSES_AND_LEGUMES = "PL", "Pulses & Legumes"
+        SPICES_AND_HERBS = "SP", "Spices & Herbs"
+        NUTS_AND_SEEDS = "NT", "Nuts & Seeds"
+        DAIRY_AND_ANIMAL_PRODUCTS = "DF", "Dairy & Animal Products"
+        FODDER_AND_FORAGE = "FM", "Fodder & Forage"
+        FLOWERS_AND_ORNAMENTAL_PLANTS = "FL", "Flowers & Ornamental Plants"
+        HERBS_AND_MEDICINAL_PLANTS = "HR", "Herbs & Medicinal Plants"
+        OTHER = "OT", "Other"
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
@@ -136,18 +129,9 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     is_marketplace_created = models.BooleanField(default=False, verbose_name=_("Marketplace Created"))
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
     location = models.ForeignKey(
-        "City",
-        on_delete=models.CASCADE,
-        verbose_name="Location",
-        help_text="Location of the product",
-        null=True,
-        blank=True
+        "City", on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
     )
 
     def __str__(self):
@@ -177,6 +161,7 @@ class Order(models.Model):
     - created_at: Timestamp indicating when the order was created.
     - updated_at: Timestamp indicating the last update to the order.
     """
+
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         APPROVED = "approved", _("Approved")
@@ -195,11 +180,7 @@ class Order(models.Model):
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
 
     def __str__(self):
         return f"Order {self.order_number} by {self.customer.name}"
@@ -230,6 +211,7 @@ class Sale(models.Model):
     - created_at: Timestamp indicating when the sale was recorded.
     - updated_at: Timestamp indicating the last update to the sale details.
     """
+
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         APPROVED = "approved", _("Approved")
@@ -244,21 +226,10 @@ class Sale(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     payment_status = models.CharField(
-        max_length=50,
-        choices=Status.choices,
-        default=Status.PENDING,
-        verbose_name=_("Payment Status")
+        max_length=50, choices=Status.choices, default=Status.PENDING, verbose_name=_("Payment Status")
     )
-    payment_due_date = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_("Payment Due Date")
-    )
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    payment_due_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Payment Due Date"))
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
 
     def __str__(self):
         return f"Sale of {self.order.product.name} (Order: {self.order.order_number})"
@@ -283,17 +254,11 @@ class StockList(models.Model):
     """
     Represents a list of products that have been moved to the stock list due to threshold conditions.
     """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     moved_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Moved Date"))
-    is_pushed_to_marketplace = models.BooleanField(
-        verbose_name=_('Is Stock moved to marketplace'),
-        default=False
-    )
-    user = models.ForeignKey(
-        User,
-        verbose_name=_('User'),
-        on_delete=models.CASCADE
-    )
+    is_pushed_to_marketplace = models.BooleanField(verbose_name=_("Is Stock moved to marketplace"), default=False)
+    user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
@@ -309,6 +274,7 @@ class MarketplaceProduct(models.Model):
     - listed_date: The date when the product was listed in the marketplace.
     - is_available: Indicates whether the product is still available for sale.
     """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     listed_price = models.FloatField(verbose_name=_("Listed Price"))
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
@@ -343,8 +309,9 @@ class ProductImage(models.Model):
     """
     Represents multiple images for a product.
     """
-    product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE)
-    image = models.ImageField(upload_to='product_images/')
+
+    product = models.ForeignKey(Product, related_name="images", on_delete=models.CASCADE)
+    image = models.ImageField(upload_to="product_images/")
     alt_text = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Alternative Text"))
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -7,18 +7,23 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0007_remove_customer_producer'),
+        ("producer", "0007_remove_customer_producer"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ProductImage',
+            name="ProductImage",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('image', models.FileField(upload_to='product_images/')),
-                ('alt_text', models.CharField(blank=True, max_length=255, null=True, verbose_name='Alternative Text')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='images', to='producer.product')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("image", models.FileField(upload_to="product_images/")),
+                ("alt_text", models.CharField(blank=True, max_length=255, null=True, verbose_name="Alternative Text")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="images", to="producer.product"
+                    ),
+                ),
             ],
         ),
     ]

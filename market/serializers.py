@@ -145,10 +145,7 @@ class BidSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    product_details = MarketplaceProductSerializer(
-        source='product',
-        read_only=True
-    )
+    product_details = MarketplaceProductSerializer(source="product", read_only=True)
 
     class Meta:
         model = Bid
@@ -174,7 +171,7 @@ class BidSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         bid_amount = validated_data["bid_amount"]
         bidder = self.context["request"].user
-        validated_data['bid_date'] = timezone.now()
+        validated_data["bid_date"] = timezone.now()
         highest_bid = Bid.objects.filter(product=product).order_by("-bid_amount").first()
         if highest_bid is None or bid_amount > highest_bid.max_bid_amount:
             max_bid_amount = bid_amount
@@ -183,17 +180,14 @@ class BidSerializer(serializers.ModelSerializer):
         bid_end_date = product.bid_end_date
         if bid_end_date.tzinfo is None:
             bid_end_date = timezone.make_aware(bid_end_date, timezone.get_current_timezone())
-        if validated_data['bid_date'] > bid_end_date:
-            raise serializers.ValidationError({
-                "bid_date": "Can't bid for this product, Time Expired!!!!!"
-            })
+        if validated_data["bid_date"] > bid_end_date:
+            raise serializers.ValidationError({"bid_date": "Can't bid for this product, Time Expired!!!!!"})
         bid = Bid.objects.create(bidder=bidder, product=product, bid_amount=bid_amount, max_bid_amount=max_bid_amount)
 
         # Check if the request user is the highest bidder, and send a notification if so
         if highest_bid is None or bid.bid_amount > highest_bid.bid_amount:
             Notification.objects.create(
-                user=bid.bidder,
-                message=f"You are the highest bidder for the product '{product.product.name}'"
+                user=bid.bidder, message=f"You are the highest bidder for the product '{product.product.name}'"
             )
 
         return bid
@@ -203,7 +197,7 @@ class BidSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cannot withdraw bid after bidding has ended.")
         # TODO: Check on this
         # if instance == Bid.objects.filter(product=instance.product).order_by('-bid_amount').first():
-        #     raise serializers.ValidationError("Cannot withdraw the highest bid.") 
+        #     raise serializers.ValidationError("Cannot withdraw the highest bid.")
         instance.delete()
 
 
@@ -211,14 +205,8 @@ class BidUserSerializer(serializers.ModelSerializer):
     product_id = serializers.IntegerField(write_only=True)
     bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     max_bid_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    product_details = MarketplaceProductSerializer(
-        source='product',
-        read_only=True
-    )
-    bidder_username = serializers.CharField(
-        source='bidder.username',
-        read_only=True
-    )
+    product_details = MarketplaceProductSerializer(source="product", read_only=True)
+    bidder_username = serializers.CharField(source="bidder.username", read_only=True)
 
     class Meta:
         model = Bid
@@ -263,7 +251,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # product = validated_data["product"]
         # message = validated_data["message"]
-        validated_data['sender'] = self.context['request'].user
+        validated_data["sender"] = self.context["request"].user
         # chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
         return super().create(validated_data)
         # return chat_message
@@ -272,7 +260,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketplaceUserProduct
-        fields = '__all__'
+        fields = "__all__"
         extra_kwargs = {"user": {"read_only": True}}
 
     def validate_price(self, value):
@@ -291,28 +279,28 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
         return bid_end_date
 
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
 
 class SellerProductSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source='product.name', read_only=True)
-    description = serializers.CharField(source='product.description', read_only=True)
+    name = serializers.CharField(source="product.name", read_only=True)
+    description = serializers.CharField(source="product.description", read_only=True)
 
     class Meta:
         model = MarketplaceProduct
-        fields = ['id', 'name', 'description']
+        fields = ["id", "name", "description"]
 
 
 class SellerBidSerializer(serializers.ModelSerializer):
-    bidder_username = serializers.CharField(source='bidder.username', read_only=True)
+    bidder_username = serializers.CharField(source="bidder.username", read_only=True)
 
     class Meta:
         model = Bid
-        fields = ['bidder_username', 'bid_amount']
+        fields = ["bidder_username", "bid_amount"]
 
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
-        fields = ['id', 'message', 'is_read', 'created_at']
+        fields = ["id", "message", "is_read", "created_at"]

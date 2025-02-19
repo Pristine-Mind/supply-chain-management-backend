@@ -7,22 +7,27 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0004_stocklist'),
+        ("producer", "0004_stocklist"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='MarketplaceProduct',
+            name="MarketplaceProduct",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('listed_price', models.DecimalField(decimal_places=2, max_digits=10, verbose_name='Listed Price')),
-                ('listed_date', models.DateTimeField(auto_now_add=True, verbose_name='Listed Date')),
-                ('is_available', models.BooleanField(default=True, verbose_name='Is Available')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='producer.product', verbose_name='Product')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("listed_price", models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Listed Price")),
+                ("listed_date", models.DateTimeField(auto_now_add=True, verbose_name="Listed Date")),
+                ("is_available", models.BooleanField(default=True, verbose_name="Is Available")),
+                (
+                    "product",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="producer.product", verbose_name="Product"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Marketplace Product',
-                'verbose_name_plural': 'Marketplace Products',
+                "verbose_name": "Marketplace Product",
+                "verbose_name_plural": "Marketplace Products",
             },
         ),
     ]

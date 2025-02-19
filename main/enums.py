@@ -4,10 +4,7 @@ from rest_framework import serializers
 from market import enums as market_enums
 from producer import enums as producer_enums
 
-apps_enum_register = [
-    ("market", market_enums.enum_register),
-    ("product", producer_enums.enum_registe)
-]
+apps_enum_register = [("market", market_enums.enum_register), ("product", producer_enums.enum_registe)]
 
 
 def underscore_to_camel(text):
@@ -37,7 +34,7 @@ def generate_enum_global_serializer(name):
         settings.SPECTACULAR_SETTINGS["ENUM_NAME_OVERRIDES"][_enum_name] = enum
 
         # Determine the choices to use in the ChoiceField
-        if hasattr(enum, 'choices'):
+        if hasattr(enum, "choices"):
             choices = enum.choices
         else:
             choices = enum
@@ -69,7 +66,7 @@ GlobalEnumSerializer = generate_enum_global_serializer("GlobalEnumSerializer")
 def get_enum_values():
     enum_data = {}
     for enum_field, (_, enum) in global_enum_registers.items():
-        if hasattr(enum, 'choices'):
+        if hasattr(enum, "choices"):
             choices = enum.choices
         else:
             choices = enum
