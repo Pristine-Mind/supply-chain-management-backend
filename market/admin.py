@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Purchase, Bid, ChatMessage, Payment
+from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction
 
 
 @admin.register(Purchase)
@@ -28,3 +28,8 @@ class PaymentAdmin(admin.ModelAdmin):
     list_display = ("purchase", "transaction_id", "amount", "status", "payment_date")
     list_filter = ("status", "payment_date")
     search_fields = ("transaction_id", "purchase__buyer__username")
+
+
+@admin.register(UserInteraction)
+class UserInteractionAdmin(admin.ModelAdmin):
+    pass

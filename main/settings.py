@@ -187,9 +187,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
-CORS_ORIGIN_WHITELIST = (
-    'http://localhost:5173',
-)
+CORS_ORIGIN_WHITELIST = ("http://localhost:5173",)
 # CORS_URLS_REGEX = r"(^/media/.*$)|(^/graphql/$)"
 # CORS_ALLOW_METHODS = (
 #     "DELETE",
@@ -230,7 +228,7 @@ REST_FRAMEWORK = {
     # 'DEFAULT_PERMISSION_CLASSES': (
     #     'rest_framework.permissions.IsAuthenticated',
     # ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 CELERY_REDIS_URL = env("CELERY_REDIS_URL")
@@ -241,29 +239,29 @@ CELERY_ACKS_LATE = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 CELERY_BEAT_SCHEDULE = {
-    'move_large_stock_to_stocklist': {
-        'task': 'producer.tasks.move_large_stock_to_stocklist',
-        'schedule': crontab(minute=0, hour='*/3')
+    "move_large_stock_to_stocklist": {
+        "task": "producer.tasks.move_large_stock_to_stocklist",
+        "schedule": crontab(minute=0, hour="*/3"),
     },
-    'update-bid-end-dates-every-hour': {
-        'task': 'producer.tasks.update_bid_end_dates',
-        'schedule': crontab(minute=0, hour='*'),  # Runs every hour
+    "update-bid-end-dates-every-hour": {
+        "task": "producer.tasks.update_bid_end_dates",
+        "schedule": crontab(minute=0, hour="*"),  # Runs every hour
     },
 }
 
-KHALTI_PUBLIC_KEY = 'aaass'
-KHALTI_SECRET_KEY = 'aa'
+KHALTI_PUBLIC_KEY = "aaass"
+KHALTI_SECRET_KEY = "aa"
 
 # Khalti test credentials
-KHALTI_TEST_MOBILE_NUMBER = '9800000001'
-KHALTI_TEST_PIN = '1234'
+KHALTI_TEST_MOBILE_NUMBER = "9800000001"
+KHALTI_TEST_PIN = "1234"
 
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Mulya Bazzar API',
-    'DESCRIPTION': 'Mulya Bazzar API Documenation',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
+    "TITLE": "Mulya Bazzar API",
+    "DESCRIPTION": "Mulya Bazzar API Documenation",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
     "ENUM_NAME_OVERRIDES": {},
     "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
 }

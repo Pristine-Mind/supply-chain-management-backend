@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0018_alter_product_category'),
+        ("producer", "0018_alter_product_category"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='producer',
-            name='email',
-            field=models.EmailField(blank=True, max_length=254, null=True, verbose_name='Email Address'),
+            model_name="producer",
+            name="email",
+            field=models.EmailField(blank=True, max_length=254, null=True, verbose_name="Email Address"),
         ),
     ]

@@ -19,6 +19,7 @@ class Command(BaseCommand):
                 email=fake.email(),
                 address=fake.address(),
                 registration_number=fake.isbn10(),
+                user_id=1
             )
             self.stdout.write(self.style.SUCCESS(f"Created Producer: {producer.name}"))
 
@@ -33,6 +34,9 @@ class Command(BaseCommand):
                     shipping_address=fake.address(),
                     credit_limit=fake.pydecimal(left_digits=5, right_digits=2, positive=True),
                     current_balance=fake.pydecimal(left_digits=4, right_digits=2, positive=True),
+                    user_id=1,
+
+                    
                 )
                 self.stdout.write(self.style.SUCCESS(f"  Created Customer: {customer.name}"))
 
@@ -46,6 +50,8 @@ class Command(BaseCommand):
                         cost_price=fake.pydecimal(left_digits=3, right_digits=2, positive=True),
                         stock=fake.random_int(min=1, max=500),
                         producer=producer,
+                        user_id=1,
+
                     )
                     self.stdout.write(self.style.SUCCESS(f"    Created Product: {product.name}"))
 
@@ -61,19 +67,24 @@ class Command(BaseCommand):
                             ),
                             total_price=product.price * fake.random_int(min=1, max=100),
                             order_date=fake.date_time_this_year(),
-                            payment_status=fake.random_element(elements=("Pending", "Paid")),
+                            # payment_status=fake.random_element(elements=("Pending", "Paid")),
                             order_number=order_number,
+                            user_id=1
+
                         )
                         self.stdout.write(self.style.SUCCESS(f"Created Order ID: {order.id}"))
 
-                    # Create 10 Sales for each Customer and Product
-                    for _ in range(10):
-                        sale = Sale.objects.create(
-                            customer=customer,
-                            product=product,
-                            quantity=fake.random_int(min=1, max=50),
-                            sale_price=product.price * fake.random_int(min=1, max=50),
-                        )
+                        # Create 10 Sales for each Customer and Product
+                        for _ in range(10):
+                            sale = Sale.objects.create(
+                                # customer=customer,
+                                # product=product,
+                                order=order,
+                                quantity=fake.random_int(min=1, max=50),
+                                sale_price=product.price * fake.random_int(min=1, max=50),
+                                user_id=1
+
+                            )
                         self.stdout.write(self.style.SUCCESS(f"      Created Sale ID: {sale.id}"))
 
         self.stdout.write(self.style.SUCCESS("Successfully created at least 100 dummy records for each model!"))

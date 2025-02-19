@@ -9,50 +9,64 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('producer', '0019_alter_producer_email'),
+        ("producer", "0019_alter_producer_email"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='customer',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="customer",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='order',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="order",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='producer',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="producer",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='product',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="product",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='productimage',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="productimage",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='sale',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="sale",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='stocklist',
-            name='user',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User'),
+            model_name="stocklist",
+            name="user",
+            field=models.ForeignKey(
+                default=1, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+            ),
             preserve_default=False,
         ),
     ]

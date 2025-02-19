@@ -6,13 +6,29 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0017_producer_location'),
+        ("producer", "0017_producer_location"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='product',
-            name='category',
-            field=models.CharField(choices=[('FR', 'Fruits'), ('VG', 'Vegetables'), ('GR', 'Grains & Cereals'), ('PL', 'Pulses & Legumes'), ('SP', 'Spices & Herbs'), ('NT', 'Nuts & Seeds'), ('DF', 'Dairy & Animal Products'), ('FM', 'Fodder & Forage'), ('FL', 'Flowers & Ornamental Plants'), ('HR', 'Herbs & Medicinal Plants'), ('OT', 'Other')], default='FR', max_length=2),
+            model_name="product",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("FR", "Fruits"),
+                    ("VG", "Vegetables"),
+                    ("GR", "Grains & Cereals"),
+                    ("PL", "Pulses & Legumes"),
+                    ("SP", "Spices & Herbs"),
+                    ("NT", "Nuts & Seeds"),
+                    ("DF", "Dairy & Animal Products"),
+                    ("FM", "Fodder & Forage"),
+                    ("FL", "Flowers & Ornamental Plants"),
+                    ("HR", "Herbs & Medicinal Plants"),
+                    ("OT", "Other"),
+                ],
+                default="FR",
+                max_length=2,
+            ),
         ),
     ]

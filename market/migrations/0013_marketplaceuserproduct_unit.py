@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0012_marketplaceuserproduct_location'),
+        ("market", "0012_marketplaceuserproduct_location"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketplaceuserproduct',
-            name='unit',
-            field=models.CharField(choices=[('KG', 'KiloGram'), ('LT', 'Liter')], default='KG', max_length=2, verbose_name='unit'),
+            model_name="marketplaceuserproduct",
+            name="unit",
+            field=models.CharField(
+                choices=[("KG", "KiloGram"), ("LT", "Liter")], default="KG", max_length=2, verbose_name="unit"
+            ),
         ),
     ]

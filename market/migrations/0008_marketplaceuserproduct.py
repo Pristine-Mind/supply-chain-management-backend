@@ -6,28 +6,51 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0007_alter_bid_bid_amount_alter_bid_max_bid_amount_and_more'),
+        ("market", "0007_alter_bid_bid_amount_alter_bid_max_bid_amount_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='MarketplaceUserProduct',
+            name="MarketplaceUserProduct",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255, verbose_name='Name')),
-                ('description', models.TextField(verbose_name='Description')),
-                ('price', models.DecimalField(decimal_places=2, max_digits=10, verbose_name='Price')),
-                ('stock', models.IntegerField(verbose_name='Stock')),
-                ('category', models.CharField(choices=[('EL', 'Electronics'), ('FA', 'Fashion & Clothing'), ('HB', 'Health & Beauty'), ('HK', 'Home & Kitchen'), ('GR', 'Groceries & Gourmet Food'), ('SO', 'Sports & Outdoors'), ('TK', 'Toys, Kids & Baby Products'), ('BM', 'Books, Music & Movies'), ('AI', 'Automotive & Industrial'), ('PS', 'Pet Supplies'), ('OS', 'Office & Stationery'), ('HF', 'Health & Fitness'), ('JA', 'Jewelry & Accessories'), ('GF', 'Gifts & Flowers')], default='EL', max_length=2, verbose_name='Category')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
-                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Updated At')),
-                ('image', models.ImageField(blank=True, null=True, upload_to='marketplace/products/', verbose_name='Image')),
-                ('is_verified', models.BooleanField(default=False, verbose_name='Is Verified')),
-                ('is_sold', models.BooleanField(default=False, verbose_name='Is Sold')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("name", models.CharField(max_length=255, verbose_name="Name")),
+                ("description", models.TextField(verbose_name="Description")),
+                ("price", models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Price")),
+                ("stock", models.IntegerField(verbose_name="Stock")),
+                (
+                    "category",
+                    models.CharField(
+                        choices=[
+                            ("EL", "Electronics"),
+                            ("FA", "Fashion & Clothing"),
+                            ("HB", "Health & Beauty"),
+                            ("HK", "Home & Kitchen"),
+                            ("GR", "Groceries & Gourmet Food"),
+                            ("SO", "Sports & Outdoors"),
+                            ("TK", "Toys, Kids & Baby Products"),
+                            ("BM", "Books, Music & Movies"),
+                            ("AI", "Automotive & Industrial"),
+                            ("PS", "Pet Supplies"),
+                            ("OS", "Office & Stationery"),
+                            ("HF", "Health & Fitness"),
+                            ("JA", "Jewelry & Accessories"),
+                            ("GF", "Gifts & Flowers"),
+                        ],
+                        default="EL",
+                        max_length=2,
+                        verbose_name="Category",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True, verbose_name="Created At")),
+                ("updated_at", models.DateTimeField(auto_now=True, verbose_name="Updated At")),
+                ("image", models.ImageField(blank=True, null=True, upload_to="marketplace/products/", verbose_name="Image")),
+                ("is_verified", models.BooleanField(default=False, verbose_name="Is Verified")),
+                ("is_sold", models.BooleanField(default=False, verbose_name="Is Sold")),
             ],
             options={
-                'verbose_name': 'Marketplace User Product',
-                'verbose_name_plural': 'Marketplace User Products',
+                "verbose_name": "Marketplace User Product",
+                "verbose_name_plural": "Marketplace User Products",
             },
         ),
     ]

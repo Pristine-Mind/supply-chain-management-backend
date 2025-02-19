@@ -5,7 +5,7 @@ _thread_locals = local()
 
 
 def get_current_shop():
-    return getattr(_thread_locals, 'shop_id', None)
+    return getattr(_thread_locals, "shop_id", None)
 
 
 class ShopSpecificQuerySet(models.QuerySet):
