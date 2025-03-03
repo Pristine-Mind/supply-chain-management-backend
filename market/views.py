@@ -328,7 +328,7 @@ class GlobalEnumView(views.APIView):
         return Response(get_enum_values())
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
 def log_interaction(request):
     """
@@ -339,13 +339,13 @@ def log_interaction(request):
       "data": { ... }  // Arbitrary event details
     }
     """
-    event_type = request.data.get('event_type')
-    data = request.data.get('data', {})
+    event_type = request.data.get("event_type")
+    data = request.data.get("data", {})
 
     if not event_type:
         return Response({"error": "Event type is required."}, status=400)
-    
+
     user = request.user if request.user.is_authenticated else None
 
     UserInteraction.objects.create(user=user, event_type=event_type, data=data)
-    return Response({'message': 'Interaction logged successfully.'})
+    return Response({"message": "Interaction logged successfully."})

@@ -2,9 +2,19 @@ import factory
 from factory.django import DjangoModelFactory
 from faker import Faker
 
-from .models import Producer, Customer, Product, Order, Sale
+from .models import Producer, Customer, Product, Order, Sale, LedgerEntry, AuditLog
+from user.models import User
 
 fake = Faker()
+
+
+class UserFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = User
+
+    username = factory.Sequence(lambda n: f"user{n}")
+    email = factory.LazyAttribute(lambda obj: f"{obj.username}@example.com")
+    password = factory.PostGenerationMethodCall("set_password", "testpass123")
 
 
 class ProducerFactory(DjangoModelFactory):
@@ -67,3 +77,28 @@ class SaleFactory(DjangoModelFactory):
     product = factory.SubFactory(ProductFactory)
     quantity = factory.Faker("random_int", min=1, max=50)
     sale_price = factory.Faker("pydecimal", left_digits=3, right_digits=2, positive=True)
+
+
+class LedgerEntryFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = LedgerEntry
+
+    account_type = LedgerEntry.AccountType.INVENTORY
+    amount = 50000.00
+    debit = True
+    reference_id = factory.Sequence(lambda n: f"REF{n:04d}")
+    date = factory.Faker("date")
+    related_entity = 1
+    user = factory.SubFactory(UserFactory)
+
+
+class AuditLogFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AuditLog
+
+    transaction_type = AuditLog.TransactionType.PROCUREMENT
+    reference_id = factory.Sequence(lambda n: f"REF{n:04d}")
+    date = factory.Faker("date")
+    entity_id = 1
+    amount = 50000.00
+    user = factory.SubFactory(UserFactory)

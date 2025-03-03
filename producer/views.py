@@ -26,6 +26,8 @@ from .models import (
     StockList,
     MarketplaceProduct,
     City,
+    LedgerEntry,
+    AuditLog,
 )
 from .serializers import (
     ProducerSerializer,
@@ -38,6 +40,13 @@ from .serializers import (
     StockListSerializer,
     MarketplaceProductSerializer,
     CitySerializer,
+    LedgerEntrySerializer,
+    AuditLogSerializer,
+    ProcurementRequestSerializer,
+    ProcurementResponseSerializer,
+    SalesRequestSerializer,
+    SalesResponseSerializer,
+    ReconciliationResponseSerializer,
 )
 from .filters import (
     SaleFilter,
@@ -48,6 +57,7 @@ from .filters import (
 )
 from .utils import export_queryset_to_excel
 from user.models import UserProfile
+from .supply_chain import SupplyChainService
 
 logger = logging.getLogger(__name__)
 
@@ -702,3 +712,70 @@ def export_sales_to_excel(request):
     response["Content-Disposition"] = "attachment; filename=sales.xlsx"
     wb.save(response)
     return response
+
+
+class LedgerEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = LedgerEntry.objects.all()
+    serializer_class = LedgerEntrySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = AuditLog.objects.all()
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+
+@api_view(["POST"])
+def procurement_view(request):
+    serializer = ProcurementRequestSerializer(data=request.data)
+    if serializer.is_valid():
+        service = SupplyChainService(request.user)
+        try:
+            order = service.procurement_process(
+                producer_id=serializer.validated_data["producer_id"],
+                product_id=serializer.validated_data["product_id"],
+                quantity=serializer.validated_data["quantity"],
+                unit_cost=serializer.validated_data["unit_cost"],
+            )
+            response_serializer = ProcurementResponseSerializer(order)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def sales_view(request):
+    serializer = SalesRequestSerializer(data=request.data)
+    if serializer.is_valid():
+        service = SupplyChainService(request.user)
+        try:
+            sale = service.sales_process(
+                customer_id=serializer.validated_data["customer_id"],
+                product_id=serializer.validated_data["product_id"],
+                quantity=serializer.validated_data["quantity"],
+                selling_price=serializer.validated_data["selling_price"],
+            )
+            response_serializer = SalesResponseSerializer(sale)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def reconciliation_view(request):
+    service = SupplyChainService(request.user)
+    try:
+        result = service.reconciliation_process()
+        serializer = ReconciliationResponseSerializer(result)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

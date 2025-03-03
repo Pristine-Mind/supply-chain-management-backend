@@ -230,15 +230,8 @@ class Notification(models.Model):
 
 class UserInteraction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
-    event_type = models.CharField(
-        max_length=100,
-        help_text="Type of event (e.g., 'click', 'page_view')"
-    )
-    data = models.JSONField(
-        blank=True,
-        null=True,
-        help_text="Additional event details (e.g., element info, coordinates)"
-    )
+    event_type = models.CharField(max_length=100, help_text="Type of event (e.g., 'click', 'page_view')")
+    data = models.JSONField(blank=True, null=True, help_text="Additional event details (e.g., element info, coordinates)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

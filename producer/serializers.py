@@ -14,6 +14,8 @@ from .models import (
     MarketplaceProduct,
     ProductImage,
     City,
+    LedgerEntry,
+    AuditLog,
 )
 
 
@@ -299,3 +301,51 @@ class CitySerializer(serializers.ModelSerializer):
     class Meta:
         model = City
         fields = ["id", "name"]
+
+
+class LedgerEntrySerializer(serializers.ModelSerializer):
+    account_type = serializers.ChoiceField(choices=LedgerEntry.AccountType.choices)
+
+    class Meta:
+        model = LedgerEntry
+        fields = ["id", "account_type", "amount", "debit", "reference_id", "date", "related_entity"]
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    transaction_type = serializers.ChoiceField(choices=AuditLog.TransactionType.choices)
+
+    class Meta:
+        model = AuditLog
+        fields = ["id", "transaction_type", "reference_id", "date", "entity_id", "amount"]
+
+
+class ProcurementRequestSerializer(serializers.Serializer):
+    producer_id = serializers.IntegerField()
+    product_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1)
+    unit_cost = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class ProcurementResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ["id", "order_number", "customer", "product", "quantity", "status", "total_price"]
+
+
+class SalesRequestSerializer(serializers.Serializer):
+    customer_id = serializers.IntegerField()
+    product_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1)
+    selling_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class SalesResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sale
+        fields = ["id", "order", "quantity", "sale_price", "sale_date", "payment_status"]
+
+
+class ReconciliationResponseSerializer(serializers.Serializer):
+    net_vat = serializers.DecimalField(max_digits=12, decimal_places=2)
+    tds_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    profit = serializers.DecimalField(max_digits=12, decimal_places=2)
