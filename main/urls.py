@@ -42,6 +42,11 @@ from producer.views import (
     export_products_to_excel,
     export_sales_to_excel,
     export_orders_to_excel,
+    LedgerEntryViewSet,
+    AuditLogViewSet,
+    procurement_view,
+    sales_view,
+    reconciliation_view,
 )
 from market.views import (
     BidViewSet,
@@ -84,6 +89,8 @@ router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
 router.register(r"user-bids", UserBidViewSet, basename="user-bids")
 router.register(r"user-recommendation", MarketplaceUserRecommendedProductViewSet, basename="user-recommendation")
+router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")
+router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -112,7 +119,10 @@ urlpatterns = [
     path("api/v1/pretrained-chatbot/", PretrainedChatbotAPIView.as_view(), name="pretrained-chatbot"),
     path("api/v1/contact/", ContactCreateView.as_view(), name="contact-create"),
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
-    path('api/log-interaction/', log_interaction, name='log_interaction'),
+    path("api/log-interaction/", log_interaction, name="log_interaction"),
+    path("api/v1/procurement/", procurement_view, name="procurement"),
+    path("api/v1/sales/", sales_view, name="sales"),
+    path("api/v1/reconciliation/", reconciliation_view, name="reconciliation"),
     # Docs
     path("docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("api-docs/", SpectacularAPIView.as_view(), name="schema"),
