@@ -9,18 +9,28 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('market', '0014_marketplaceuserproduct_bid_end_date'),
+        ("market", "0014_marketplaceuserproduct_bid_end_date"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='UserInteraction',
+            name="UserInteraction",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('event_type', models.CharField(help_text="Type of event (e.g., 'click', 'page_view')", max_length=100)),
-                ('data', models.JSONField(blank=True, help_text='Additional event details (e.g., element info, coordinates)', null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("event_type", models.CharField(help_text="Type of event (e.g., 'click', 'page_view')", max_length=100)),
+                (
+                    "data",
+                    models.JSONField(
+                        blank=True, help_text="Additional event details (e.g., element info, coordinates)", null=True
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL
+                    ),
+                ),
             ],
         ),
     ]

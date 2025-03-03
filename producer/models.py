@@ -5,8 +5,6 @@ import uuid
 from datetime import timedelta
 from django.contrib.gis.db import models
 from django.utils import timezone
-from main.manager import ShopSpecificQuerySet
-from typing import Optional
 
 
 class Producer(models.Model):
@@ -324,3 +322,53 @@ class City(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class LedgerEntry(models.Model):
+    class AccountType(models.TextChoices):
+        INVENTORY = "INV", _("Inventory")
+        ACCOUNTS_PAYABLE = "AP", _("Accounts Payable")
+        ACCOUNTS_RECEIVABLE = "AR", _("Accounts Receivable")
+        SALES_REVENUE = "SR", _("Sales Revenue")
+        COST_OF_GOODS_SOLD = "COGS", _("Cost of Goods Sold")
+        VAT_RECEIVABLE = "VAT_R", _("VAT Receivable")
+        VAT_PAYABLE = "VAT_P", _("VAT Payable")
+        TDS_PAYABLE = "TDS", _("TDS Payable")
+        CASH = "CASH", _("Cash/Bank")
+
+    account_type = models.CharField(max_length=5, choices=AccountType.choices, verbose_name=_("Account Type"))
+    amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Amount"))
+    debit = models.BooleanField(default=True, verbose_name=_("Debit Entry"))
+    reference_id = models.CharField(max_length=100, verbose_name=_("Reference ID"))
+    date = models.DateField(default=timezone.now, verbose_name=_("Transaction Date"))
+    related_entity = models.IntegerField(verbose_name=_("Related Entity ID"))
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("User"))
+
+    class Meta:
+        verbose_name = _("Ledger Entry")
+        verbose_name_plural = _("Ledger Entries")
+
+    def __str__(self):
+        return f"{self.account_type} - {self.amount} ({'Debit' if self.debit else 'Credit'})"
+
+
+class AuditLog(models.Model):
+    class TransactionType(models.TextChoices):
+        PROCUREMENT = "Procurement", _("Procurement")
+        INVENTORY = "Inventory", _("Inventory")
+        SALES = "Sales", _("Sales")
+        RECONCILIATION = "Reconciliation", _("Reconciliation")
+
+    transaction_type = models.CharField(max_length=20, choices=TransactionType.choices, verbose_name=_("Transaction Type"))
+    reference_id = models.CharField(max_length=100, verbose_name=_("Reference ID"))
+    date = models.DateField(default=timezone.now, verbose_name=_("Date"))
+    entity_id = models.IntegerField(verbose_name=_("Entity ID"))
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, verbose_name=_("Amount"))
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("User"))
+
+    class Meta:
+        verbose_name = _("Audit Log")
+        verbose_name_plural = _("Audit Logs")
+
+    def __str__(self):
+        return f"{self.transaction_type} - {self.reference_id}"
