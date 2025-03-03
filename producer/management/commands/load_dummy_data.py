@@ -19,7 +19,7 @@ class Command(BaseCommand):
                 email=fake.email(),
                 address=fake.address(),
                 registration_number=fake.isbn10(),
-                user_id=1
+                user_id=1,
             )
             self.stdout.write(self.style.SUCCESS(f"Created Producer: {producer.name}"))
 
@@ -35,8 +35,6 @@ class Command(BaseCommand):
                     credit_limit=fake.pydecimal(left_digits=5, right_digits=2, positive=True),
                     current_balance=fake.pydecimal(left_digits=4, right_digits=2, positive=True),
                     user_id=1,
-
-                    
                 )
                 self.stdout.write(self.style.SUCCESS(f"  Created Customer: {customer.name}"))
 
@@ -51,7 +49,6 @@ class Command(BaseCommand):
                         stock=fake.random_int(min=1, max=500),
                         producer=producer,
                         user_id=1,
-
                     )
                     self.stdout.write(self.style.SUCCESS(f"    Created Product: {product.name}"))
 
@@ -69,8 +66,7 @@ class Command(BaseCommand):
                             order_date=fake.date_time_this_year(),
                             # payment_status=fake.random_element(elements=("Pending", "Paid")),
                             order_number=order_number,
-                            user_id=1
-
+                            user_id=1,
                         )
                         self.stdout.write(self.style.SUCCESS(f"Created Order ID: {order.id}"))
 
@@ -82,8 +78,7 @@ class Command(BaseCommand):
                                 order=order,
                                 quantity=fake.random_int(min=1, max=50),
                                 sale_price=product.price * fake.random_int(min=1, max=50),
-                                user_id=1
-
+                                user_id=1,
                             )
                         self.stdout.write(self.style.SUCCESS(f"      Created Sale ID: {sale.id}"))
 
