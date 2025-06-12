@@ -210,7 +210,8 @@ class DashboardAPIView(APIView):
         total_sales = Sale.objects.filter(user__userprofile__shop_id=shop_id).count()
         total_customers = Customer.objects.filter(user__userprofile__shop_id=shop_id).count()
         pending_orders = Order.objects.filter(
-            Q(status=Order.Status.PENDING) | Q(status=Order.Status.APPROVED), user__userprofile__shop_id=shop_id
+            status__in=[Order.Status.PENDING, Order.Status.APPROVED],
+            user__userprofile__shop_id=shop_id
         ).count()
         total_revenue = (
             Sale.objects.filter(user__userprofile__shop_id=shop_id).aggregate(total_revenue=Sum("sale_price"))[
@@ -285,7 +286,7 @@ class TopSalesCustomersView(APIView):
             .order_by("-total_sales")
         )
         sales_serializer = CustomerSalesSerializer(top_sales_customers, many=True)
-        return Response(sales_serializer.data, status=status.HTTP_200_OK)
+        return Response(data=sales_serializer.data, status=status.HTTP_200_OK)
 
 
 class TopOrdersCustomersView(APIView):
@@ -392,7 +393,7 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
             MarketplaceProduct.objects.filter(
                 is_available=True,
                 bid_end_date__gte=timezone.now(),
-                product__location=location,
+                #product__location=location,
             )
             .exclude(product__user=user)
             .order_by("-listed_date")
