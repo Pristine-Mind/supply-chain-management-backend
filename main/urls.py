@@ -71,7 +71,7 @@ from market.views import (
 from user.views import (
     RegisterView,
     LoginAPIView,
-    PretrainedChatbotAPIView,
+    # PretrainedChatbotAPIView,
     ContactCreateView,
 )
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -116,7 +116,7 @@ urlpatterns = [
     path("api/v1/cities/", CityListView.as_view(), name="city-list"),
     path("api/v1/seller/<int:product_id>/withdraw/", withdraw_product, name="withdraw_product"),
     path("api/v1/bids/<int:bid_id>/withdraw/", WithdrawBidView.as_view(), name="withdraw-bid"),
-    path("api/v1/pretrained-chatbot/", PretrainedChatbotAPIView.as_view(), name="pretrained-chatbot"),
+    # path("api/v1/pretrained-chatbot/", PretrainedChatbotAPIView.as_view(), name="pretrained-chatbot"),
     path("api/v1/contact/", ContactCreateView.as_view(), name="contact-create"),
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
     path("api/log-interaction/", log_interaction, name="log_interaction"),
