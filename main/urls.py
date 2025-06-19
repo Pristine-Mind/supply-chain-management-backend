@@ -47,6 +47,7 @@ from producer.views import (
     procurement_view,
     sales_view,
     reconciliation_view,
+    stats_dashboard,
 )
 from market.views import (
     BidViewSet,
@@ -116,6 +117,7 @@ urlpatterns = [
     path("api/v1/cities/", CityListView.as_view(), name="city-list"),
     path("api/v1/seller/<int:product_id>/withdraw/", withdraw_product, name="withdraw_product"),
     path("api/v1/bids/<int:bid_id>/withdraw/", WithdrawBidView.as_view(), name="withdraw-bid"),
+    path("api/v1/stats-dashboard/", stats_dashboard, name="stats-dashboard"),
     # path("api/v1/pretrained-chatbot/", PretrainedChatbotAPIView.as_view(), name="pretrained-chatbot"),
     path("api/v1/contact/", ContactCreateView.as_view(), name="contact-create"),
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),

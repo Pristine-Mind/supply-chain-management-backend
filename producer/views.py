@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
@@ -210,8 +210,7 @@ class DashboardAPIView(APIView):
         total_sales = Sale.objects.filter(user__userprofile__shop_id=shop_id).count()
         total_customers = Customer.objects.filter(user__userprofile__shop_id=shop_id).count()
         pending_orders = Order.objects.filter(
-            status__in=[Order.Status.PENDING, Order.Status.APPROVED],
-            user__userprofile__shop_id=shop_id
+            status__in=[Order.Status.PENDING, Order.Status.APPROVED], user__userprofile__shop_id=shop_id
         ).count()
         total_revenue = (
             Sale.objects.filter(user__userprofile__shop_id=shop_id).aggregate(total_revenue=Sum("sale_price"))[
@@ -393,7 +392,7 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
             MarketplaceProduct.objects.filter(
                 is_available=True,
                 bid_end_date__gte=timezone.now(),
-                #product__location=location,
+                # product__location=location,
             )
             .exclude(product__user=user)
             .order_by("-listed_date")
@@ -780,3 +779,85 @@ def reconciliation_view(request):
         return Response(serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def stats_dashboard(request):
+    user = request.user
+
+    user_date = request.query_params.get("date", None)
+    if user_date:
+        print(user_date)
+        try:
+            date = datetime.strptime(user_date, "%Y-%m-%d")
+            print(f"date:{date}")
+        except ValueError:
+            return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        date = datetime.today().date()
+    start_of_week = date - timedelta(days=date.weekday())
+    print(f"start_of_week: {start_of_week}")
+    start_of_month = date.replace(day=1)
+
+    producer_orders = (
+        Order.objects.filter(user=user, order_date__gte=start_of_week)
+        .select_related("product", "customer")
+        .order_by("-created_at")[:10]
+    )
+    customer_sales = (
+        Sale.objects.filter(user=user, sale_date__gte=start_of_week)
+        .select_related("order__product")
+        .order_by("-created_at")[:10]
+    )
+
+    producer_transactions = [
+        {
+            "name": order.product.producer.name if order.product and order.product.producer else "Unknown",
+            "detail": f"{order.quantity} units of {order.product.name}",
+            "date": order.order_date.date(),
+        }
+        for order in producer_orders
+    ]
+
+    customer_transactions = [
+        {
+            "name": sale.order.customer.name if sale.order.customer else "Unknown",
+            "detail": f"{sale.quantity} units of {sale.order.product.name}",
+            "date": sale.sale_date.date(),
+        }
+        for sale in customer_sales
+    ]
+
+    total_products = Product.objects.filter(user=user).count()
+    total_stock_value = Product.objects.filter(user=user).aggregate(total=Sum("stock") * Sum("price"))["total"] or 0
+
+    today_sales = Sale.objects.filter(user=user, created_at__date=date).aggregate(total=Sum("sale_price"))["total"] or 0
+    week_sales = (
+        Sale.objects.filter(user=user, created_at__date__gte=start_of_week).aggregate(total=Sum("sale_price"))["total"] or 0
+    )
+    month_sales = (
+        Sale.objects.filter(user=user, created_at__date__gte=start_of_month).aggregate(total=Sum("sale_price"))["total"] or 0
+    )
+
+    order_status = Order.objects.filter(user=user).values("status").annotate(count=Count("id"))
+
+    return Response(
+        {
+            "producer_transactions": producer_transactions,
+            "customer_transactions": customer_transactions,
+            "product_summary": [
+                {"title": "Total Products", "value": str(total_products)},
+                {"title": "Total Stock Value", "value": f"${total_stock_value:.2f}"},
+            ],
+            "sales_overview": [
+                {"title": "Total Sales (Today)", "value": f"${today_sales:.2f}"},
+                {"title": "Total Sales (Week)", "value": f"${week_sales:.2f}"},
+                {"title": "Total Sales (Month)", "value": f"${month_sales:.2f}"},
+            ],
+            "order_status": [
+                {"title": status["status"].capitalize() + " Orders", "value": str(status["count"])}
+                for status in order_status
+            ],
+        }
+    )
