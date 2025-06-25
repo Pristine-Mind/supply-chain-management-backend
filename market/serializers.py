@@ -337,11 +337,19 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    product_details = MarketplaceProductSerializer(read_only=True)
+    product_details = MarketplaceProductSerializer(source='product', read_only=True)
+    unit_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        fields = ["id", "product", "quantity", "product_details"]
+        fields = ["id", "product", "quantity", "product_details", "unit_price", "total_price"]
+
+    def get_unit_price(self, obj):
+        return obj.product.listed_price
+
+    def get_total_price(self, obj):
+        return obj.product.listed_price * obj.quantity   
 
 
 class CartSerializer(serializers.ModelSerializer):
