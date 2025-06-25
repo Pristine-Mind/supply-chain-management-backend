@@ -14,7 +14,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
 
-from market.models import Bid, ChatMessage, Notification, UserInteraction
+from market.models import Bid, ChatMessage, Notification, UserInteraction, Feedback
 from producer.models import MarketplaceProduct
 from .serializers import (
     PurchaseSerializer,
@@ -25,6 +25,7 @@ from .serializers import (
     SellerProductSerializer,
     SellerBidSerializer,
     NotificationSerializer,
+    FeedbackSerializer,
 )
 from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct
@@ -349,3 +350,45 @@ def log_interaction(request):
 
     UserInteraction.objects.create(user=user, event_type=event_type, data=data)
     return Response({"message": "Interaction logged successfully."})
+
+
+class FeedbackViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing feedback on marketplace products.
+    """
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Feedback.objects.all()
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ProductFeedbackView(views.APIView):
+    """
+    API view to get all feedback for a specific product.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request, product_id):
+        try:
+            product = MarketplaceProduct.objects.get(id=product_id)
+            feedbacks = Feedback.objects.filter(product=product).order_by('-created_at')
+            serializer = FeedbackSerializer(feedbacks, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except MarketplaceProduct.DoesNotExist:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class UserFeedbackView(views.APIView):
+    """
+    API view to get all feedback submitted by the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        feedbacks = Feedback.objects.filter(user=request.user).order_by('-created_at')
+        serializer = FeedbackSerializer(feedbacks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

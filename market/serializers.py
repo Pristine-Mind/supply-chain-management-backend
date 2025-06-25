@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 
 from rest_framework import serializers
 
-from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct, Notification
+from .models import Purchase, Bid, ChatMessage, Payment, MarketplaceUserProduct, Notification, Feedback
 from producer.models import MarketplaceProduct
 from producer.serializers import MarketplaceProductSerializer
 
@@ -304,3 +304,31 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ["id", "message", "is_read", "created_at"]
+
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source="user.username", read_only=True)
+    product_name = serializers.CharField(source="product.product.name", read_only=True)
+    
+    class Meta:
+        model = Feedback
+        fields = [
+            "id",
+            "user",
+            "user_username", 
+            "product",
+            "product_name",
+            "rating",
+            "comment",
+            "created_at"
+        ]
+        read_only_fields = ["user", "created_at"]
+    
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+    
+    def create(self, validated_data):
+        validated_data["user"] = self.context["request"].user
+        return super().create(validated_data)

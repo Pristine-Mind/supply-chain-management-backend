@@ -374,7 +374,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer
-    # filterset_class = MarketplaceProductFilter
+    filterset_class = MarketplaceProductFilter
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet:
@@ -391,7 +391,7 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
         return (
             MarketplaceProduct.objects.filter(
                 is_available=True,
-                bid_end_date__gte=timezone.now(),
+                # bid_end_date__gte=timezone.now(),
                 # product__location=location,
             )
             .exclude(product__user=user)
