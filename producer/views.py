@@ -380,13 +380,13 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
         try:
-            user_profile = UserProfile.objects.get(user=user)
-            location = user_profile.location
+            UserProfile.objects.get(user=user)
+            # location = user_profile.location
         except UserProfile.DoesNotExist:
             return MarketplaceProduct.objects.none()
 
-        if not location:
-            return MarketplaceProduct.objects.none()
+        # if not location:
+        #     return MarketplaceProduct.objects.none()
 
         return (
             MarketplaceProduct.objects.filter(
