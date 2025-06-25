@@ -75,7 +75,7 @@ from market.views import (
     CartCreateView,
     CartItemCreateView,
     CartItemUpdateView,
-    CartItemDeleteView
+    CartItemDeleteView,
 )
 from user.views import (
     RegisterView,
