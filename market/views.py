@@ -7,9 +7,9 @@ from django.conf import settings
 from django.db.models import Subquery, OuterRef
 from django.views.decorators.csrf import csrf_exempt
 
-from rest_framework import viewsets, status, views
+from rest_framework import viewsets, status, views, generics
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
@@ -26,9 +26,12 @@ from .serializers import (
     SellerBidSerializer,
     NotificationSerializer,
     FeedbackSerializer,
+    DeliverySerializer,
+    CartSerializer,
+    CartItemSerializer,
 )
 from .filters import ChatFilter, BidFilter, UserBidFilter
-from .models import Payment, MarketplaceUserProduct
+from .models import Payment, MarketplaceUserProduct, Delivery, Cart, CartItem
 from .forms import ShippingAddressForm
 from main.enums import GlobalEnumSerializer, get_enum_values
 
@@ -356,12 +359,13 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing feedback on marketplace products.
     """
+
     serializer_class = FeedbackSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Feedback.objects.all()
-    
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -370,12 +374,13 @@ class ProductFeedbackView(views.APIView):
     """
     API view to get all feedback for a specific product.
     """
+
     permission_classes = [AllowAny]
-    
+
     def get(self, request, product_id):
         try:
             product = MarketplaceProduct.objects.get(id=product_id)
-            feedbacks = Feedback.objects.filter(product=product).order_by('-created_at')
+            feedbacks = Feedback.objects.filter(product=product).order_by("-created_at")
             serializer = FeedbackSerializer(feedbacks, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except MarketplaceProduct.DoesNotExist:
@@ -386,9 +391,101 @@ class UserFeedbackView(views.APIView):
     """
     API view to get all feedback submitted by the authenticated user.
     """
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        feedbacks = Feedback.objects.filter(user=request.user).order_by('-created_at')
+        feedbacks = Feedback.objects.filter(user=request.user).order_by("-created_at")
         serializer = FeedbackSerializer(feedbacks, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CartCreateView(generics.CreateAPIView):
+    queryset = Cart.objects.all()
+    serializer_class = CartSerializer
+
+    def post(self, request, *args, **kwargs):
+        user = request.user if request.user.is_authenticated else None
+        if user:
+            cart, created = Cart.objects.get_or_create(user=user)
+            serializer = self.get_serializer(cart)
+            return Response(serializer.data, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
+        else:
+            return super().post(request, *args, **kwargs)
+
+
+class CartItemCreateView(generics.CreateAPIView):
+    serializer_class = CartItemSerializer
+    
+    def create(self, request, *args, **kwargs):
+        cart_id = self.kwargs['cart_id']
+        cart = get_object_or_404(Cart, id=cart_id)
+        
+        # Check if item already exists in cart
+        product_id = request.data.get('product_id')
+        existing_item = CartItem.objects.filter(cart=cart, product_id=product_id).first()
+        
+        if existing_item:
+            # Update quantity if item exists
+            existing_item.quantity += request.data.get('quantity', 1)
+            existing_item.save()
+            serializer = self.get_serializer(existing_item)
+        else:
+            # Create new item
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(cart=cart)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CartItemUpdateView(generics.UpdateAPIView):
+    serializer_class = CartItemSerializer
+    
+    def get_queryset(self):
+        cart_id = self.kwargs['cart_id']
+        return CartItem.objects.filter(cart_id=cart_id)
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+
+class CartItemDeleteView(generics.DestroyAPIView):
+    serializer_class = CartItemSerializer
+    
+    def get_queryset(self):
+        cart_id = self.kwargs['cart_id']
+        return CartItem.objects.filter(cart_id=cart_id)
+
+
+class DeliveryCreateView(generics.CreateAPIView):
+    queryset = Delivery.objects.all()
+    serializer_class = DeliverySerializer
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Verify cart exists
+        cart_id = serializer.validated_data['cart']
+        try:
+            cart = Cart.objects.get(id=cart_id)
+        except Cart.DoesNotExist:
+            return Response(
+                {'error': 'Cart not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Create delivery linked to cart
+        delivery = serializer.save(cart=cart)
+        
+        return Response(
+            DeliverySerializer(delivery).data, 
+            status=status.HTTP_201_CREATED
+        )
+

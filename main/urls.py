@@ -71,6 +71,11 @@ from market.views import (
     FeedbackViewSet,
     ProductFeedbackView,
     UserFeedbackView,
+    DeliveryCreateView,
+    CartCreateView,
+    CartItemCreateView,
+    CartItemUpdateView,
+    CartItemDeleteView
 )
 from user.views import (
     RegisterView,
@@ -96,6 +101,7 @@ router.register(r"user-recommendation", MarketplaceUserRecommendedProductViewSet
 router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")
 router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 router.register(r"feedback", FeedbackViewSet, basename="feedback")
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -141,6 +147,11 @@ urlpatterns = [
     path("export/products/", export_products_to_excel, name="export_products"),
     path("export/orders/", export_orders_to_excel, name="export_orders"),
     path("export/sales/", export_sales_to_excel, name="export_sales"),
+    path("api/v1/carts/", CartCreateView.as_view(), name="cart-create"),
+    path("api/v1/carts/<int:cart_id>/items/", CartItemCreateView.as_view(), name="cart-item-create"),
+    path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemUpdateView.as_view(), name="cart-item-update"),
+    path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemDeleteView.as_view(), name="cart-item-delete"),
+    path("api/v1/deliveries/", DeliveryCreateView.as_view(), name="delivery-create"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
