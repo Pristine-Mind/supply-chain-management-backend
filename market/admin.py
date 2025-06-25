@@ -38,4 +38,3 @@ class UserInteractionAdmin(admin.ModelAdmin):
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ("user", "product", "rating", "comment", "created_at")
-    

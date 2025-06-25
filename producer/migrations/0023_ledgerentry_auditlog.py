@@ -10,41 +10,80 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('producer', '0022_city_product_location'),
+        ("producer", "0022_city_product_location"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='LedgerEntry',
+            name="LedgerEntry",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('account_type', models.CharField(choices=[('INV', 'Inventory'), ('AP', 'Accounts Payable'), ('AR', 'Accounts Receivable'), ('SR', 'Sales Revenue'), ('COGS', 'Cost of Goods Sold'), ('VAT_R', 'VAT Receivable'), ('VAT_P', 'VAT Payable'), ('TDS', 'TDS Payable'), ('CASH', 'Cash/Bank')], max_length=5, verbose_name='Account Type')),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=12, verbose_name='Amount')),
-                ('debit', models.BooleanField(default=True, verbose_name='Debit Entry')),
-                ('reference_id', models.CharField(max_length=100, verbose_name='Reference ID')),
-                ('date', models.DateField(default=django.utils.timezone.now, verbose_name='Transaction Date')),
-                ('related_entity', models.IntegerField(verbose_name='Related Entity ID')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "account_type",
+                    models.CharField(
+                        choices=[
+                            ("INV", "Inventory"),
+                            ("AP", "Accounts Payable"),
+                            ("AR", "Accounts Receivable"),
+                            ("SR", "Sales Revenue"),
+                            ("COGS", "Cost of Goods Sold"),
+                            ("VAT_R", "VAT Receivable"),
+                            ("VAT_P", "VAT Payable"),
+                            ("TDS", "TDS Payable"),
+                            ("CASH", "Cash/Bank"),
+                        ],
+                        max_length=5,
+                        verbose_name="Account Type",
+                    ),
+                ),
+                ("amount", models.DecimalField(decimal_places=2, max_digits=12, verbose_name="Amount")),
+                ("debit", models.BooleanField(default=True, verbose_name="Debit Entry")),
+                ("reference_id", models.CharField(max_length=100, verbose_name="Reference ID")),
+                ("date", models.DateField(default=django.utils.timezone.now, verbose_name="Transaction Date")),
+                ("related_entity", models.IntegerField(verbose_name="Related Entity ID")),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Ledger Entry',
-                'verbose_name_plural': 'Ledger Entries',
+                "verbose_name": "Ledger Entry",
+                "verbose_name_plural": "Ledger Entries",
             },
         ),
         migrations.CreateModel(
-            name='AuditLog',
+            name="AuditLog",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('transaction_type', models.CharField(choices=[('Procurement', 'Procurement'), ('Inventory', 'Inventory'), ('Sales', 'Sales'), ('Reconciliation', 'Reconciliation')], max_length=20, verbose_name='Transaction Type')),
-                ('reference_id', models.CharField(max_length=100, verbose_name='Reference ID')),
-                ('date', models.DateField(default=django.utils.timezone.now, verbose_name='Date')),
-                ('entity_id', models.IntegerField(verbose_name='Entity ID')),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=12, null=True, verbose_name='Amount')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name='User')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "transaction_type",
+                    models.CharField(
+                        choices=[
+                            ("Procurement", "Procurement"),
+                            ("Inventory", "Inventory"),
+                            ("Sales", "Sales"),
+                            ("Reconciliation", "Reconciliation"),
+                        ],
+                        max_length=20,
+                        verbose_name="Transaction Type",
+                    ),
+                ),
+                ("reference_id", models.CharField(max_length=100, verbose_name="Reference ID")),
+                ("date", models.DateField(default=django.utils.timezone.now, verbose_name="Date")),
+                ("entity_id", models.IntegerField(verbose_name="Entity ID")),
+                ("amount", models.DecimalField(decimal_places=2, max_digits=12, null=True, verbose_name="Amount")),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL, verbose_name="User"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Audit Log',
-                'verbose_name_plural': 'Audit Logs',
+                "verbose_name": "Audit Log",
+                "verbose_name_plural": "Audit Logs",
             },
         ),
     ]
