@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction
+from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction, Feedback
 
 
 @admin.register(Purchase)
@@ -33,3 +33,9 @@ class PaymentAdmin(admin.ModelAdmin):
 @admin.register(UserInteraction)
 class UserInteractionAdmin(admin.ModelAdmin):
     pass
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ("user", "product", "rating", "comment", "created_at")
+    

@@ -214,18 +214,18 @@ class Notification(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-# class Feedback(models.Model):
-#     """
-#     This model collects user feedback (e.g., rating or comment) on recommended products.
-#     """
-#     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feedbacks')
-#     product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, related_name='feedbacks')
-#     rating = models.IntegerField(default=1)  # For example, 1 to 5 stars
-#     comment = models.TextField(blank=True, null=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
+class Feedback(models.Model):
+    """
+    This model collects user feedback (e.g., rating or comment) on recommended products.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feedbacks')
+    product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, related_name='feedbacks')
+    rating = models.IntegerField(default=1)
+    comment = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-#     def __str__(self):
-#         return f"Feedback by {self.user.username} on {self.product.name}"
+    def __str__(self):
+        return f"Feedback by {self.user.username} on {self.product.product.name}"
 
 
 class UserInteraction(models.Model):
