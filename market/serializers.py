@@ -337,17 +337,31 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
+    product_details = MarketplaceProductSerializer(read_only=True)
+
     class Meta:
         model = CartItem
-        fields = ["id", "product", "quantity"]
+        fields = ["id", "product", "quantity", "product_details"]
 
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
+    subtotal = serializers.SerializerMethodField()
+    shipping = serializers.SerializerMethodField()
+    total = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ["id", "user", "items", "created_at"]
+        fields = ["id", "user", "items", "subtotal", "shipping", "total", "created_at"]
+
+    def get_subtotal(self, obj):
+        return sum(item.product.listed_price * item.quantity for item in obj.items.all())
+
+    def get_shipping(self, obj):
+        return 100.0
+
+    def get_total(self, obj):
+        return self.get_subtotal(obj) + self.get_shipping(obj)
 
 
 class DeliverySerializer(serializers.ModelSerializer):
