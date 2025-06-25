@@ -336,21 +336,34 @@ class FeedbackSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-
 class CartItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity']
+        fields = ["id", "product", "quantity"]
+
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Cart
-        fields = ['id', 'user', 'items', 'created_at']
+        fields = ["id", "user", "items", "created_at"]
+
 
 class DeliverySerializer(serializers.ModelSerializer):
+    cart = serializers.PrimaryKeyRelatedField(queryset=Cart.objects.all())
+
     class Meta:
         model = Delivery
-        fields = ['id', 'cart', 'customer_name', 'phone_number', 'address', 'city', 'state', 'zip_code', 'created_at', 'updated_at']
-
+        fields = [
+            "id",
+            "cart",
+            "customer_name",
+            "phone_number",
+            "address",
+            "city",
+            "state",
+            "zip_code",
+            "created_at",
+            "updated_at",
+        ]
