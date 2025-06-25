@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction, Feedback
+from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction, Feedback, Notification
 
 
 @admin.register(Purchase)
@@ -38,3 +38,8 @@ class UserInteractionAdmin(admin.ModelAdmin):
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ("user", "product", "rating", "comment", "created_at")
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    pass
