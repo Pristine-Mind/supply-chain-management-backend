@@ -218,8 +218,9 @@ class Feedback(models.Model):
     """
     This model collects user feedback (e.g., rating or comment) on recommended products.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feedbacks')
-    product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, related_name='feedbacks')
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="feedbacks")
+    product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE, related_name="feedbacks")
     rating = models.IntegerField(default=1)
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -236,3 +237,35 @@ class UserInteraction(models.Model):
 
     def __str__(self):
         return f"{self.event_type} at {self.created_at}"
+
+
+class Cart(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name="carts")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Cart {self.id} for {self.user.username if self.user else 'Guest'}"
+
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE)
+    product = models.ForeignKey(MarketplaceProduct, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product} in Cart {self.cart.id}"
+
+
+class Delivery(models.Model):
+    cart = models.OneToOneField(Cart, on_delete=models.CASCADE, related_name='delivery')
+    customer_name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20)
+    address = models.TextField()
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    zip_code = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Delivery for {self.customer_name} ({self.city})"
