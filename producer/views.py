@@ -848,12 +848,12 @@ def stats_dashboard(request):
             "customer_transactions": customer_transactions,
             "product_summary": [
                 {"title": "Total Products", "value": str(total_products)},
-                {"title": "Total Stock Value", "value": f"${total_stock_value:.2f}"},
+                {"title": "Total Stock Value", "value": f"Rs.{total_stock_value:.2f}"},
             ],
             "sales_overview": [
-                {"title": "Total Sales (Today)", "value": f"${today_sales:.2f}"},
-                {"title": "Total Sales (Week)", "value": f"${week_sales:.2f}"},
-                {"title": "Total Sales (Month)", "value": f"${month_sales:.2f}"},
+                {"title": "Total Sales (Today)", "value": f"Rs.{today_sales:.2f}"},
+                {"title": "Total Sales (Week)", "value": f"Rs.{week_sales:.2f}"},
+                {"title": "Total Sales (Month)", "value": f"Rs.{month_sales:.2f}"},
             ],
             "order_status": [
                 {"title": status["status"].capitalize() + " Orders", "value": str(status["count"])}
