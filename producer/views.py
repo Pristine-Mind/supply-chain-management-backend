@@ -2,7 +2,6 @@ from datetime import timedelta, datetime
 
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
-from django.contrib.auth.decorators import login_required
 
 from rest_framework import viewsets
 from rest_framework.views import APIView
@@ -12,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.decorators import api_view, permission_classes
 
-from django.db.models import Sum, Q, Count, F, FloatField, ExpressionWrapper
+from django.db.models import Sum, Count, F, FloatField, ExpressionWrapper
 from django.utils import timezone
 from django.db.models.functions import TruncMonth
 import logging
