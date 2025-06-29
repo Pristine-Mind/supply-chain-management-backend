@@ -54,4 +54,5 @@ class LoginSerializer(serializers.Serializer):
 
 class LoginResponseSerializer(serializers.Serializer):
     token = serializers.CharField()
-    error = serializers.CharField()
+    has_access_to_marketplace = serializers.BooleanField()
+    error = serializers.CharField(required=False)
