@@ -34,6 +34,7 @@ from .filters import ChatFilter, BidFilter, UserBidFilter
 from .models import Payment, MarketplaceUserProduct, Delivery, Cart, CartItem
 from .forms import ShippingAddressForm
 from main.enums import GlobalEnumSerializer, get_enum_values
+from .utils import sms_service
 
 
 @api_view(["POST"])
@@ -148,6 +149,10 @@ def verify_payment(request):
         # If the payment is verified, update the Payment status to 'completed'
         payment.status = "completed"
         payment.save()
+        
+        # Send SMS confirmation
+        sms_service.send_payment_confirmation_sms(payment)
+        
         return redirect("payment_confirmation", payment_id=payment.id)
     else:
         # If the verification failed, update the Payment status to 'failed'
@@ -176,6 +181,14 @@ def shipping_address_form(request, payment_id):
             shipping_address = form.save(commit=False)
             shipping_address.payment = payment
             shipping_address.save()
+            
+            # Send order confirmation SMS
+            sms_service.send_order_status_sms(
+                payment, 
+                "Your order has been confirmed and shipping details received. "
+                "We will process your order soon!"
+            )
+            
             return render(
                 request,
                 "shipping_address_form.html",
@@ -214,6 +227,9 @@ def verify_khalti_payment(request):
             payment = Payment.objects.get(transaction_id=transaction_id)
             payment.status = "completed"
             payment.save()
+            
+            # Send SMS confirmation
+            sms_service.send_payment_confirmation_sms(payment)
 
             return redirect("payment_confirmation", payment_id=payment.id)
         except Payment.DoesNotExist:

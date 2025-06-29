@@ -245,7 +245,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "update-bid-end-dates-every-hour": {
         "task": "producer.tasks.update_bid_end_dates",
-        "schedule": crontab(minute=0, hour="*"),  # Runs every hour
+        "schedule": crontab(minute=0, hour="*"),
     },
 }
 
@@ -254,8 +254,12 @@ KHALTI_SECRET_KEY = "aa"
 
 # Khalti test credentials
 KHALTI_TEST_MOBILE_NUMBER = "9800000001"
-KHALTI_TEST_PIN = "1234"
+KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
 
+# SMS Configuration (SparrowSMS)
+SMS_TOKEN = "v2_RkYVbjMU1uZqOhK1aqo703XHK7R.ZVmT"
+SMS_API_URL = "http://api.sparrowsms.com/v2/sms/"
+SMS_SENDER = "EshopAlert"
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Mulya Bazzar API",
