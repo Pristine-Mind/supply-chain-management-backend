@@ -713,7 +713,7 @@ def export_sales_to_excel(request):
     return response
 
 
-class LedgerEntryViewSet(viewsets.ReadOnlyModelViewSet):
+class LedgerEntryViewSet(viewsets.ModelViewSet):
     queryset = LedgerEntry.objects.all()
     serializer_class = LedgerEntrySerializer
     permission_classes = [IsAuthenticated]
