@@ -1,5 +1,16 @@
 from django.contrib import admin
-from .models import Producer, Customer, Product, Order, Sale, StockList, MarketplaceProduct, ProductImage
+from .models import (
+    Producer,
+    Customer,
+    Product,
+    Order,
+    Sale,
+    StockList,
+    MarketplaceProduct,
+    ProductImage,
+    LedgerEntry,
+    AuditLog,
+)
 
 
 @admin.register(Producer)
@@ -96,3 +107,17 @@ class ProductImageAdmin(admin.ModelAdmin):
     autocomplete_fields = [
         "product",
     ]
+
+
+@admin.register(LedgerEntry)
+class LedgerEntryAdmin(admin.ModelAdmin):
+    list_display = ("id", "account_type", "amount", "debit", "reference_id", "related_entity",)
+    search_fields = ("reference_id", "user__username", "account_type")
+    list_filter = ("account_type", "debit", "user")
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ("id", "transaction_type", "reference_id", "entity_id", "amount")
+    search_fields = ("reference_id", "user__username", "transaction_type")
+    list_filter = ("transaction_type", "user")
