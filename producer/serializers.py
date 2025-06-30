@@ -304,11 +304,11 @@ class CitySerializer(serializers.ModelSerializer):
 
 
 class LedgerEntrySerializer(serializers.ModelSerializer):
-    account_type = serializers.ChoiceField(choices=LedgerEntry.AccountType.choices)
+    account_type_display = serializers.CharField(source='get_account_type_display', read_only=True)
 
     class Meta:
         model = LedgerEntry
-        fields = ["id", "account_type", "amount", "debit", "reference_id", "date", "related_entity"]
+        fields = ["id", "account_type", "amount", "debit", "reference_id", "date", "related_entity", "account_type_display"]
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
