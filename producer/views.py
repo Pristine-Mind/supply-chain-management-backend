@@ -722,7 +722,7 @@ class LedgerEntryViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(user=self.request.user)
 
 
-class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+class AuditLogViewSet(viewsets.ModelViewSet):
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsAuthenticated]
