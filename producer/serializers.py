@@ -1,21 +1,22 @@
 import json
 from datetime import datetime
-from django.contrib.gis.geos import Point
 
+from django.contrib.gis.geos import Point
 from rest_framework import serializers
 
 from .models import (
-    Producer,
+    AuditLog,
+    City,
     Customer,
-    Product,
+    LedgerEntry,
+    MarketplaceProduct,
     Order,
+    Producer,
+    Product,
+    ProductImage,
+    PurchaseOrder,
     Sale,
     StockList,
-    MarketplaceProduct,
-    ProductImage,
-    City,
-    LedgerEntry,
-    AuditLog,
 )
 
 
@@ -304,7 +305,7 @@ class CitySerializer(serializers.ModelSerializer):
 
 
 class LedgerEntrySerializer(serializers.ModelSerializer):
-    account_type_display = serializers.CharField(source='get_account_type_display', read_only=True)
+    account_type_display = serializers.CharField(source="get_account_type_display", read_only=True)
 
     class Meta:
         model = LedgerEntry
@@ -349,3 +350,11 @@ class ReconciliationResponseSerializer(serializers.Serializer):
     net_vat = serializers.DecimalField(max_digits=12, decimal_places=2)
     tds_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     profit = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    product_details = ProductSerializer(source="product", read_only=True)
+
+    class Meta:
+        model = PurchaseOrder
+        fields = "__all__"

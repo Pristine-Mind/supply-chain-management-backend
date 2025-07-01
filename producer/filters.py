@@ -1,5 +1,6 @@
 import django_filters
-from .models import Sale, Producer, Customer, Product, MarketplaceProduct, Order
+
+from .models import Customer, MarketplaceProduct, Order, Producer, Product, Sale
 
 
 class ProducerFilter(django_filters.FilterSet):

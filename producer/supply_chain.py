@@ -1,6 +1,8 @@
-from django.db import transaction, models
 from decimal import Decimal
-from .models import Producer, Customer, Product, Order, Sale, LedgerEntry, AuditLog
+
+from django.db import models, transaction
+
+from .models import AuditLog, Customer, LedgerEntry, Order, Producer, Product, Sale
 
 VAT_RATE = Decimal("0.13")
 TDS_THRESHOLD = 50000
