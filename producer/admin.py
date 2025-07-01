@@ -1,15 +1,17 @@
 from django.contrib import admin
+
 from .models import (
-    Producer,
+    AuditLog,
     Customer,
-    Product,
+    LedgerEntry,
+    MarketplaceProduct,
     Order,
+    Producer,
+    Product,
+    ProductImage,
+    PurchaseOrder,
     Sale,
     StockList,
-    MarketplaceProduct,
-    ProductImage,
-    LedgerEntry,
-    AuditLog,
 )
 
 
@@ -111,7 +113,14 @@ class ProductImageAdmin(admin.ModelAdmin):
 
 @admin.register(LedgerEntry)
 class LedgerEntryAdmin(admin.ModelAdmin):
-    list_display = ("id", "account_type", "amount", "debit", "reference_id", "related_entity",)
+    list_display = (
+        "id",
+        "account_type",
+        "amount",
+        "debit",
+        "reference_id",
+        "related_entity",
+    )
     search_fields = ("reference_id", "user__username", "account_type")
     list_filter = ("account_type", "debit", "user")
 
@@ -121,3 +130,12 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("id", "transaction_type", "reference_id", "entity_id", "amount")
     search_fields = ("reference_id", "user__username", "transaction_type")
     list_filter = ("transaction_type", "user")
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    list_display = ("id", "product", "quantity", "created_at", "approved", "sent_to_vendor")
+    search_fields = ("product__name",)
+    list_filter = ("approved", "sent_to_vendor")
+    readonly_fields = ("created_at",)
+    autocomplete_fields = ["product"]

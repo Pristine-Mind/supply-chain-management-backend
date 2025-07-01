@@ -1,28 +1,28 @@
-from urllib.parse import urlencode
-import time
-import requests
 import json
+import time
 from datetime import datetime
+from urllib.parse import urlencode
 
-from django.utils import timezone
+import requests
 from django.contrib.auth.models import User
-
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import (
-    Purchase,
-    Bid,
-    ChatMessage,
-    Payment,
-    MarketplaceUserProduct,
-    Notification,
-    Feedback,
-    Delivery,
-    Cart,
-    CartItem,
-)
 from producer.models import MarketplaceProduct
 from producer.serializers import MarketplaceProductSerializer
+
+from .models import (
+    Bid,
+    Cart,
+    CartItem,
+    ChatMessage,
+    Delivery,
+    Feedback,
+    MarketplaceUserProduct,
+    Notification,
+    Payment,
+    Purchase,
+)
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -337,7 +337,7 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    product_details = MarketplaceProductSerializer(source='product', read_only=True)
+    product_details = MarketplaceProductSerializer(source="product", read_only=True)
     unit_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
 
@@ -349,7 +349,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         return obj.product.listed_price
 
     def get_total_price(self, obj):
-        return obj.product.listed_price * obj.quantity   
+        return obj.product.listed_price * obj.quantity
 
 
 class CartSerializer(serializers.ModelSerializer):

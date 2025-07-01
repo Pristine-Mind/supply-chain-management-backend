@@ -1,5 +1,5 @@
-from user.models import UserProfile
 from main.manager import set_current_shop
+from user.models import UserProfile
 
 
 class ShopIDMiddleware:

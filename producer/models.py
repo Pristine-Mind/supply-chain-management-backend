@@ -1,10 +1,10 @@
-from django.utils.translation import gettext_lazy as _
-from django.contrib.auth.models import User
-
 import uuid
 from datetime import timedelta
+
+from django.contrib.auth.models import User
 from django.contrib.gis.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 
 class Producer(models.Model):
@@ -130,6 +130,24 @@ class Product(models.Model):
     user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
     location = models.ForeignKey(
         "City", on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
+    )
+    avg_daily_demand = models.FloatField(
+        default=0.0, verbose_name=_("Average Daily Demand"), help_text="Auto-computed from sales history"
+    )
+    stddev_daily_demand = models.FloatField(
+        default=0.0, verbose_name=_("Daily Demand Std. Dev."), help_text="Auto-computed from sales history"
+    )
+    safety_stock = models.IntegerField(
+        default=0, verbose_name=_("Safety Stock"), help_text="z-factor × σ(Demand × LeadTime)"
+    )
+    reorder_point = models.IntegerField(
+        default=0, verbose_name=_("Reorder Point"), help_text="avg_daily_demand × lead_time + safety_stock"
+    )
+    reorder_quantity = models.IntegerField(
+        default=0, verbose_name=_("Reorder Quantity (EOQ)"), help_text="Optimal order quantity Q*"
+    )
+    lead_time_days = models.PositiveIntegerField(
+        default=7, verbose_name=_("Lead Time (days)"), help_text="Supplier lead time"
     )
 
     def __str__(self):
@@ -372,3 +390,14 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.transaction_type} - {self.reference_id}"
+
+
+class PurchaseOrder(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved = models.BooleanField(default=False)
+    sent_to_vendor = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"PO #{self.id} – {self.product.sku} x{self.quantity}"

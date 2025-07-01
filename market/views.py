@@ -1,39 +1,40 @@
-from django.db.models.query import QuerySet
 import requests
-
-from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse
 from django.conf import settings
-from django.db.models import Subquery, OuterRef
+from django.db.models import OuterRef, Subquery
+from django.db.models.query import QuerySet
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
-
-from rest_framework import viewsets, status, views, generics
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
-
-from market.models import Bid, ChatMessage, Notification, UserInteraction, Feedback
-from producer.models import MarketplaceProduct
-from .serializers import (
-    PurchaseSerializer,
-    BidSerializer,
-    ChatMessageSerializer,
-    MarketplaceUserProductSerializer,
-    BidUserSerializer,
-    SellerProductSerializer,
-    SellerBidSerializer,
-    NotificationSerializer,
-    FeedbackSerializer,
-    DeliverySerializer,
-    CartSerializer,
-    CartItemSerializer,
+from rest_framework import generics, serializers, status, views, viewsets
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
 )
-from .filters import ChatFilter, BidFilter, UserBidFilter
-from .models import Payment, MarketplaceUserProduct, Delivery, Cart, CartItem
-from .forms import ShippingAddressForm
+from rest_framework.response import Response
+
 from main.enums import GlobalEnumSerializer, get_enum_values
+from market.models import Bid, ChatMessage, Feedback, Notification, UserInteraction
+from producer.models import MarketplaceProduct
+
+from .filters import BidFilter, ChatFilter, UserBidFilter
+from .forms import ShippingAddressForm
+from .models import Cart, CartItem, Delivery, MarketplaceUserProduct, Payment
+from .serializers import (
+    BidSerializer,
+    BidUserSerializer,
+    CartItemSerializer,
+    CartSerializer,
+    ChatMessageSerializer,
+    DeliverySerializer,
+    FeedbackSerializer,
+    MarketplaceUserProductSerializer,
+    NotificationSerializer,
+    PurchaseSerializer,
+    SellerBidSerializer,
+    SellerProductSerializer,
+)
 from .utils import sms_service
 
 
@@ -149,10 +150,10 @@ def verify_payment(request):
         # If the payment is verified, update the Payment status to 'completed'
         payment.status = "completed"
         payment.save()
-        
+
         # Send SMS confirmation
         sms_service.send_payment_confirmation_sms(payment)
-        
+
         return redirect("payment_confirmation", payment_id=payment.id)
     else:
         # If the verification failed, update the Payment status to 'failed'
@@ -181,14 +182,12 @@ def shipping_address_form(request, payment_id):
             shipping_address = form.save(commit=False)
             shipping_address.payment = payment
             shipping_address.save()
-            
+
             # Send order confirmation SMS
             sms_service.send_order_status_sms(
-                payment, 
-                "Your order has been confirmed and shipping details received. "
-                "We will process your order soon!"
+                payment, "Your order has been confirmed and shipping details received. " "We will process your order soon!"
             )
-            
+
             return render(
                 request,
                 "shipping_address_form.html",
@@ -227,7 +226,7 @@ def verify_khalti_payment(request):
             payment = Payment.objects.get(transaction_id=transaction_id)
             payment.status = "completed"
             payment.save()
-            
+
             # Send SMS confirmation
             sms_service.send_payment_confirmation_sms(payment)
 

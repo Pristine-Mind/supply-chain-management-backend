@@ -1,5 +1,6 @@
-from django.db import models
 from threading import local
+
+from django.db import models
 
 _thread_locals = local()
 

@@ -1,7 +1,13 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .factories import ProducerFactory, CustomerFactory, ProductFactory, OrderFactory, SaleFactory
+from .factories import (
+    CustomerFactory,
+    OrderFactory,
+    ProducerFactory,
+    ProductFactory,
+    SaleFactory,
+)
 from .models import Order
 
 

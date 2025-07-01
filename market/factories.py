@@ -1,9 +1,10 @@
 import factory
 from django.contrib.auth.models import User
-from .models import Purchase, Bid, ChatMessage
 
-from producer.models import MarketplaceProduct
 from producer.factories import ProductFactory
+from producer.models import MarketplaceProduct
+
+from .models import Bid, ChatMessage, Purchase
 
 
 class UserFactory(factory.django.DjangoModelFactory):

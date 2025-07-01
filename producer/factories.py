@@ -2,8 +2,9 @@ import factory
 from factory.django import DjangoModelFactory
 from faker import Faker
 
-from .models import Producer, Customer, Product, Order, Sale, LedgerEntry, AuditLog
 from user.models import User
+
+from .models import AuditLog, Customer, LedgerEntry, Order, Producer, Product, Sale
 
 fake = Faker()
 

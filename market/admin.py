@@ -1,5 +1,14 @@
 from django.contrib import admin
-from .models import Purchase, Bid, ChatMessage, Payment, UserInteraction, Feedback, Notification
+
+from .models import (
+    Bid,
+    ChatMessage,
+    Feedback,
+    Notification,
+    Payment,
+    Purchase,
+    UserInteraction,
+)
 
 
 @admin.register(Purchase)
