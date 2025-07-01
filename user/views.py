@@ -1,24 +1,23 @@
-from django.contrib.auth.models import User
-
-from rest_framework import generics, status
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from rest_framework.authtoken.models import Token
-from rest_framework.views import APIView
-from rest_framework.decorators import permission_classes
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-
 from django.contrib.auth import authenticate
-from drf_spectacular.utils import extend_schema_view, extend_schema
+from django.contrib.auth.models import User
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework import generics, status
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .models import Contact, UserProfile
 from .serializers import (
-    RegisterSerializer,
+    BusinessRegisterSerializer,
     ContactSerializer,
     LoginResponseSerializer,
     LoginSerializer,
+    RegisterSerializer,
 )
-from .models import Contact, UserProfile
 
 
 @extend_schema_view(request=RegisterSerializer, responses=RegisterSerializer)
@@ -39,7 +38,7 @@ class RegisterView(generics.CreateAPIView):
         )
 
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_exempt, name="dispatch")
 class LoginAPIView(APIView):
     @extend_schema(request=LoginSerializer, responses=LoginResponseSerializer)
     @permission_classes([AllowAny])
@@ -50,19 +49,20 @@ class LoginAPIView(APIView):
         print(user, "user")
         if user is not None:
             token, created = Token.objects.get_or_create(user=user)
-            
-            # Get the user's marketplace access status
+
             try:
                 user_profile = user.userprofile
                 has_access_to_marketplace = user_profile.has_access_to_marketplace
             except UserProfile.DoesNotExist:
-                # If UserProfile doesn't exist, default to False
                 has_access_to_marketplace = False
-            
-            return Response({
-                "token": token.key,
-                "has_access_to_marketplace": has_access_to_marketplace
-            })
+
+            return Response(
+                {
+                    "token": token.key,
+                    "has_access_to_marketplace": has_access_to_marketplace,
+                    "business_type": user_profile.business_type if hasattr(user_profile, "business_type") else None,
+                }
+            )
         else:
             return Response({"error": "Invalid Credentials"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -110,3 +110,20 @@ class LogoutAPIView(APIView):
 class ContactCreateView(generics.CreateAPIView):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
+
+
+class BusinessRegisterView(APIView):
+    """
+    API endpoint for registering a new business user.
+
+    POST: Creates a User and associated UserProfile with business details.
+    """
+
+    serializer_class = BusinessRegisterSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"detail": "Business user created successfully."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

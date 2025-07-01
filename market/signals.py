@@ -1,8 +1,9 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import MarketplaceUserProduct
 from producer.models import MarketplaceProduct, Product, ProductImage
+
+from .models import MarketplaceUserProduct
 
 
 @receiver(post_save, sender=MarketplaceUserProduct)

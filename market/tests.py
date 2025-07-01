@@ -1,9 +1,15 @@
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .factories import UserFactory, MarketplaceProductFactory, PurchaseFactory, BidFactory, ChatMessageFactory
-from .models import Purchase, Bid, ChatMessage, MarketplaceUserProduct
-from django.core.files.uploadedfile import SimpleUploadedFile
+from .factories import (
+    BidFactory,
+    ChatMessageFactory,
+    MarketplaceProductFactory,
+    PurchaseFactory,
+    UserFactory,
+)
+from .models import Bid, ChatMessage, MarketplaceUserProduct, Purchase
 
 
 class PurchaseAPITestCase(APITestCase):
