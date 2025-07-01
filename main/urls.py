@@ -1,89 +1,77 @@
-"""
-URL configuration for main project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-
-from rest_framework.routers import DefaultRouter
-from producer.views import (
-    ProducerViewSet,
-    CustomerViewSet,
-    ProductViewSet,
-    OrderViewSet,
-    SaleViewSet,
-    DashboardAPIView,
-    UserInfoView,
-    TopSalesCustomersView,
-    TopOrdersCustomersView,
-    StockListView,
-    MarketplaceProductViewSet,
-    StatsAPIView,
-    CityListView,
-    withdraw_product,
-    MarketplaceUserRecommendedProductViewSet,
-    export_producers_to_excel,
-    export_customers_to_excel,
-    export_products_to_excel,
-    export_sales_to_excel,
-    export_orders_to_excel,
-    LedgerEntryViewSet,
-    AuditLogViewSet,
-    procurement_view,
-    sales_view,
-    reconciliation_view,
-    stats_dashboard,
+from django.contrib import admin
+from django.urls import include, path
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
 )
+from rest_framework.routers import DefaultRouter
+
 from market.views import (
     BidViewSet,
+    CartCreateView,
+    CartItemCreateView,
+    CartItemDeleteView,
+    CartItemUpdateView,
     ChatMessageViewSet,
-    highest_bidder,
+    DeliveryCreateView,
+    FeedbackViewSet,
+    GlobalEnumView,
+    MarketplaceUserProductViewSet,
+    MarkNotificationAsReadView,
+    NotificationListView,
+    ProductBidsView,
+    ProductFeedbackView,
+    SellerProductsView,
+    UserBidsForProductView,
+    UserBidViewSet,
+    UserFeedbackView,
+    WithdrawBidView,
     create_purchase,
-    verify_payment,
+    highest_bidder,
+    log_interaction,
     payment_confirmation,
     shipping_address_form,
     verify_khalti_payment,
-    MarketplaceUserProductViewSet,
-    ProductBidsView,
-    UserBidViewSet,
-    UserBidsForProductView,
-    SellerProductsView,
-    NotificationListView,
-    MarkNotificationAsReadView,
-    WithdrawBidView,
-    GlobalEnumView,
-    log_interaction,
-    FeedbackViewSet,
-    ProductFeedbackView,
-    UserFeedbackView,
-    DeliveryCreateView,
-    CartCreateView,
-    CartItemCreateView,
-    CartItemUpdateView,
-    CartItemDeleteView,
+    verify_payment,
+)
+from producer.views import (
+    AuditLogViewSet,
+    CityListView,
+    CustomerViewSet,
+    DashboardAPIView,
+    LedgerEntryViewSet,
+    MarketplaceProductViewSet,
+    MarketplaceUserRecommendedProductViewSet,
+    OrderViewSet,
+    ProducerViewSet,
+    ProductViewSet,
+    PurchaseOrderViewSet,
+    SaleViewSet,
+    StatsAPIView,
+    StockListView,
+    TopOrdersCustomersView,
+    TopSalesCustomersView,
+    UserInfoView,
+    export_customers_to_excel,
+    export_orders_to_excel,
+    export_producers_to_excel,
+    export_products_to_excel,
+    export_sales_to_excel,
+    procurement_view,
+    reconciliation_view,
+    sales_view,
+    stats_dashboard,
+    withdraw_product,
 )
 from user.views import (
-    RegisterView,
-    LoginAPIView,
-    # PretrainedChatbotAPIView,
+    BusinessRegisterView,
     ContactCreateView,
+    LoginAPIView,
+    RegisterView,
 )
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 router = DefaultRouter()
 router.register(r"producers", ProducerViewSet)
@@ -101,6 +89,7 @@ router.register(r"user-recommendation", MarketplaceUserRecommendedProductViewSet
 router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")
 router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 router.register(r"feedback", FeedbackViewSet, basename="feedback")
+router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-orders")
 
 
 urlpatterns = [
@@ -118,6 +107,7 @@ urlpatterns = [
     path("shipping/address/<int:payment_id>/", shipping_address_form, name="shipping_address_form"),
     path("khalti/verify/", verify_khalti_payment, name="verify_khalti_payment"),
     path("register/", RegisterView.as_view(), name="register"),
+    path("register/business/", BusinessRegisterView.as_view(), name="business-register"),
     path("api/v1/stats/", StatsAPIView.as_view(), name="stats-api"),
     path("api/v1/bids/product/<int:product_id>/", ProductBidsView.as_view(), name="product-bids"),
     path("api/v1/bids/user/<int:product_id>/", UserBidsForProductView.as_view(), name="user-bids-for-product"),

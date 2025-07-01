@@ -12,8 +12,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
-from celery.schedules import crontab
+
 import environ
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -225,9 +226,6 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.BasicAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ),
-    # 'DEFAULT_PERMISSION_CLASSES': (
-    #     'rest_framework.permissions.IsAuthenticated',
-    # ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
@@ -245,6 +243,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "update-bid-end-dates-every-hour": {
         "task": "producer.tasks.update_bid_end_dates",
+        "schedule": crontab(minute=0, hour="*"),
+    },
+    "recalc_inventory_parameters": {
+        "task": "producer.tasks.recalc_inventory_parameters",
         "schedule": crontab(minute=0, hour="*"),
     },
 }

@@ -1,8 +1,9 @@
 import uuid
 
-from django.db import models
 from django.contrib.auth.models import User
+from django.db import models
 from django.utils.translation import gettext_lazy as _
+
 from producer.models import City
 
 
@@ -13,22 +14,58 @@ class UserProfile(models.Model):
     Fields:
     - user: One-to-one relationship with the User model.
     - phone_number: Phone number of the user.
+    - shop_id: Unique UUID for the shop.
+    - has_access_to_marketplace: Flag for marketplace access.
+    - location: ForeignKey to City.
+    - latitude, longitude: Geolocation of the shop.
+    - business_type: Whether the shop is a distributor or retailer.
     """
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    phone_number = models.CharField(max_length=15, null=True, blank=True)
-    shop_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    has_access_to_marketplace = models.BooleanField(verbose_name=_("Has Access to Marketplace"), default=False)
+    class BusinessType(models.TextChoices):
+        DISTRIBUTOR = "distributor", _("Distributor")
+        RETAILER = "retailer", _("Retailer")
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name=_("User"))
+    phone_number = models.CharField(max_length=15, null=True, blank=True, verbose_name=_("Phone Number"))
+    shop_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name=_("Shop ID"))
+    has_access_to_marketplace = models.BooleanField(default=False, verbose_name=_("Has Access to Marketplace"))
     location = models.ForeignKey(
-        City, on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
+        City,
+        on_delete=models.CASCADE,
+        verbose_name=_("Location"),
+        help_text=_("Location of the shop"),
+        null=True,
+        blank=True,
+    )
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name=_("Latitude"),
+        help_text=_("Geo-coordinate: latitude"),
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name=_("Longitude"),
+        help_text=_("Geo-coordinate: longitude"),
+    )
+    business_type = models.CharField(
+        max_length=12,
+        choices=BusinessType.choices,
+        default=BusinessType.RETAILER,
+        verbose_name=_("Business Type"),
     )
 
     def __str__(self):
-        return f"Shop profile for {self.user.username} with Shop ID {self.shop_id}"
+        return f"Shop profile for {self.user.username} ({self.get_business_type_display()})"
 
     class Meta:
-        verbose_name = "User Profile"
-        verbose_name_plural = "User Profiles"
+        verbose_name = _("User Profile")
+        verbose_name_plural = _("User Profiles")
 
 
 class Contact(models.Model):

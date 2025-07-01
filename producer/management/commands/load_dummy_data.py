@@ -1,8 +1,9 @@
-from django.core.management.base import BaseCommand
-from faker import Faker
 import uuid
 
-from producer.models import Producer, Customer, Product, Order, Sale
+from django.core.management.base import BaseCommand
+from faker import Faker
+
+from producer.models import Customer, Order, Producer, Product, Sale
 
 
 class Command(BaseCommand):

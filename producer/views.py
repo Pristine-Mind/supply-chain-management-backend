@@ -1,62 +1,61 @@
-from datetime import timedelta, datetime
+import logging
+from datetime import datetime, timedelta
 
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
+from django.db.models.functions import TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
-
-from rest_framework import viewsets
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.decorators import action
-from rest_framework.decorators import api_view, permission_classes
-
-from django.db.models import Sum, Count, F, FloatField, ExpressionWrapper
 from django.utils import timezone
-from django.db.models.functions import TruncMonth
-import logging
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from user.models import UserProfile
+
+from .filters import (
+    CustomerFilter,
+    MarketplaceProductFilter,
+    ProducerFilter,
+    ProductFilter,
+    SaleFilter,
+)
 from .models import (
-    Producer,
+    AuditLog,
+    City,
     Customer,
-    Product,
+    LedgerEntry,
+    MarketplaceProduct,
     Order,
+    Producer,
+    Product,
+    PurchaseOrder,
     Sale,
     StockList,
-    MarketplaceProduct,
-    City,
-    LedgerEntry,
-    AuditLog,
 )
 from .serializers import (
-    ProducerSerializer,
-    CustomerSerializer,
-    ProductSerializer,
-    OrderSerializer,
-    SaleSerializer,
-    CustomerSalesSerializer,
-    CustomerOrdersSerializer,
-    StockListSerializer,
-    MarketplaceProductSerializer,
-    CitySerializer,
-    LedgerEntrySerializer,
     AuditLogSerializer,
+    CitySerializer,
+    CustomerOrdersSerializer,
+    CustomerSalesSerializer,
+    CustomerSerializer,
+    LedgerEntrySerializer,
+    MarketplaceProductSerializer,
+    OrderSerializer,
     ProcurementRequestSerializer,
     ProcurementResponseSerializer,
+    ProducerSerializer,
+    ProductSerializer,
+    PurchaseOrderSerializer,
+    ReconciliationResponseSerializer,
+    SaleSerializer,
     SalesRequestSerializer,
     SalesResponseSerializer,
-    ReconciliationResponseSerializer,
+    StockListSerializer,
 )
-from .filters import (
-    SaleFilter,
-    ProducerFilter,
-    CustomerFilter,
-    ProductFilter,
-    MarketplaceProductFilter,
-)
-from .utils import export_queryset_to_excel
-from user.models import UserProfile
 from .supply_chain import SupplyChainService
+from .utils import export_queryset_to_excel
 
 logger = logging.getLogger(__name__)
 
@@ -860,3 +859,8 @@ def stats_dashboard(request):
             ],
         }
     )
+
+
+class PurchaseOrderViewSet(viewsets.ModelViewSet):
+    queryset = PurchaseOrder.objects.all().order_by("-created_at")
+    serializer_class = PurchaseOrderSerializer

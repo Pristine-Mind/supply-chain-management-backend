@@ -1,22 +1,25 @@
+from decimal import Decimal
+
 import pytest
 from django.urls import reverse
+from rest_framework import status
 from rest_framework.test import APIClient
-from decimal import Decimal
+
 from .factories import (
-    UserFactory,
-    ProducerFactory,
+    AuditLogFactory,
     CustomerFactory,
+    LedgerEntryFactory,
+    ProducerFactory,
     ProductFactory,
     SaleFactory,
-    LedgerEntryFactory,
-    AuditLogFactory,
+    UserFactory,
 )
-from .supply_chain import SupplyChainService
-from .models import LedgerEntry, AuditLog, Order, Sale, Product, Customer
+from .models import AuditLog, Customer, LedgerEntry, Order, Product, Sale
 from .serializers import (
     ProcurementRequestSerializer,
     SalesResponseSerializer,
 )
+from .supply_chain import SupplyChainService
 
 
 @pytest.fixture
@@ -40,7 +43,7 @@ class TestSupplyChainService:
     def test_procurement_process(self, user):
         producer = ProducerFactory(user=user)
         product = ProductFactory(user=user, stock=0)
-        customer = CustomerFactory(user=user)
+        CustomerFactory(user=user)
 
         service = SupplyChainService(user)
         order = service.procurement_process(
@@ -53,7 +56,7 @@ class TestSupplyChainService:
         assert Product.objects.get(id=product.id).stock == 100
 
         ledger_entries = LedgerEntry.objects.filter(user=user)
-        assert ledger_entries.count() == 4  # INV, AP, VAT_R, TDS/AP
+        assert ledger_entries.count() == 4
         assert ledger_entries.filter(account_type=LedgerEntry.AccountType.INVENTORY, debit=True).exists()
         assert ledger_entries.filter(account_type=LedgerEntry.AccountType.VAT_RECEIVABLE).exists()
 
@@ -76,7 +79,7 @@ class TestSupplyChainService:
         assert Customer.objects.get(id=customer.id).current_balance > 0
 
         ledger_entries = LedgerEntry.objects.filter(user=user)
-        assert ledger_entries.count() == 5  # AR, SR, COGS, INV, VAT_P
+        assert ledger_entries.count() == 5
         assert ledger_entries.filter(account_type=LedgerEntry.AccountType.SALES_REVENUE, debit=False).exists()
         assert ledger_entries.filter(account_type=LedgerEntry.AccountType.VAT_PAYABLE).exists()
 
