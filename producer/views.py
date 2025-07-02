@@ -326,7 +326,7 @@ class StockListView(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "userprofile", None)
         if user_profile:
-            return StockList.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return self.queryset.filter(user__userprofile__shop_id=user_profile.shop_id)
         else:
             return StockList.objects.none()
 
@@ -352,6 +352,7 @@ class StockListView(viewsets.ModelViewSet):
 
         # Update the product to have moved to marketplace
         stock_item.is_pushed_to_marketplace = True
+        stock_item.moved_date = timezone.now()
         stock_item.save(update_fields=["is_pushed_to_marketplace"])
         return Response(
             {"message": f"Product '{stock_item.product.name}' has been successfully pushed to the marketplace."},
@@ -362,11 +363,11 @@ class StockListView(viewsets.ModelViewSet):
 class MarketplaceProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return (
-            MarketplaceProduct.objects.filter(is_available=True, bid_end_date__gte=timezone.now())
+            MarketplaceProduct.objects.filter(is_available=True)
             .order_by("-listed_date")
             .distinct()
         )
@@ -375,15 +376,15 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet:
-        user = self.request.user
-        try:
-            UserProfile.objects.get(user=user)
-            # location = user_profile.location
-        except UserProfile.DoesNotExist:
-            return MarketplaceProduct.objects.none()
+        # user = self.request.user
+        # try:
+        #     UserProfile.objects.get(user=user)
+        #     # location = user_profile.location
+        # except UserProfile.DoesNotExist:
+        #     return MarketplaceProduct.objects.none()
 
         # if not location:
         #     return MarketplaceProduct.objects.none()
@@ -394,7 +395,6 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
                 # bid_end_date__gte=timezone.now(),
                 # product__location=location,
             )
-            .exclude(product__user=user)
             .order_by("-listed_date")
         )
 
@@ -864,5 +864,15 @@ def stats_dashboard(request):
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseOrder.objects.all().order_by("-created_at")
     serializer_class = PurchaseOrderSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return PurchaseOrder.objects.none()
+
+        user_profile = getattr(user, "userprofile", None)
+        if user_profile:
+            return PurchaseOrder.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+        else:
+            return PurchaseOrder.objects.none()

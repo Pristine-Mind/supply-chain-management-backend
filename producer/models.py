@@ -398,6 +398,11 @@ class PurchaseOrder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     approved = models.BooleanField(default=False)
     sent_to_vendor = models.BooleanField(default=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("User"))
 
     def __str__(self):
         return f"PO #{self.id} – {self.product.sku} x{self.quantity}"
+
+    class Meta:
+        verbose_name = _("Purchase Order")
+        verbose_name_plural = _("Purchase Orders")
