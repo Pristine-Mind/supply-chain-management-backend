@@ -26,19 +26,48 @@ class CustomerFilter(django_filters.FilterSet):
 
 
 class SaleFilter(django_filters.FilterSet):
-    customer = django_filters.NumberFilter(field_name="customer__id", lookup_expr="exact")
-    product = django_filters.NumberFilter(field_name="product__id", lookup_expr="exact")
+    customer = django_filters.ModelChoiceFilter(
+        field_name="order__customer",
+        queryset=Customer.objects.none(),
+        label="Customer"
+    )
+    product = django_filters.ModelChoiceFilter(
+        field_name="order__product",
+        queryset=Product.objects.none(),
+        label="Product"
+    )
+    sale_date_from = django_filters.DateFilter(field_name="sale_date", lookup_expr="gte", label="Sale Date From")
+    sale_date_to = django_filters.DateFilter(field_name="sale_date", lookup_expr="lte", label="Sale Date To")
     search = django_filters.CharFilter(method="filter_search", label="Search")
 
     class Meta:
         model = Sale
-        fields = ["customer", "product"]
+        fields = ["customer", "product", "sale_date_from", "sale_date_to"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.request
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated:
+            user_profile = getattr(user, "userprofile", None)
+            if user_profile:
+                self.filters["customer"].queryset = Customer.objects.filter(
+                    user__userprofile__shop_id=user_profile.shop_id
+                )
+                self.filters["product"].queryset = Product.objects.filter(
+                    user__userprofile__shop_id=user_profile.shop_id
+                )
+            else:
+                self.filters["customer"].queryset = Customer.objects.none()
+                self.filters["product"].queryset = Product.objects.none()
 
     def filter_search(self, queryset, name, value):
         """
         Custom filter to search by product name or customer name.
         """
-        return queryset.filter(product__name__icontains=value) | queryset.filter(customer__name__icontains=value).distinct()
+        qs1 = queryset.filter(product__name__icontains=value)
+        qs2 = queryset.filter(customer__name__icontains=value)
+        return (qs1 | qs2).distinct()
 
 
 class ProductFilter(django_filters.FilterSet):
@@ -81,12 +110,39 @@ class MarketplaceProductFilter(django_filters.FilterSet):
 
 class OrderFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    customer = django_filters.NumberFilter(field_name="customer__id", lookup_expr="exact")
-    product = django_filters.NumberFilter(field_name="product__id", lookup_expr="exact")
+    customer = django_filters.ModelChoiceFilter(
+        field_name="customer",
+        queryset=Customer.objects.none(),
+        label="Customer"
+    )
+    product = django_filters.ModelChoiceFilter(
+        field_name="product",
+        queryset=Product.objects.none(),
+        label="Product"
+    )
+    order_date_from = django_filters.DateFilter(field_name="order_date", lookup_expr="gte", label="Order Date From")
+    order_date_to = django_filters.DateFilter(field_name="order_date", lookup_expr="lte", label="Order Date To")
 
     class Meta:
         model = Order
-        fields = ["search"]
+        fields = ["search", "customer", "product", "order_date_from", "order_date_to"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = getattr(self, 'request', None)
+        user = getattr(request, "user", None) if request else None
+        if user and user.is_authenticated:
+            user_profile = getattr(user, "userprofile", None)
+            if user_profile:
+                self.filters["customer"].queryset = Customer.objects.filter(
+                    user__userprofile__shop_id=user_profile.shop_id
+                )
+                self.filters["product"].queryset = Product.objects.filter(
+                    user__userprofile__shop_id=user_profile.shop_id
+                )
+            else:
+                self.filters["customer"].queryset = Customer.objects.none()
+                self.filters["product"].queryset = Product.objects.none()
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(order_number__icontains=value).distinct()
