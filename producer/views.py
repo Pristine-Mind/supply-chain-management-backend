@@ -20,6 +20,7 @@ from .filters import (
     ProducerFilter,
     ProductFilter,
     SaleFilter,
+    OrderFilter,
 )
 from .models import (
     AuditLog,
@@ -151,6 +152,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     queryset = Order.objects.all().order_by("-created_at")
     serializer_class = OrderSerializer
+    filterset_class = OrderFilter
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
