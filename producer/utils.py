@@ -1,4 +1,4 @@
-from django.utils.timezone import localtime
+from time import localtime
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
