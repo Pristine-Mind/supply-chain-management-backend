@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
@@ -111,14 +112,11 @@ class DailyProductStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from datetime import datetime, timedelta
         user = request.user
-        # Date range support
         start_date_str = request.query_params.get('start_date')
         end_date_str = request.query_params.get('end_date')
         product_id = request.query_params.get('product')
         today = datetime.today().date()
-        # Parse start_date and end_date
         if start_date_str:
             try:
                 start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()

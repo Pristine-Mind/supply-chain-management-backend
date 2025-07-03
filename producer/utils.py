@@ -1,4 +1,5 @@
-from time import localtime
+from datetime import date, datetime
+from django.utils.timezone import localtime, is_naive, make_aware
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
@@ -26,8 +27,14 @@ def export_queryset_to_excel(queryset, field_names, headers=None):
                 value = value()
             elif hasattr(value, "all"):
                 value = ", ".join([str(item) for item in value.all()])
-            elif hasattr(value, "strftime"):
+            elif isinstance(value, datetime):
+                # Handle timezone for datetime objects
+                if is_naive(value):
+                    value = make_aware(value)
                 value = localtime(value).strftime("%Y-%m-%d %H:%M:%S")
+            elif isinstance(value, date):
+                # Handle date objects (without time)
+                value = value.strftime("%Y-%m-%d")
             row.append(value)
         ws.append(row)
 
