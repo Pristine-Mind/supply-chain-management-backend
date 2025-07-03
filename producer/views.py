@@ -948,21 +948,54 @@ def export_orders_to_excel(request):
 
     user = request.user
     if not user.is_authenticated:
-        return
+        return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    start_date = request.query_params.get("start_date")
+    end_date = request.query_params.get("end_date")
+    product_id = request.query_params.get("product_id")
 
     user_profile = getattr(user, "userprofile", None)
-    if user_profile:
-        queryset = Order.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related(
-            "customer", "product"
-        )
-    for obj in queryset:
-        obj.customer_name = obj.customer.name
-        obj.product_name = obj.product.name
+    if not user_profile:
+        return Response({"error": "User profile not found"}, status=status.HTTP_400_BAD_REQUEST)
 
+    queryset = Order.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related("customer", "product")
+    if start_date:
+        try:
+            start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d").date()
+            queryset = queryset.filter(order_date__gte=start_date)
+        except ValueError:
+            return Response({"error": "Invalid start_date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if end_date:
+        try:
+            end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d").date()
+            # Include the entire end date by adding 1 day
+            end_date = end_date + timezone.timedelta(days=1)
+            queryset = queryset.filter(order_date__lt=end_date)
+        except ValueError:
+            return Response({"error": "Invalid end_date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if product_id:
+        try:
+            product_id = int(product_id)
+            queryset = queryset.filter(product_id=product_id)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid product_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+    queryset = queryset.annotate(customer_name=F("customer__name"), product_name=F("product__name"))
     wb = export_queryset_to_excel(queryset, field_names, headers)
 
+    filename = "orders"
+    if start_date or end_date:
+        start_str = start_date.strftime("%Y%m%d") if start_date else "start"
+        end_str = (end_date - timezone.timedelta(days=1)).strftime("%Y%m%d") if end_date else "end"
+        filename += f"_{start_str}_to_{end_str}"
+    if product_id:
+        filename += f"_product_{product_id}"
+    filename += ".xlsx"
+
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response["Content-Disposition"] = "attachment; filename=orders.xlsx"
+    response["Content-Disposition"] = f"attachment; filename={filename}"
     wb.save(response)
     return response
 
@@ -995,19 +1028,63 @@ def export_sales_to_excel(request):
 
     user = request.user
     if not user.is_authenticated:
-        return
+        return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # Get query parameters
+    start_date = request.query_params.get("start_date")
+    end_date = request.query_params.get("end_date")
+    product_id = request.query_params.get("product_id")
 
     user_profile = getattr(user, "userprofile", None)
-    if user_profile:
-        queryset = Sale.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related("order__product")
-    for obj in queryset:
-        obj.order_number = obj.order.order_number
-        obj.product_name = obj.order.product.name
+    if not user_profile:
+        return Response({"error": "User profile not found"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Base queryset with shop filtering
+    queryset = Sale.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related("order__product")
+
+    # Apply date filters
+    if start_date:
+        try:
+            start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d").date()
+            queryset = queryset.filter(sale_date__gte=start_date)
+        except ValueError:
+            return Response({"error": "Invalid start_date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if end_date:
+        try:
+            end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d").date()
+            # Include the entire end date by adding 1 day
+            end_date = end_date + timezone.timedelta(days=1)
+            queryset = queryset.filter(sale_date__lt=end_date)
+        except ValueError:
+            return Response({"error": "Invalid end_date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Apply product filter
+    if product_id:
+        try:
+            product_id = int(product_id)
+            queryset = queryset.filter(order__product_id=product_id)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid product_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Annotate with order number and product name
+    queryset = queryset.annotate(order_number=F("order__order_number"), product_name=F("order__product__name"))
+
+    # Export to Excel
     wb = export_queryset_to_excel(queryset, field_names, headers)
 
+    # Create response with filename including date range if applicable
+    filename = "sales"
+    if start_date or end_date:
+        start_str = start_date.strftime("%Y%m%d") if start_date else "start"
+        end_str = (end_date - timezone.timedelta(days=1)).strftime("%Y%m%d") if end_date else "end"
+        filename += f"_{start_str}_to_{end_str}"
+    if product_id:
+        filename += f"_product_{product_id}"
+    filename += ".xlsx"
+
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response["Content-Disposition"] = "attachment; filename=sales.xlsx"
+    response["Content-Disposition"] = f"attachment; filename={filename}"
     wb.save(response)
     return response
 
