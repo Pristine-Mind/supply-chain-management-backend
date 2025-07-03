@@ -17,6 +17,7 @@ from .models import (
     PurchaseOrder,
     Sale,
     StockList,
+    StockHistory,
 )
 
 
@@ -282,12 +283,30 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "total_orders"]
 
 
-class StockListSerializer(serializers.ModelSerializer):
-    product_details = ProductSerializer(source="product", read_only=True)
+class StockHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    user_username = serializers.CharField(source="user.username", read_only=True)
 
     class Meta:
         model = StockList
         fields = ["product", "moved_date", "product_details", "id", "is_pushed_to_marketplace"]
+
+
+class StockListSerializer(serializers.ModelSerializer):
+    product_details = ProductSerializer(source="product", read_only=True)
+    user_username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = StockList
+        fields = [
+            "id",
+            "product",
+            "product_details",
+            "moved_date",
+            "is_pushed_to_marketplace",
+            "user",
+            "user_username",
+        ]
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):

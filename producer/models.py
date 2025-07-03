@@ -5,6 +5,8 @@ from django.contrib.auth.models import User
 from django.contrib.gis.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
 
 
 class Producer(models.Model):
@@ -255,8 +257,21 @@ class Sale(models.Model):
         verbose_name_plural = _("Sales")
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
         super().save(*args, **kwargs)
         self.reduce_product_stock()
+        # Only create StockHistory on creation
+        if is_new:
+            from .models import StockHistory  # avoid circular import if any
+            StockHistory.objects.create(
+                product=self.order.product,
+                date=self.sale_date.date() if hasattr(self.sale_date, 'date') else self.sale_date,
+                quantity_in=0,
+                quantity_out=self.quantity,
+                user=self.user,
+                notes="Stock out due to sale",
+                stock_after=self.order.product.stock,
+            )
 
     def reduce_product_stock(self):
         """
@@ -278,6 +293,74 @@ class StockList(models.Model):
 
     def __str__(self):
         return f"{self.product.name} moved to StockList on {self.moved_date}"
+
+
+class StockHistory(models.Model):
+    """
+    Tracks daily stock entry and exit for each product.
+    Automatically updates Product.stock on create, update, and delete.
+    """
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stock_histories")
+    date = models.DateField(default=timezone.now, verbose_name=_("Date"))
+    quantity_in = models.PositiveIntegerField(default=0, verbose_name=_("Stock In"))
+    quantity_out = models.PositiveIntegerField(default=0, verbose_name=_("Stock Out"))
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
+    user = models.ForeignKey(User, on_delete=models.PROTECT, null=False, blank=False, verbose_name=_("User"))
+    stock_after = models.IntegerField(verbose_name=_("Stock After Movement"), null=True, blank=True)
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+
+    class Meta:
+        verbose_name = _("Stock History")
+        verbose_name_plural = _("Stock Histories")
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.product.name} on {self.date}: +{self.quantity_in}/-{self.quantity_out}"
+
+    def save(self, *args, **kwargs):
+        # Prevent update after creation except by superuser
+        if self.pk:
+            # If this is an update, block unless user is superuser
+            request = getattr(self, '_request', None)
+            if request is None or not getattr(request.user, 'is_superuser', False):
+                raise PermissionDenied("StockHistory entries cannot be updated after creation.")
+
+        # Ensure user is set
+        if not self.user_id:
+            raise ValueError("StockHistory entries must have a user.")
+
+        # Concurrency protection
+        with transaction.atomic():
+            product = Product.objects.select_for_update().get(pk=self.product.pk)
+
+            # Determine if this is an update or a new entry
+            if self.pk:
+                old = StockHistory.objects.get(pk=self.pk)
+                delta_in = self.quantity_in - old.quantity_in
+                delta_out = self.quantity_out - old.quantity_out
+            else:
+                delta_in = self.quantity_in
+                delta_out = self.quantity_out
+
+            # Prevent negative stock
+            new_stock = product.stock + delta_in - delta_out
+            if new_stock < 0:
+                raise ValueError(f"Stock cannot go negative for product {product.name}. Current: {product.stock}, Attempted: {new_stock}")
+
+            super().save(*args, **kwargs)
+            # Update product stock
+            product.stock = new_stock
+            product.save()
+            # Set stock_after and save again if changed
+            self.stock_after = product.stock
+            super().save(update_fields=["stock_after"])
+
+    def delete(self, *args, **kwargs):
+        request = getattr(self, '_request', None)
+        if request is None or not getattr(request.user, 'is_superuser', False):
+            raise PermissionDenied("StockHistory entries cannot be deleted except by superuser.")
+        self.is_active = False
+        self.save(update_fields=["is_active"])
 
 
 class MarketplaceProduct(models.Model):
@@ -406,3 +489,26 @@ class PurchaseOrder(models.Model):
     class Meta:
         verbose_name = _("Purchase Order")
         verbose_name_plural = _("Purchase Orders")
+
+    def save(self, *args, **kwargs):
+        # Check if approval status changes from False to True
+        is_new = self.pk is None
+        prev_approved = False
+        if not is_new:
+            orig = type(self).objects.get(pk=self.pk)
+            prev_approved = orig.approved
+        super().save(*args, **kwargs)
+        if (is_new and self.approved) or (not is_new and not prev_approved and self.approved):
+            # Stock is received only on approval
+            self.product.stock += self.quantity
+            self.product.save()
+            from .models import StockHistory
+            StockHistory.objects.create(
+                product=self.product,
+                date=self.created_at.date() if hasattr(self.created_at, 'date') else self.created_at,
+                quantity_in=self.quantity,
+                quantity_out=0,
+                user=self.user,
+                notes="Stock in due to purchase order approval",
+                stock_after=self.product.stock,
+            )

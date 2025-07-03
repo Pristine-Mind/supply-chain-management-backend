@@ -23,4 +23,8 @@ from .models import MarketplaceProduct, Product, PurchaseOrder, StockList
 def auto_create_po(sender, instance: Product, **kwargs):
     if instance.stock <= instance.reorder_point:
         if not PurchaseOrder.objects.filter(product=instance, approved=False).exists():
-            PurchaseOrder.objects.create(product=instance, quantity=instance.reorder_quantity)
+            PurchaseOrder.objects.create(
+                product=instance,
+                quantity=instance.reorder_quantity,
+                user=instance.user
+            )
