@@ -41,6 +41,7 @@ from producer.views import (
     AuditLogViewSet,
     CityListView,
     CustomerViewSet,
+    DailyProductStatsView,
     DashboardAPIView,
     LedgerEntryViewSet,
     MarketplaceProductViewSet,
@@ -51,6 +52,7 @@ from producer.views import (
     PurchaseOrderViewSet,
     SaleViewSet,
     StatsAPIView,
+    StockHistoryViewSet,
     StockListView,
     TopOrdersCustomersView,
     TopSalesCustomersView,
@@ -90,16 +92,18 @@ router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")
 router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 router.register(r"feedback", FeedbackViewSet, basename="feedback")
 router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-orders")
+router.register(r'stock-history', StockHistoryViewSet, basename='stockhistory')
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include(router.urls)),
     path("login/", LoginAPIView.as_view()),
+    path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),
     path("api/v1/user-info/", UserInfoView.as_view()),
     path("api/v1/customer/top-sales/", TopSalesCustomersView.as_view(), name="top-sales-customers"),
-    path("api/v1/customer/top-orders/", TopOrdersCustomersView.as_view(), name="top-orders-customers"),
+    path("api/v1/customer/top-orders/", TopOrdersCustomersView.as_view(), name="top-orders-customers"), 
     path("api/v1/bids/highest/<int:product_id>/", highest_bidder, name="highest_bidder"),
     path("api/v1/purchases/", create_purchase, name="create_purchase"),
     path("payment/verify/", verify_payment, name="verify_payment"),
