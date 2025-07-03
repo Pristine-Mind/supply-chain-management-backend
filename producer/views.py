@@ -1,8 +1,10 @@
 import logging
 from datetime import datetime, timedelta
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
-from django.db.models.functions import TruncMonth
+from django.db.models.functions import TruncMonth, TruncDate
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.utils import timezone
@@ -11,6 +13,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 
 from user.models import UserProfile
 
@@ -34,6 +37,7 @@ from .models import (
     PurchaseOrder,
     Sale,
     StockList,
+    StockHistory,
 )
 from .serializers import (
     AuditLogSerializer,
@@ -54,11 +58,307 @@ from .serializers import (
     SalesRequestSerializer,
     SalesResponseSerializer,
     StockListSerializer,
+    StockHistorySerializer,
 )
 from .supply_chain import SupplyChainService
 from .utils import export_queryset_to_excel
 
 logger = logging.getLogger(__name__)
+
+
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+
+
+class StockHistoryViewSet(viewsets.ModelViewSet):
+    serializer_class = StockHistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only return active entries
+        return StockHistory.objects.filter(is_active=True).order_by('-date')
+
+    def perform_create(self, serializer):
+        # Always set user from request
+        serializer.save(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'detail': 'Updates not allowed. StockHistory entries are immutable.'}, status=403)
+        instance = self.get_object()
+        instance._request = request
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'detail': 'Updates not allowed. StockHistory entries are immutable.'}, status=403)
+        instance = self.get_object()
+        instance._request = request
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({'detail': 'Delete not allowed. Only superusers can delete.'}, status=403)
+        instance = self.get_object()
+        instance._request = request
+        # Soft-delete
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
+        return Response(status=204)
+
+
+class DailyProductStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime, timedelta
+        user = request.user
+        # Date range support
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        product_id = request.query_params.get('product')
+        today = datetime.today().date()
+        # Parse start_date and end_date
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({'error': 'Invalid start_date format. Use YYYY-MM-DD.'}, status=400)
+        else:
+            start_date = today
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({'error': 'Invalid end_date format. Use YYYY-MM-DD.'}, status=400)
+        else:
+            end_date = start_date
+        if end_date < start_date:
+            return Response({'error': 'end_date cannot be before start_date.'}, status=400)
+        # Filter products
+        products = Product.objects.filter(user=user)
+        if product_id:
+            products = products.filter(id=product_id)
+        export_type = request.query_params.get('export')
+        result = []
+        product_list = list(products)
+        if export_type == 'excel':
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Product Stats'
+            headers = [
+                'Product ID', 'Product Name', 'SKU', 'Category', 'Price', 'Cost Price', 'Stock', 'Reorder Level',
+                'Date', 'Stock In', 'Stock Out', 'Total Sales', 'Total Sales Price', 'Opening Stock', 'Closing Stock'
+            ]
+            ws.append(headers)
+            for product in product_list:
+                product_info = {
+                    'product_id': product.id,
+                    'product_name': product.name,
+                    'sku': product.sku,
+                    'category': product.get_category_display() if hasattr(product, 'get_category_display') else product.category,
+                    'price': product.price,
+                    'cost_price': product.cost_price,
+                    'stock': product.stock,
+                    'reorder_level': product.reorder_level,
+                }
+                # Prepare daily stats
+                stats_by_day = {}
+                opening_stock = None
+                prev_stock_hist = StockHistory.objects.filter(
+                    product=product, user=user, is_active=True, date__lt=start_date
+                ).order_by('-date', '-id').first()
+                if prev_stock_hist and prev_stock_hist.stock_after is not None:
+                    opening_stock = prev_stock_hist.stock_after
+                else:
+                    opening_stock = product.stock
+                    all_hist = StockHistory.objects.filter(product=product, user=user, is_active=True, date__gte=start_date)
+                    for hist in all_hist:
+                        opening_stock -= (hist.quantity_in - hist.quantity_out)
+                stock_histories = (
+                    StockHistory.objects.filter(product=product, user=user, is_active=True, date__gte=start_date, date__lte=end_date)
+                    .annotate(day=TruncDate('date'))
+                    .values('day')
+                    .annotate(
+                        stock_in=Sum('quantity_in'),
+                        stock_out=Sum('quantity_out'),
+                        last_stock_after=Sum('stock_after')
+                    )
+                )
+                sales = (
+                    Sale.objects.filter(order__product=product, user=user, sale_date__date__gte=start_date, sale_date__date__lte=end_date)
+                    .annotate(day=TruncDate('sale_date'))
+                    .values('day')
+                    .annotate(
+                        total_sales=Sum('quantity'),
+                        total_sales_price=Sum(F('quantity') * F('sale_price'))
+                    )
+                )
+                for sh in stock_histories:
+                    stats_by_day[sh['day']] = {
+                        'date': sh['day'],
+                        'stock_in': sh['stock_in'] or 0,
+                        'stock_out': sh['stock_out'] or 0,
+                        'total_sales': 0,
+                        'total_sales_price': 0,
+                    }
+                for sale in sales:
+                    day = sale['day']
+                    if day not in stats_by_day:
+                        stats_by_day[day] = {
+                            'date': day,
+                            'stock_in': 0,
+                            'stock_out': 0,
+                            'total_sales': sale['total_sales'] or 0,
+                            'total_sales_price': sale['total_sales_price'] or 0,
+                        }
+                    else:
+                        stats_by_day[day]['total_sales'] = sale['total_sales'] or 0
+                        stats_by_day[day]['total_sales_price'] = sale['total_sales_price'] or 0
+                num_days = (end_date - start_date).days + 1
+                for i in range(num_days):
+                    day = start_date + timedelta(days=i)
+                    if day not in stats_by_day:
+                        stats_by_day[day] = {
+                            'date': day,
+                            'stock_in': 0,
+                            'stock_out': 0,
+                            'total_sales': 0,
+                            'total_sales_price': 0,
+                        }
+                sorted_days = sorted(stats_by_day.keys())
+                prev_closing = opening_stock
+                for day in sorted_days:
+                    stats = stats_by_day[day]
+                    stats['opening_stock'] = prev_closing
+                    stats['closing_stock'] = prev_closing + stats['stock_in'] - stats['stock_out']
+                    prev_closing = stats['closing_stock']
+                stats_list = [stats_by_day[day] for day in sorted_days]
+                for stats in stats_list:
+                    ws.append([
+                        product.id,
+                        product.name,
+                        product.sku,
+                        product.get_category_display() if hasattr(product, 'get_category_display') else product.category,
+                        product.price,
+                        product.cost_price,
+                        product.stock,
+                        product.reorder_level,
+                        stats['date'],
+                        stats['stock_in'],
+                        stats['stock_out'],
+                        stats['total_sales'],
+                        stats['total_sales_price'],
+                        abs(stats['opening_stock']),
+                        abs(stats['closing_stock']),
+                    ])
+            for i, col in enumerate(headers, 1):
+                ws.column_dimensions[get_column_letter(i)].width = 15
+            from io import BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            response = HttpResponse(output.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = 'attachment; filename="product_stats.xlsx"'
+            return response
+        paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
+        paginated_products = paginator.paginate_queryset(products, request)
+        result = []
+        for product in paginated_products:
+            product_info = {
+                'product_id': product.id,
+                'product_name': product.name,
+                'sku': product.sku,
+                'category': product.get_category_display() if hasattr(product, 'get_category_display') else product.category,
+                'price': product.price,
+                'cost_price': product.cost_price,
+                'stock': product.stock,
+                'reorder_level': product.reorder_level,
+            }
+            stats_by_day = {}
+            prev_stock_hist = StockHistory.objects.filter(
+                product=product, user=user, is_active=True, date__lt=start_date
+            ).order_by('-date', '-id').first()
+            if prev_stock_hist and prev_stock_hist.stock_after is not None:
+                opening_stock = prev_stock_hist.stock_after
+                print(f"[DEBUG] Product: {product.name}, Opening stock from last history before {start_date}: {opening_stock}")
+            else:
+                opening_stock = 0
+                print(f"[WARNING] Product: {product.name}, No stock history before {start_date}. Defaulting opening stock to 0.")
+            stock_histories = (
+                StockHistory.objects.filter(product=product, user=user, is_active=True, date__gte=start_date, date__lte=end_date)
+                .annotate(day=TruncDate('date'))
+                .values('day')
+                .annotate(
+                    stock_in=Sum('quantity_in'),
+                    stock_out=Sum('quantity_out'),
+                    last_stock_after=Sum('stock_after')  # Not used for closing, just for completeness
+                )
+            )
+            sales = (
+                Sale.objects.filter(order__product=product, user=user, sale_date__date__gte=start_date, sale_date__date__lte=end_date)
+                .annotate(day=TruncDate('sale_date'))
+                .values('day')
+                .annotate(
+                    total_sales=Sum('quantity'),
+                    total_sales_price=Sum(F('quantity') * F('sale_price'))
+                )
+            )
+            for sh in stock_histories:
+                stats_by_day[sh['day']] = {
+                    'date': sh['day'],
+                    'stock_in': sh['stock_in'] or 0,
+                    'stock_out': sh['stock_out'] or 0,
+                    'total_sales': 0,
+                    'total_sales_price': 0,
+                }
+            for sale in sales:
+                day = sale['day']
+                if day not in stats_by_day:
+                    stats_by_day[day] = {
+                        'date': day,
+                        'stock_in': 0,
+                        'stock_out': 0,
+                        'total_sales': sale['total_sales'] or 0,
+                        'total_sales_price': sale['total_sales_price'] or 0,
+                    }
+                else:
+                    stats_by_day[day]['total_sales'] = sale['total_sales'] or 0
+                    stats_by_day[day]['total_sales_price'] = sale['total_sales_price'] or 0
+            num_days = (end_date - start_date).days + 1
+            for i in range(num_days):
+                day = start_date + timedelta(days=i)
+                if day not in stats_by_day:
+                    stats_by_day[day] = {
+                        'date': day,
+                        'stock_in': 0,
+                        'stock_out': 0,
+                        'total_sales': 0,
+                        'total_sales_price': 0,
+                    }
+            sorted_days = sorted(stats_by_day.keys())
+            prev_closing = opening_stock
+            for day in sorted_days:
+                stats = stats_by_day[day]
+                stats['opening_stock'] = prev_closing
+                stats['closing_stock'] = prev_closing + stats['stock_in'] - stats['stock_out']
+                prev_closing = stats['closing_stock']
+            stats_list = [stats_by_day[day] for day in sorted_days]
+            totals = {
+                'stock_in': sum(s['stock_in'] for s in stats_list),
+                'stock_out': sum(s['stock_out'] for s in stats_list),
+                'total_sales': sum(s['total_sales'] for s in stats_list),
+                'total_sales_price': sum(s['total_sales_price'] for s in stats_list),
+                'opening_stock': abs(stats_list[0]['opening_stock']) if stats_list else opening_stock,
+                'closing_stock': abs(stats_list[-1]['closing_stock']) if stats_list else opening_stock,
+            }
+            product_info.update({
+                'stats': stats_list,
+                'totals': totals,
+            })
+            result.append(product_info)
+        return paginator.get_paginated_response(result)
 
 
 class ProducerViewSet(viewsets.ModelViewSet):
