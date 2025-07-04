@@ -37,17 +37,13 @@ class UserProfile(models.Model):
         null=True,
         blank=True,
     )
-    latitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+    latitude = models.FloatField(
         null=True,
         blank=True,
         verbose_name=_("Latitude"),
         help_text=_("Geo-coordinate: latitude"),
     )
-    longitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+    longitude = models.FloatField(
         null=True,
         blank=True,
         verbose_name=_("Longitude"),
