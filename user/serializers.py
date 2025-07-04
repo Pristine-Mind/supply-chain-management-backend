@@ -15,10 +15,12 @@ class RegisterSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
     location = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = User
-        fields = ["username", "email", "password", "password2", "first_name", "last_name", "phone_number", "location"]
+        fields = ["username", "email", "password", "password2", "first_name", "last_name", "phone_number", "location", "latitude", "longitude"]
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
@@ -27,6 +29,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         phone_number = validated_data.pop("phone_number")
+        latitude = validated_data.pop("latitude", None)
+        longitude = validated_data.pop("longitude", None)
         location = validated_data.pop("location")
         user = User.objects.create(
             username=validated_data["username"],
@@ -38,7 +42,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data["password"])
         user.save()
         # Create UserProfile instance
-        UserProfile.objects.create(user=user, phone_number=phone_number, location=location)
+        UserProfile.objects.create(
+            user=user, phone_number=phone_number, location=location, latitude=latitude, longitude=longitude)
         return user
 
 
@@ -68,8 +73,8 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True)
     location = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=True)
     business_type = serializers.ChoiceField(choices=UserProfile.BusinessType.choices, required=True)
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = User
