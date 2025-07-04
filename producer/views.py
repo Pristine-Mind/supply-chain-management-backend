@@ -60,6 +60,7 @@ from .serializers import (
     SalesResponseSerializer,
     StockListSerializer,
     StockHistorySerializer,
+    ProductStockUpdateSerializer,
 )
 from .supply_chain import SupplyChainService
 from .utils import export_queryset_to_excel
@@ -441,6 +442,26 @@ class ProductViewSet(viewsets.ModelViewSet):
                 for key, value in Product.ProductCategory.choices
             ]
         )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="update-stock",
+        permission_classes=[IsAuthenticated],
+        serializer_class=ProductStockUpdateSerializer,
+    )
+    def update_stock(self, request, pk=None):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=404)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        stock = serializer.validated_data["stock"]
+        product.stock += stock
+        product.updated_at = timezone.now()
+        product.save(update_fields=["stock", "updated_at"])
+        return Response(ProductSerializer(product).data)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
