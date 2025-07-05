@@ -266,6 +266,8 @@ class Delivery(models.Model):
     zip_code = models.CharField(max_length=20)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    latitude = models.FloatField()
+    longitude = models.FloatField()
 
     def __str__(self):
         return f"Delivery for {self.customer_name} ({self.city})"
