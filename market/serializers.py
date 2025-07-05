@@ -389,4 +389,6 @@ class DeliverySerializer(serializers.ModelSerializer):
             "zip_code",
             "created_at",
             "updated_at",
+            "latitude",
+            "longitude",
         ]
