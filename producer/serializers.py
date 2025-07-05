@@ -315,10 +315,12 @@ class StockListSerializer(serializers.ModelSerializer):
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
+    latitude = serializers.FloatField(source="product.user.userprofile.latitude", read_only=True)
+    longitude = serializers.FloatField(source="product.user.userprofile.longitude", read_only=True)
 
     class Meta:
         model = MarketplaceProduct
-        fields = ["product", "listed_price", "listed_date", "is_available", "id", "product_details", "bid_end_date"]
+        fields = ["product", "listed_price", "listed_date", "is_available", "id", "product_details", "bid_end_date", "latitude", "longitude"]
 
 
 class CitySerializer(serializers.ModelSerializer):
