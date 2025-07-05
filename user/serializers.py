@@ -43,7 +43,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
         # Create UserProfile instance
         UserProfile.objects.create(
-            user=user, phone_number=phone_number, location=location, latitude=latitude, longitude=longitude)
+            user=user,
+            phone_number=phone_number,
+            location=location,
+            latitude=latitude,
+            longitude=longitude,
+        )
         return user
 
 
