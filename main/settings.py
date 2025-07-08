@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "django_celery_beat",
+    "anymail",
     # localapps
     "producer",
     "market",
@@ -235,9 +236,10 @@ KHALTI_TEST_MOBILE_NUMBER = "9800000001"
 KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
 
 # SMS Configuration (SparrowSMS)
-SMS_TOKEN = "v2_RkYVbjMU1uZqOhK1aqo703XHK7R.ZVmT"
-SMS_API_URL = "http://api.sparrowsms.com/v2/sms/"
-SMS_SENDER = "EshopAlert"
+# These values are now loaded from environment variables for security
+SMS_TOKEN = os.environ.get("SMS_TOKEN")
+SMS_API_URL = os.environ.get("SMS_API_URL")
+SMS_SENDER = os.environ.get("SMS_SENDER")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Mulya Bazzar API",
@@ -247,3 +249,20 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {},
     "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
 }
+
+
+# SparrowSMS config now loaded from environment variables
+SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
+SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
+SPARROWSMS_ENDPOINT = os.environ.get("SPARROWSMS_ENDPOINT")
+
+
+EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+ANYMAIL = {
+    "SENDGRID_API_KEY": os.environ.get("SENDGRID_API_KEY"),
+    "SENDGRID_GENERATE_MESSAGE_ID": True,
+    "SENDGRID_MERGE_DATA": {},
+    "SENDGRID_MERGE_GLOBAL_DATA": {},
+}
+
+DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"

@@ -11,8 +11,8 @@ from .models import (
     ProductImage,
     PurchaseOrder,
     Sale,
-    StockList,
     StockHistory,
+    StockList,
 )
 
 
@@ -108,6 +108,7 @@ class StockHistoryAdmin(admin.ModelAdmin):
     autocomplete_fields = ["product", "user"]
     date_hierarchy = "date"
     readonly_fields = ()
+
 
 @admin.register(MarketplaceProduct)
 class MarketplaceProductAdmin(admin.ModelAdmin):

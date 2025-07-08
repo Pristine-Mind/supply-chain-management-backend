@@ -30,6 +30,7 @@ django-redis = "^5.3.0"
 django-celery-beat = "*"
 pillow = "*"
 openpyxl = "*"
+django-anymail = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

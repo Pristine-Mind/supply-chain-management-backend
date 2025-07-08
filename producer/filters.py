@@ -27,15 +27,9 @@ class CustomerFilter(django_filters.FilterSet):
 
 class SaleFilter(django_filters.FilterSet):
     customer = django_filters.ModelChoiceFilter(
-        field_name="order__customer",
-        queryset=Customer.objects.none(),
-        label="Customer"
+        field_name="order__customer", queryset=Customer.objects.none(), label="Customer"
     )
-    product = django_filters.ModelChoiceFilter(
-        field_name="order__product",
-        queryset=Product.objects.none(),
-        label="Product"
-    )
+    product = django_filters.ModelChoiceFilter(field_name="order__product", queryset=Product.objects.none(), label="Product")
     sale_date_from = django_filters.DateFilter(field_name="sale_date", lookup_expr="gte", label="Sale Date From")
     sale_date_to = django_filters.DateFilter(field_name="sale_date", lookup_expr="lte", label="Sale Date To")
     search = django_filters.CharFilter(method="filter_search", label="Search")
@@ -51,12 +45,8 @@ class SaleFilter(django_filters.FilterSet):
         if user and user.is_authenticated:
             user_profile = getattr(user, "userprofile", None)
             if user_profile:
-                self.filters["customer"].queryset = Customer.objects.filter(
-                    user__userprofile__shop_id=user_profile.shop_id
-                )
-                self.filters["product"].queryset = Product.objects.filter(
-                    user__userprofile__shop_id=user_profile.shop_id
-                )
+                self.filters["customer"].queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+                self.filters["product"].queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
             else:
                 self.filters["customer"].queryset = Customer.objects.none()
                 self.filters["product"].queryset = Product.objects.none()
@@ -110,16 +100,8 @@ class MarketplaceProductFilter(django_filters.FilterSet):
 
 class OrderFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    customer = django_filters.ModelChoiceFilter(
-        field_name="customer",
-        queryset=Customer.objects.none(),
-        label="Customer"
-    )
-    product = django_filters.ModelChoiceFilter(
-        field_name="product",
-        queryset=Product.objects.none(),
-        label="Product"
-    )
+    customer = django_filters.ModelChoiceFilter(field_name="customer", queryset=Customer.objects.none(), label="Customer")
+    product = django_filters.ModelChoiceFilter(field_name="product", queryset=Product.objects.none(), label="Product")
     order_date_from = django_filters.DateFilter(field_name="order_date", lookup_expr="gte", label="Order Date From")
     order_date_to = django_filters.DateFilter(field_name="order_date", lookup_expr="lte", label="Order Date To")
 
@@ -129,17 +111,13 @@ class OrderFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        request = getattr(self, 'request', None)
+        request = getattr(self, "request", None)
         user = getattr(request, "user", None) if request else None
         if user and user.is_authenticated:
             user_profile = getattr(user, "userprofile", None)
             if user_profile:
-                self.filters["customer"].queryset = Customer.objects.filter(
-                    user__userprofile__shop_id=user_profile.shop_id
-                )
-                self.filters["product"].queryset = Product.objects.filter(
-                    user__userprofile__shop_id=user_profile.shop_id
-                )
+                self.filters["customer"].queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+                self.filters["product"].queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
             else:
                 self.filters["customer"].queryset = Customer.objects.none()
                 self.filters["product"].queryset = Product.objects.none()
