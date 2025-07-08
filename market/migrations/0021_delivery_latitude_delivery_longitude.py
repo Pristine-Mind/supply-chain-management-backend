@@ -6,19 +6,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0020_alter_delivery_cart'),
+        ("market", "0020_alter_delivery_cart"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='delivery',
-            name='latitude',
+            model_name="delivery",
+            name="latitude",
             field=models.FloatField(default=1),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='delivery',
-            name='longitude',
+            model_name="delivery",
+            name="longitude",
             field=models.FloatField(default=1),
             preserve_default=False,
         ),

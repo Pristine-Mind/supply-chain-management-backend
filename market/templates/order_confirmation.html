@@ -1,0 +1,24 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "Order Confirmation" %}</title>
+</head>
+<body>
+  <h1>{% trans "Thank you for your order!" %}</h1>
+  <p>{% blocktrans %}Hi {{ order_obj.customer.name }},{% endblocktrans %}</p>
+  <p>{% blocktrans %}We have received your order <strong>#{{ order_obj.order_number }}</strong> placed on {{ order_obj.order_date|date:"F j, Y, g:i a" }}.{% endblocktrans %}</p>
+
+  <h2>{% trans "Order Details" %}</h2>
+  <ul>
+    <li><strong>{% trans "Product" %}:</strong> {{ order_obj.product.name }}</li>
+    <li><strong>{% trans "Quantity" %}:</strong> {{ order_obj.quantity }}</li>
+    <li><strong>{% trans "Total Price" %}:</strong> {{ order_obj.total_price }}</li>
+  </ul>
+
+  <p>{% trans "We’ll notify you again when your order ships." %}</p>
+  <hr>
+  <p>{% trans "Thanks for shopping with Mulya Bazzar!" %}</p>
+</body>
+</html>

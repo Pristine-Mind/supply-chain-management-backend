@@ -5,6 +5,8 @@ from threading import Thread
 import requests
 from django.conf import settings
 
+from .models import Notification
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,3 +150,54 @@ class SMSService:
 
 # Create a global instance of the SMS service
 sms_service = SMSService()
+
+
+def notify_event(
+    user,
+    notif_type,
+    message,
+    via_in_app=False,
+    via_email=False,
+    via_sms=False,
+    email_addr=None,
+    sms_number=None,
+    email_tpl=None,
+    email_ctx=None,
+    sms_body=None,
+):
+    # In-app
+    if via_in_app:
+        Notification.objects.create(
+            user=user,
+            notification_type=notif_type,
+            channel=Notification.Channel.IN_APP,
+            message=message,
+        )
+
+    # Email
+    if via_email and email_addr and email_tpl and email_ctx is not None:
+        Notification.objects.create(
+            user=user,
+            notification_type=notif_type,
+            channel=Notification.Channel.EMAIL,
+            message=message,
+        )
+        from .tasks import send_email
+        send_email.delay(
+            to_email=email_addr,
+            subject=message[:50],
+            template_name=email_tpl,
+            context=email_ctx,
+        )
+
+    # SMS
+    if via_sms and sms_number and sms_body:
+        Notification.objects.create(
+            user=user,
+            notification_type=notif_type,
+            channel=Notification.Channel.SMS,
+            message=message,
+        )
+        from .tasks import send_sms
+
+        send_sms.delay(to_number=sms_number, body=sms_body)
