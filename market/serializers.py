@@ -198,8 +198,7 @@ class BidSerializer(serializers.ModelSerializer):
         # Check if the request user is the highest bidder, and send a notification if so
         if highest_bid is None or bid.bid_amount > highest_bid.bid_amount:
             Notification.objects.create(
-                user=bid.bidder,
-                message=f"You are the highest bidder for the product '{product.product.name}'"
+                user=bid.bidder, message=f"You are the highest bidder for the product '{product.product.name}'"
             )
 
         return bid

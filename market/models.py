@@ -208,10 +208,37 @@ class MarketplaceUserProduct(models.Model):
 
 
 class Notification(models.Model):
+    class Type(models.TextChoices):
+        ORDER = "order", _("Order")
+        SALE = "sale", _("Sale")
+        PURCHASE_ORDER = "po", _("Purchase Order")
+        STOCK = "stock", _("Stock")
+        MARKETPLACE = "marketplace", _("Marketplace")
+        ALERT = "alert", _("Alert")
+
+    class Channel(models.TextChoices):
+        IN_APP = "in_app", _("In-App")
+        EMAIL = "email", _("Email")
+        SMS = "sms", _("SMS")
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    notification_type = models.CharField(
+        max_length=20,
+        choices=Type.choices,
+        default=Type.ALERT,
+        verbose_name=_("Notification Type"),
+    )
+    channel = models.CharField(
+        max_length=10,
+        choices=Channel.choices,
+        verbose_name=_("Channel"),
+    )
     message = models.TextField()
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.notification_type}] ({self.channel}) {self.message[:30]}"
 
 
 class Feedback(models.Model):

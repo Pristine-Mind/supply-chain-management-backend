@@ -16,8 +16,8 @@ from .models import (
     ProductImage,
     PurchaseOrder,
     Sale,
-    StockList,
     StockHistory,
+    StockList,
 )
 
 
@@ -320,7 +320,17 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MarketplaceProduct
-        fields = ["product", "listed_price", "listed_date", "is_available", "id", "product_details", "bid_end_date", "latitude", "longitude"]
+        fields = [
+            "product",
+            "listed_price",
+            "listed_date",
+            "is_available",
+            "id",
+            "product_details",
+            "bid_end_date",
+            "latitude",
+            "longitude",
+        ]
 
 
 class CitySerializer(serializers.ModelSerializer):
