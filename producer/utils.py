@@ -1,5 +1,6 @@
 from datetime import date, datetime
-from django.utils.timezone import localtime, is_naive, make_aware
+
+from django.utils.timezone import is_naive, localtime, make_aware
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter

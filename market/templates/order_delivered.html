@@ -1,0 +1,17 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "Order Delivered" %}</title>
+</head>
+<body>
+  <h1>✅ {% trans "Delivered!" %}</h1>
+  <p>{% blocktrans %}Hi {{ order_obj.customer.name }},{% endblocktrans %}</p>
+  <p>{% blocktrans %}We’re pleased to let you know that your order <strong>#{{ order_obj.order_number }}</strong> was delivered on {{ order_obj.delivery_date|date:"F j, Y" }}.{% endblocktrans %}</p>
+
+  <p>{% trans "We hope you enjoy your purchase. Please let us know if you have any feedback!" %}</p>
+  <hr>
+  <p>{% trans "Thank you for shopping at Mulya Bazzar." %}</p>
+</body>
+</html>

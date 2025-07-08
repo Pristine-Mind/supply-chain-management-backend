@@ -1,0 +1,24 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "Sale Recorded" %}</title>
+</head>
+<body>
+  <h1>💰 {% trans "Sale Successfully Recorded" %}</h1>
+  <p>{% blocktrans %}Hi {{ sale_obj.order.customer.name }},{% endblocktrans %}</p>
+  <p>{% blocktrans %}We’ve recorded a sale for your order <strong>#{{ sale_obj.order.order_number }}</strong> on {{ sale_obj.sale_date|date:"F j, Y, g:i a" }}.{% endblocktrans %}</p>
+
+  <h2>{% trans "Sale Details" %}</h2>
+  <ul>
+    <li><strong>{% trans "Product" %}:</strong> {{ sale_obj.order.product.name }}</li>
+    <li><strong>{% trans "Quantity" %}:</strong> {{ sale_obj.quantity }}</li>
+    <li><strong>{% trans "Sale Price" %}:</strong> {{ sale_obj.sale_price }}</li>
+  </ul>
+
+  <p>{% trans "Your stock levels have been updated accordingly." %}</p>
+  <hr>
+  <p>{% trans "Thank you for using Mulya Bazzar." %}</p>
+</body>
+</html>

@@ -3,10 +3,10 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.contrib.gis.db import models
-from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 
 class Producer(models.Model):
@@ -263,9 +263,10 @@ class Sale(models.Model):
         # Only create StockHistory on creation
         if is_new:
             from .models import StockHistory  # avoid circular import if any
+
             StockHistory.objects.create(
                 product=self.order.product,
-                date=self.sale_date.date() if hasattr(self.sale_date, 'date') else self.sale_date,
+                date=self.sale_date.date() if hasattr(self.sale_date, "date") else self.sale_date,
                 quantity_in=0,
                 quantity_out=self.quantity,
                 user=self.user,
@@ -300,6 +301,7 @@ class StockHistory(models.Model):
     Tracks daily stock entry and exit for each product.
     Automatically updates Product.stock on create, update, and delete.
     """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stock_histories")
     date = models.DateField(default=timezone.now, verbose_name=_("Date"))
     quantity_in = models.PositiveIntegerField(default=0, verbose_name=_("Stock In"))
@@ -321,8 +323,8 @@ class StockHistory(models.Model):
         # Prevent update after creation except by superuser
         if self.pk:
             # If this is an update, block unless user is superuser
-            request = getattr(self, '_request', None)
-            if request is None or not getattr(request.user, 'is_superuser', False):
+            request = getattr(self, "_request", None)
+            if request is None or not getattr(request.user, "is_superuser", False):
                 raise PermissionDenied("StockHistory entries cannot be updated after creation.")
 
         # Ensure user is set
@@ -345,7 +347,9 @@ class StockHistory(models.Model):
             # Prevent negative stock
             new_stock = product.stock + delta_in - delta_out
             if new_stock < 0:
-                raise ValueError(f"Stock cannot go negative for product {product.name}. Current: {product.stock}, Attempted: {new_stock}")
+                raise ValueError(
+                    f"Stock cannot go negative for product {product.name}. Current: {product.stock}, Attempted: {new_stock}"
+                )
 
             super().save(*args, **kwargs)
             # Update product stock
@@ -356,8 +360,8 @@ class StockHistory(models.Model):
             super().save(update_fields=["stock_after"])
 
     def delete(self, *args, **kwargs):
-        request = getattr(self, '_request', None)
-        if request is None or not getattr(request.user, 'is_superuser', False):
+        request = getattr(self, "_request", None)
+        if request is None or not getattr(request.user, "is_superuser", False):
             raise PermissionDenied("StockHistory entries cannot be deleted except by superuser.")
         self.is_active = False
         self.save(update_fields=["is_active"])
@@ -503,9 +507,10 @@ class PurchaseOrder(models.Model):
             self.product.stock += self.quantity
             self.product.save()
             from .models import StockHistory
+
             StockHistory.objects.create(
                 product=self.product,
-                date=self.created_at.date() if hasattr(self.created_at, 'date') else self.created_at,
+                date=self.created_at.date() if hasattr(self.created_at, "date") else self.created_at,
                 quantity_in=self.quantity,
                 quantity_out=0,
                 user=self.user,
