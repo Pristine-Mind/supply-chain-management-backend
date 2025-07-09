@@ -1,6 +1,7 @@
 import django_filters
 
 from .models import Customer, MarketplaceProduct, Order, Producer, Product, Sale
+from user.models import UserProfile
 
 
 class ProducerFilter(django_filters.FilterSet):
@@ -75,6 +76,7 @@ class ProductFilter(django_filters.FilterSet):
         return queryset.filter(name__icontains=value).distinct()
 
 
+
 class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
     category = django_filters.MultipleChoiceFilter(
@@ -82,10 +84,15 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         field_name="product__category",
     )
     city = django_filters.CharFilter(field_name="product__location__name", lookup_expr="exact")
+    profile_type = django_filters.ChoiceFilter(
+        choices=UserProfile.BusinessType.choices,
+        field_name="product__user__userprofile__business_type",
+        label="Profile Type"
+    )
 
     class Meta:
         model = MarketplaceProduct
-        fields = ["search", "category", "city"]
+        fields = ["search", "category", "city", "profile_type"]
 
     def filter_search(self, queryset, name, value):
         if value:
