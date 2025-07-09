@@ -4,7 +4,10 @@ from .models import (
     AuditLog,
     Customer,
     LedgerEntry,
+    MarketplaceBulkPriceTier,
     MarketplaceProduct,
+    MarketplaceProductReview,
+    MarketplaceProductVariant,
     Order,
     Producer,
     Product,
@@ -110,9 +113,63 @@ class StockHistoryAdmin(admin.ModelAdmin):
     readonly_fields = ()
 
 
+class MarketplaceBulkPriceTierInline(admin.TabularInline):
+    model = MarketplaceBulkPriceTier    
+    extra = 1
+
+class MarketplaceProductVariantInline(admin.TabularInline):
+    model = MarketplaceProductVariant   
+    extra = 1
+
+class MarketplaceProductReviewInline(admin.TabularInline):
+    model = MarketplaceProductReview
+    extra = 1
+    # readonly_fields = ("user", "rating", "review_text", "created_at")
+
 @admin.register(MarketplaceProduct)
 class MarketplaceProductAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "product",
+        "listed_price",
+        "discounted_price",
+        "percent_off",
+        "is_offer_active",
+        "estimated_delivery_days",
+        "shipping_cost",
+        "recent_purchases_count",
+        "listed_date",
+        "is_available",
+        "min_order",
+    )
+    search_fields = ("product__name",)
+    list_filter = ("is_available", "listed_date")
     autocomplete_fields = ["product"]
+    readonly_fields = ("listed_date",)
+    inlines = [
+        MarketplaceBulkPriceTierInline,
+        MarketplaceProductVariantInline,
+        MarketplaceProductReviewInline,
+    ]
+
+@admin.register(MarketplaceBulkPriceTier)
+class MarketplaceBulkPriceTierAdmin(admin.ModelAdmin):
+    list_display = ("product", "min_quantity", "discount_percent", "price_per_unit")
+    search_fields = ("product__product__name",)
+    list_filter = ("product",)
+
+@admin.register(MarketplaceProductVariant)
+class MarketplaceProductVariantAdmin(admin.ModelAdmin):
+    list_display = ("product", "name", "value", "additional_price", "stock")
+    search_fields = ("product__product__name", "name", "value")
+    list_filter = ("product", "name")
+
+@admin.register(MarketplaceProductReview)
+class MarketplaceProductReviewAdmin(admin.ModelAdmin):
+    list_display = ("product", "user", "rating", "created_at")
+    search_fields = ("product__product__name", "user__username", "review_text")
+    list_filter = ("rating", "created_at")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(ProductImage)
