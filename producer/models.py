@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 
 class Producer(models.Model):
@@ -382,30 +383,33 @@ class MarketplaceProduct(models.Model):
     listed_price = models.FloatField(verbose_name=_("Listed Price"))
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
-    bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"))
+    min_order = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_('Minimum Order'),
+        help_text='Minimum order quantity (required for distributors)'
+    )
+
+    def save(self, *args, **kwargs):
+        # Validate min_order for distributors
+        user_profile = None
+        try:
+            user_profile = self.product.user.userprofile
+        except Exception:
+            pass
+        if user_profile and getattr(user_profile, 'business_type', None) == 'distributor':
+            if self.min_order is None:
+                raise ValidationError({'min_order': 'This field is required for distributors.'})
+            if self.min_order <= 0:
+                raise ValidationError({'min_order': 'Minimum order must be greater than zero.'})
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.product.name} listed for {self.listed_price}"
+        return f"{self.product.name} listed for {self.listed_price} by user {self.product.user.username}"
 
     class Meta:
         verbose_name = _("Marketplace Product")
         verbose_name_plural = _("Marketplace Products")
-
-    def update_bid_end_date(self, bids_last_hour: int, bids_last_day: int) -> None:
-        """
-        Dynamically updates the bid_end_date based on heuristic rules.
-        """
-        if self.bid_end_date is None:
-            self.bid_end_date = timezone.now() + timedelta(days=1)
-
-        time_left = self.bid_end_date - timezone.now()
-        if bids_last_day == 0 and time_left <= timedelta(hours=6):
-            self.bid_end_date += timedelta(hours=12)
-        elif bids_last_day < 5 and bids_last_hour == 0:
-            self.bid_end_date += timedelta(hours=6)
-        elif bids_last_hour > 3:
-            self.bid_end_date -= timedelta(hours=2)
-        self.save()
 
 
 class ProductImage(models.Model):
