@@ -317,6 +317,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
     latitude = serializers.FloatField(source="product.user.userprofile.latitude", read_only=True)
     longitude = serializers.FloatField(source="product.user.userprofile.longitude", read_only=True)
+    min_order = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = MarketplaceProduct
@@ -327,10 +328,11 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "is_available",
             "id",
             "product_details",
-            "bid_end_date",
             "latitude",
             "longitude",
+            "min_order",
         ]
+
 
 
 class CitySerializer(serializers.ModelSerializer):
