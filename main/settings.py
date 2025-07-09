@@ -218,10 +218,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "producer.tasks.move_large_stock_to_stocklist",
         "schedule": crontab(minute=0, hour="*/3"),
     },
-    "update-bid-end-dates-every-hour": {
-        "task": "producer.tasks.update_bid_end_dates",
-        "schedule": crontab(minute=0, hour="*"),
-    },
+    # "update-bid-end-dates-every-hour": {
+    #     "task": "producer.tasks.update_bid_end_dates",
+    #     "schedule": crontab(minute=0, hour="*"),
+    # },
     "recalc_inventory_parameters": {
         "task": "producer.tasks.recalc_inventory_parameters",
         "schedule": crontab(minute=0, hour="*"),

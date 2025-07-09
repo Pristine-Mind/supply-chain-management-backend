@@ -1,11 +1,12 @@
 import uuid
+from collections import Counter
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.contrib.gis.db import models
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 
@@ -370,17 +371,12 @@ class StockHistory(models.Model):
 
 class MarketplaceProduct(models.Model):
     """
-    Represents a product listed in the marketplace.
-
-    Fields:
-    - product: The reference to the product in the stock list.
-    - listed_price: The price at which the product is listed in the marketplace.
-    - listed_date: The date when the product was listed in the marketplace.
-    - is_available: Indicates whether the product is still available for sale.
+    Represents a product listed in the marketplace with advanced pricing, offers, shipping, variants, engagement, and ratings features.
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
-    listed_price = models.FloatField(verbose_name=_("Listed Price"))
+    listed_price = models.FloatField(verbose_name=_('Listed Price'), help_text="Original price before discount.")
+    discounted_price = models.FloatField(null=True, blank=True, verbose_name=_('Discounted Price'), help_text="Discounted price if applicable.")
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
     min_order = models.PositiveIntegerField(
@@ -389,6 +385,11 @@ class MarketplaceProduct(models.Model):
         verbose_name=_('Minimum Order'),
         help_text='Minimum order quantity (required for distributors)'
     )
+    offer_start = models.DateTimeField(null=True, blank=True, verbose_name=_('Offer Start'))
+    offer_end = models.DateTimeField(null=True, blank=True, verbose_name=_('Offer End'))
+    estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Estimated Delivery Days'))
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_('Shipping Cost'))
+    recent_purchases_count = models.PositiveIntegerField(default=0, verbose_name=_('Recent Purchases (24h)'))
 
     def save(self, *args, **kwargs):
         # Validate min_order for distributors
@@ -402,14 +403,156 @@ class MarketplaceProduct(models.Model):
                 raise ValidationError({'min_order': 'This field is required for distributors.'})
             if self.min_order <= 0:
                 raise ValidationError({'min_order': 'Minimum order must be greater than zero.'})
+        # Discounted price validation
+        if self.discounted_price is not None:
+            if self.listed_price is None:
+                raise ValidationError({'listed_price': 'Listed price required if discounted price is set.'})
+            if self.discounted_price >= self.listed_price:
+                raise ValidationError({'discounted_price': 'Discounted price must be less than listed price.'})
+            if self.discounted_price <= 0:
+                raise ValidationError({'discounted_price': 'Discounted price must be greater than zero.'})
+        # Offer period validation
+        if self.offer_start and self.offer_end and self.offer_start >= self.offer_end:
+            raise ValidationError({'offer_end': 'Offer end must be after offer start.'})
         super().save(*args, **kwargs)
 
+    @property
+    def percent_off(self):
+        if self.discounted_price and self.listed_price:
+            return round(100 * (self.listed_price - self.discounted_price) / self.listed_price, 2)
+        return 0
+
+    @property
+    def savings_amount(self):
+        if self.discounted_price and self.listed_price:
+            return round(self.original_price - self.discounted_price, 2)
+        return 0
+
+    @property
+    def is_offer_active(self):
+        now = timezone.now()
+        return self.offer_start and self.offer_end and self.offer_start <= now <= self.offer_end
+
+    @property
+    def offer_countdown(self):
+        if self.is_offer_active:
+            return (self.offer_end - timezone.now()).total_seconds()
+        return None
+
+    @property
+    def is_free_shipping(self):
+        return self.shipping_cost == 0
+
+    @property
+    def average_rating(self):
+        reviews = self.reviews.all()
+        if not reviews:
+            return 0
+        return round(sum(r.rating for r in reviews) / reviews.count(), 2)
+
+    @property
+    def ratings_breakdown(self):
+        reviews = self.reviews.all()
+        breakdown = Counter(r.rating for r in reviews)
+        total = reviews.count()
+        return {str(star): round(100 * breakdown.get(star, 0) / total, 2) if total else 0 for star in range(1, 6)}
+
+    @property
+    def total_reviews(self):
+        return self.reviews.count()
+
     def __str__(self):
-        return f"{self.product.name} listed for {self.listed_price} by user {self.product.user.username}"
+        return f"{self.product.name} listed for {self.listed_price}"
 
     class Meta:
         verbose_name = _("Marketplace Product")
         verbose_name_plural = _("Marketplace Products")
+
+
+class MarketplaceBulkPriceTier(models.Model):
+    """
+    Represents a bulk pricing tier for a marketplace product.
+    Each tier defines a minimum quantity for a discount or special price per unit.
+    Fields:
+    - product: The related MarketplaceProduct.
+    - min_quantity: Minimum quantity required to qualify for this tier.
+    - discount_percent: Discount percent (optional, mutually exclusive with price_per_unit).
+    - price_per_unit: Special price per unit for this tier (optional).
+    """
+    product = models.ForeignKey(MarketplaceProduct, related_name='bulk_price_tiers', on_delete=models.CASCADE)
+    min_quantity = models.PositiveIntegerField(verbose_name=_('Min Quantity'))
+    discount_percent = models.FloatField(verbose_name=_('Discount Percent'), null=True, blank=True)
+    price_per_unit = models.FloatField(verbose_name=_('Price Per Unit'), null=True, blank=True)
+
+    class Meta:
+        unique_together = ('product', 'min_quantity')
+        ordering = ['min_quantity']
+        verbose_name = _("Bulk Price Tier")
+        verbose_name_plural = _("Bulk Price Tiers")
+
+    def clean(self):
+        if self.discount_percent is not None and (self.discount_percent < 0 or self.discount_percent > 100):
+            raise ValidationError({'discount_percent': 'Discount percent must be between 0 and 100.'})
+        if self.price_per_unit is not None and self.price_per_unit <= 0:
+            raise ValidationError({'price_per_unit': 'Price per unit must be greater than zero.'})
+
+    def __str__(self):
+        return f"{self.min_quantity}+ units: {self.discount_percent or ''}% off, {self.price_per_unit or ''} per unit"
+
+
+class MarketplaceProductVariant(models.Model):
+    """
+    Represents a specific variant of a marketplace product (e.g., size, color).
+    Fields:
+    - product: The related MarketplaceProduct.
+    - name: The name of the variant attribute (e.g., 'Size', 'Color').
+    - value: The value of the variant (e.g., 'XL', 'Red').
+    - additional_price: Additional price for this variant (added to base/original price).
+    - stock: Stock available for this variant.
+    """
+    product = models.ForeignKey(MarketplaceProduct, related_name='variants', on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, verbose_name=_('Variant Name'))
+    value = models.CharField(max_length=100, verbose_name=_('Variant Value'))
+    additional_price = models.FloatField(default=0, verbose_name=_('Additional Price'))
+    stock = models.PositiveIntegerField(default=0, verbose_name=_('Stock'))
+
+    class Meta:
+        unique_together = ('product', 'name', 'value')
+        verbose_name = _("Product Variant")
+        verbose_name_plural = _("Product Variants")
+
+    def __str__(self):
+        return f"{self.product} - {self.name}: {self.value}"
+
+
+class MarketplaceProductReview(models.Model):
+    """
+    Represents a review and rating for a marketplace product by a user.
+    Fields:
+    - product: The related MarketplaceProduct.
+    - user: The user who submitted the review.
+    - rating: Integer rating (1-5 stars).
+    - review_text: Optional review text.
+    - created_at: Timestamp when the review was created.
+    """
+    product = models.ForeignKey(MarketplaceProduct, related_name='reviews', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    rating = models.PositiveIntegerField(choices=[(i, str(i)) for i in range(1, 6)], verbose_name=_('Rating'))
+    review_text = models.TextField(blank=True, null=True, verbose_name=_('Review'))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('product', 'user')
+        ordering = ['-created_at']
+        verbose_name = _("Product Review")
+        verbose_name_plural = _("Product Reviews")
+
+    def clean(self):
+        if self.rating < 1 or self.rating > 5:
+            raise ValidationError({'rating': 'Rating must be between 1 and 5.'})
+
+    def __str__(self):
+        return f"{self.product} - {self.user} ({self.rating})"
 
 
 class ProductImage(models.Model):
