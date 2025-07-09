@@ -9,7 +9,10 @@ from .models import (
     City,
     Customer,
     LedgerEntry,
+    MarketplaceBulkPriceTier,
     MarketplaceProduct,
+    MarketplaceProductReview,
+    MarketplaceProductVariant,
     Order,
     Producer,
     Product,
@@ -313,25 +316,75 @@ class StockListSerializer(serializers.ModelSerializer):
         ]
 
 
+class MarketplaceBulkPriceTierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarketplaceBulkPriceTier    
+        fields = ["min_quantity", "discount_percent", "price_per_unit"]
+
+class MarketplaceProductVariantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarketplaceProductVariant
+        fields = ["name", "value", "additional_price", "stock"]
+
+class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    class Meta:
+        model = MarketplaceProductReview
+        fields = ["user", "rating", "review_text", "created_at"]
+
 class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
     latitude = serializers.FloatField(source="product.user.userprofile.latitude", read_only=True)
     longitude = serializers.FloatField(source="product.user.userprofile.longitude", read_only=True)
     min_order = serializers.IntegerField(required=False, allow_null=True)
+    bulk_price_tiers = MarketplaceBulkPriceTierSerializer(many=True, read_only=True)
+    variants = MarketplaceProductVariantSerializer(many=True, read_only=True)
+    reviews = MarketplaceProductReviewSerializer(many=True, read_only=True)
+    average_rating = serializers.FloatField(read_only=True)
+    ratings_breakdown = serializers.SerializerMethodField()
+    total_reviews = serializers.IntegerField(read_only=True)
+    percent_off = serializers.FloatField(read_only=True)
+    savings_amount = serializers.FloatField(read_only=True)
+    is_offer_active = serializers.BooleanField(read_only=True)
+    offer_countdown = serializers.SerializerMethodField()
+    is_free_shipping = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = MarketplaceProduct
         fields = [
+            "id",
             "product",
+            "product_details",
+            "discounted_price",
             "listed_price",
+            "percent_off",
+            "savings_amount",
+            "offer_start",
+            "offer_end",
+            "is_offer_active",
+            "offer_countdown",
+            "estimated_delivery_days",
+            "shipping_cost",
+            "is_free_shipping",
+            "recent_purchases_count",
             "listed_date",
             "is_available",
-            "id",
-            "product_details",
+            "min_order",
             "latitude",
             "longitude",
-            "min_order",
+            "bulk_price_tiers",
+            "variants",
+            "reviews",
+            "average_rating",
+            "ratings_breakdown",
+            "total_reviews",
         ]
+
+    def get_ratings_breakdown(self, obj):
+        return obj.ratings_breakdown
+
+    def get_offer_countdown(self, obj):
+        return obj.offer_countdown
 
 
 

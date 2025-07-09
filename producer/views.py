@@ -714,7 +714,13 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return MarketplaceProduct.objects.filter(is_available=True).order_by("-listed_date").distinct()
+        return (
+            MarketplaceProduct.objects.filter(is_available=True)
+            .select_related("product", "product__user", "product__user__userprofile")
+            .prefetch_related("bulk_price_tiers", "variants", "reviews")
+            .order_by("-listed_date")
+            .distinct()
+        )
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
