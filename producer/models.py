@@ -1,6 +1,7 @@
 import uuid
 from collections import Counter
 from datetime import timedelta
+from ckeditor.fields import RichTextField
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -121,7 +122,7 @@ class Product(models.Model):
         choices=ProductCategory.choices,
         default=ProductCategory.FRUITS,
     )
-    description = models.TextField(verbose_name=_("Product Description"))
+    description = RichTextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
     price = models.FloatField(verbose_name=_("Price"))
     cost_price = models.FloatField(verbose_name=_("Cost Price"))
