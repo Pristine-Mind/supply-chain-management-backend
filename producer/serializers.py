@@ -296,7 +296,7 @@ class StockHistorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StockList
-        fields = ["product", "moved_date", "product_details", "id", "is_pushed_to_marketplace"]
+        fields = ["product", "moved_date", "id", "is_pushed_to_marketplace", "product_name", "user_username"]
 
 
 class StockListSerializer(serializers.ModelSerializer):
