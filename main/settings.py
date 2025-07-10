@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "django_filters",
     "django_celery_beat",
     "anymail",
+    "ckeditor",
     # localapps
     "producer",
     "market",
@@ -266,3 +267,9 @@ ANYMAIL = {
 }
 
 DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
+
+CKEDITOR_CONFIGS = {
+    'default': {
+        'toolbar': 'full',
+    }
+}
