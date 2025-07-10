@@ -23,6 +23,7 @@ from .models import (
     Payment,
     Purchase,
 )
+from market.utils import notify_event
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
@@ -242,30 +243,30 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
-    product_id = serializers.IntegerField(write_only=True)
+    # product_id = serializers.IntegerField(write_only=True)
     message = serializers.CharField()
     sender_details = UserSerializer(source="sender", read_only=True)
 
     class Meta:
         model = ChatMessage
-        fields = ["sender", "product_id", "message", "timestamp", "sender_details"]
+        fields = ["sender", "product", "message", "timestamp", "sender_details"]
         read_only_fields = ["sender", "timestamp"]
 
-    def validate(self, data):
-        try:
-            product = MarketplaceProduct.objects.get(id=data["product_id"])
-        except MarketplaceProduct.DoesNotExist:
-            raise serializers.ValidationError("Product not found.")
-        data["product"] = product
-        return data
-
     def create(self, validated_data):
-        # product = validated_data["product"]
-        # message = validated_data["message"]
         validated_data["sender"] = self.context["request"].user
-        # chat_message = ChatMessage.objects.create(sender=self.context["request"].user, product=product, message=message)
-        return super().create(validated_data)
-        # return chat_message
+        chat_message = super().create(validated_data)
+
+        product = validated_data["product"]
+        sender = validated_data["sender"]
+        product_user = product.product.user
+        if product_user != sender:
+            notify_event(
+                user=product_user,
+                notif_type="alert",
+                message=f"New chat message from {sender.username} about your product '{product.product.name}': {chat_message.message}",
+                via_in_app=True,
+            )
+        return chat_message
 
 
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
