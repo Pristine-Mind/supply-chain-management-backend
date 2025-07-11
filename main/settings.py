@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "producer",
     "market",
     "user",
+    "report",
     "drf_spectacular",
 ]
 
