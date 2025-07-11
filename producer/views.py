@@ -404,9 +404,9 @@ class ProducerViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Producer.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Producer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return Producer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Producer.objects.none()
 
@@ -432,9 +432,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Customer.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return Customer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Customer.objects.none()
 
@@ -454,9 +454,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Product.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return Product.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Product.objects.none()
 
@@ -508,9 +508,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Order.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Order.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return Order.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Order.objects.none()
 
@@ -530,9 +530,9 @@ class SaleViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Sale.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Sale.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return Sale.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Sale.objects.none()
 
@@ -545,7 +545,7 @@ class DashboardAPIView(APIView):
         if not user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
@@ -553,15 +553,15 @@ class DashboardAPIView(APIView):
         shop_id = user_profile.shop_id
         current_year = timezone.now().year
 
-        total_products = Product.objects.filter(user__userprofile__shop_id=shop_id).distinct().count() or 0
-        total_orders = Order.objects.filter(user__userprofile__shop_id=shop_id).count()
-        total_sales = Sale.objects.filter(user__userprofile__shop_id=shop_id).count()
-        total_customers = Customer.objects.filter(user__userprofile__shop_id=shop_id).count()
+        total_products = Product.objects.filter(user__user_profile__shop_id=shop_id).distinct().count() or 0
+        total_orders = Order.objects.filter(user__user_profile__shop_id=shop_id).count()
+        total_sales = Sale.objects.filter(user__user_profile__shop_id=shop_id).count()
+        total_customers = Customer.objects.filter(user__user_profile__shop_id=shop_id).count()
         pending_orders = Order.objects.filter(
-            status__in=[Order.Status.PENDING, Order.Status.APPROVED], user__userprofile__shop_id=shop_id
+            status__in=[Order.Status.PENDING, Order.Status.APPROVED], user__user_profile__shop_id=shop_id
         ).count()
         total_revenue = (
-            Sale.objects.filter(user__userprofile__shop_id=shop_id).aggregate(total_revenue=Sum("sale_price"))[
+            Sale.objects.filter(user__user_profile__shop_id=shop_id).aggregate(total_revenue=Sum("sale_price"))[
                 "total_revenue"
             ]
             or 0
@@ -569,7 +569,7 @@ class DashboardAPIView(APIView):
 
         # Group sales by month for the current year
         sales_trends = (
-            Sale.objects.filter(user__userprofile__shop_id=shop_id, sale_date__year=current_year)
+            Sale.objects.filter(user__user_profile__shop_id=shop_id, sale_date__year=current_year)
             .annotate(month=TruncMonth("sale_date"))
             .values("month")
             .annotate(total_sales=Sum("sale_price"))
@@ -618,7 +618,7 @@ class TopSalesCustomersView(APIView):
         if not user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
@@ -626,7 +626,7 @@ class TopSalesCustomersView(APIView):
         shop_id = user_profile.shop_id
 
         top_sales_customers = (
-            Sale.objects.filter(user__userprofile__shop_id=shop_id, sale_date__year=current_year)
+            Sale.objects.filter(user__user_profile__shop_id=shop_id, sale_date__year=current_year)
             .annotate(total_sales_amount=ExpressionWrapper(F("sale_price") * F("quantity"), output_field=FloatField()))
             .values("order__customer__id", "order__customer__name")
             .annotate(total_sales=Sum("total_sales_amount"), name=F("order__customer__name"), id=F("order__customer__id"))
@@ -645,7 +645,7 @@ class TopOrdersCustomersView(APIView):
         if not user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
@@ -653,7 +653,7 @@ class TopOrdersCustomersView(APIView):
         shop_id = user_profile.shop_id
 
         top_orders_customers = (
-            Customer.objects.filter(user__userprofile__shop_id=shop_id, order__order_date__year=current_year)
+            Customer.objects.filter(user__user_profile__shop_id=shop_id, order__order_date__year=current_year)
             .annotate(total_orders=Count("order"))
             .order_by("-total_orders")[:10]
         )
@@ -672,9 +672,9 @@ class StockListView(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return StockList.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return self.queryset.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return self.queryset.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return StockList.objects.none()
 
@@ -716,7 +716,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             MarketplaceProduct.objects.filter(is_available=True)
-            .select_related("product", "product__user", "product__user__userprofile")
+            .select_related("product", "product__user", "product__user__user_profile")
             .prefetch_related("bulk_price_tiers", "variants", "reviews")
             .order_by("-listed_date")
             .distinct()
@@ -767,7 +767,7 @@ class StatsAPIView(APIView):
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
 
-        parsed_start_date, parsed_end_date = None, None
+        parsed_start_date, parsed_end_date = None, None 
         if start_date and end_date:
             try:
                 parsed_start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d")
@@ -782,13 +782,13 @@ class StatsAPIView(APIView):
         if not user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
         # Filter data based on the shop_id of the user's profile
         shop_id = user_profile.shop_id
-        sales_query = Sale.objects.filter(user__userprofile__shop_id=shop_id)
+        sales_query = Sale.objects.filter(user__user_profile__shop_id=shop_id)
 
         if filter_params["location"]:
             sales_query = sales_query.filter(order__customer__city=filter_params["location"])
@@ -881,9 +881,9 @@ def export_producers_to_excel(request):
     if not user.is_authenticated:
         return
 
-    user_profile = getattr(user, "userprofile", None)
+    user_profile = getattr(user, "user_profile", None)
     if user_profile:
-        queryset = Producer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+        queryset = Producer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
     wb = export_queryset_to_excel(queryset, field_names)
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -911,9 +911,9 @@ def export_customers_to_excel(request):
     if not user.is_authenticated:
         return
 
-    user_profile = getattr(user, "userprofile", None)
+    user_profile = getattr(user, "user_profile", None)
     if user_profile:
-        queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+        queryset = Customer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
     wb = export_queryset_to_excel(queryset, field_names)
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -956,9 +956,9 @@ def export_products_to_excel(request):
     if not user.is_authenticated:
         return
 
-    user_profile = getattr(user, "userprofile", None)
+    user_profile = getattr(user, "user_profile", None)
     if user_profile:
-        queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+        queryset = Product.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
     wb = export_queryset_to_excel(queryset, field_names, headers)
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -1003,11 +1003,11 @@ def export_orders_to_excel(request):
     end_date = request.query_params.get("end_date")
     product_id = request.query_params.get("product_id")
 
-    user_profile = getattr(user, "userprofile", None)
+    user_profile = getattr(user, "user_profile", None)
     if not user_profile:
         return Response({"error": "User profile not found"}, status=status.HTTP_400_BAD_REQUEST)
 
-    queryset = Order.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related("customer", "product")
+    queryset = Order.objects.filter(user__user_profile__shop_id=user_profile.shop_id).select_related("customer", "product")
     if start_date:
         try:
             start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d").date()
@@ -1084,12 +1084,12 @@ def export_sales_to_excel(request):
     end_date = request.query_params.get("end_date")
     product_id = request.query_params.get("product_id")
 
-    user_profile = getattr(user, "userprofile", None)
+    user_profile = getattr(user, "user_profile", None)
     if not user_profile:
         return Response({"error": "User profile not found"}, status=status.HTTP_400_BAD_REQUEST)
 
     # Base queryset with shop filtering
-    queryset = Sale.objects.filter(user__userprofile__shop_id=user_profile.shop_id).select_related("order__product")
+    queryset = Sale.objects.filter(user__user_profile__shop_id=user_profile.shop_id).select_related("order__product")
 
     # Apply date filters
     if start_date:
@@ -1295,8 +1295,8 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return PurchaseOrder.objects.none()
 
-        user_profile = getattr(user, "userprofile", None)
+        user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return PurchaseOrder.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+            return PurchaseOrder.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return PurchaseOrder.objects.none()

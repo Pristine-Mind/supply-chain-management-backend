@@ -7,4 +7,3 @@ class ProducerConfig(AppConfig):
 
     def ready(self):
         import producer.admin  # Import admin to register models
-        import producer.receivers  # noqa

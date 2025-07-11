@@ -51,7 +51,7 @@ class LoginAPIView(APIView):
             token, created = Token.objects.get_or_create(user=user)
 
             try:
-                user_profile = user.userprofile
+                user_profile = user.user_profile
                 has_access_to_marketplace = user_profile.has_access_to_marketplace
             except UserProfile.DoesNotExist:
                 has_access_to_marketplace = False
