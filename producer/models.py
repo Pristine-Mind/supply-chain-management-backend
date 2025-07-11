@@ -1,15 +1,14 @@
 import uuid
 from collections import Counter
 from datetime import timedelta
-from ckeditor.fields import RichTextField
 
+from ckeditor.fields import RichTextField
 from django.contrib.auth.models import User
-from django.utils import timezone
 from django.contrib.gis.db import models
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.core.exceptions import ValidationError
 
 
 class Producer(models.Model):
@@ -376,21 +375,23 @@ class MarketplaceProduct(models.Model):
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
-    listed_price = models.FloatField(verbose_name=_('Listed Price'), help_text="Original price before discount.")
-    discounted_price = models.FloatField(null=True, blank=True, verbose_name=_('Discounted Price'), help_text="Discounted price if applicable.")
+    listed_price = models.FloatField(verbose_name=_("Listed Price"), help_text="Original price before discount.")
+    discounted_price = models.FloatField(
+        null=True, blank=True, verbose_name=_("Discounted Price"), help_text="Discounted price if applicable."
+    )
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
     min_order = models.PositiveIntegerField(
         null=True,
         blank=True,
-        verbose_name=_('Minimum Order'),
-        help_text='Minimum order quantity (required for distributors)'
+        verbose_name=_("Minimum Order"),
+        help_text="Minimum order quantity (required for distributors)",
     )
-    offer_start = models.DateTimeField(null=True, blank=True, verbose_name=_('Offer Start'))
-    offer_end = models.DateTimeField(null=True, blank=True, verbose_name=_('Offer End'))
-    estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Estimated Delivery Days'))
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_('Shipping Cost'))
-    recent_purchases_count = models.PositiveIntegerField(default=0, verbose_name=_('Recent Purchases (24h)'))
+    offer_start = models.DateTimeField(null=True, blank=True, verbose_name=_("Offer Start"))
+    offer_end = models.DateTimeField(null=True, blank=True, verbose_name=_("Offer End"))
+    estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Estimated Delivery Days"))
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_("Shipping Cost"))
+    recent_purchases_count = models.PositiveIntegerField(default=0, verbose_name=_("Recent Purchases (24h)"))
 
     def save(self, *args, **kwargs):
         # Validate min_order for distributors
@@ -399,22 +400,22 @@ class MarketplaceProduct(models.Model):
             user_profile = self.product.user.userprofile
         except Exception:
             pass
-        if user_profile and getattr(user_profile, 'business_type', None) == 'distributor':
+        if user_profile and getattr(user_profile, "business_type", None) == "distributor":
             if self.min_order is None:
-                raise ValidationError({'min_order': 'This field is required for distributors.'})
+                raise ValidationError({"min_order": "This field is required for distributors."})
             if self.min_order <= 0:
-                raise ValidationError({'min_order': 'Minimum order must be greater than zero.'})
+                raise ValidationError({"min_order": "Minimum order must be greater than zero."})
         # Discounted price validation
         if self.discounted_price is not None:
             if self.listed_price is None:
-                raise ValidationError({'listed_price': 'Listed price required if discounted price is set.'})
+                raise ValidationError({"listed_price": "Listed price required if discounted price is set."})
             if self.discounted_price >= self.listed_price:
-                raise ValidationError({'discounted_price': 'Discounted price must be less than listed price.'})
+                raise ValidationError({"discounted_price": "Discounted price must be less than listed price."})
             if self.discounted_price <= 0:
-                raise ValidationError({'discounted_price': 'Discounted price must be greater than zero.'})
+                raise ValidationError({"discounted_price": "Discounted price must be greater than zero."})
         # Offer period validation
         if self.offer_start and self.offer_end and self.offer_start >= self.offer_end:
-            raise ValidationError({'offer_end': 'Offer end must be after offer start.'})
+            raise ValidationError({"offer_end": "Offer end must be after offer start."})
         super().save(*args, **kwargs)
 
     @property
@@ -480,22 +481,23 @@ class MarketplaceBulkPriceTier(models.Model):
     - discount_percent: Discount percent (optional, mutually exclusive with price_per_unit).
     - price_per_unit: Special price per unit for this tier (optional).
     """
-    product = models.ForeignKey(MarketplaceProduct, related_name='bulk_price_tiers', on_delete=models.CASCADE)
-    min_quantity = models.PositiveIntegerField(verbose_name=_('Min Quantity'))
-    discount_percent = models.FloatField(verbose_name=_('Discount Percent'), null=True, blank=True)
-    price_per_unit = models.FloatField(verbose_name=_('Price Per Unit'), null=True, blank=True)
+
+    product = models.ForeignKey(MarketplaceProduct, related_name="bulk_price_tiers", on_delete=models.CASCADE)
+    min_quantity = models.PositiveIntegerField(verbose_name=_("Min Quantity"))
+    discount_percent = models.FloatField(verbose_name=_("Discount Percent"), null=True, blank=True)
+    price_per_unit = models.FloatField(verbose_name=_("Price Per Unit"), null=True, blank=True)
 
     class Meta:
-        unique_together = ('product', 'min_quantity')
-        ordering = ['min_quantity']
+        unique_together = ("product", "min_quantity")
+        ordering = ["min_quantity"]
         verbose_name = _("Bulk Price Tier")
         verbose_name_plural = _("Bulk Price Tiers")
 
     def clean(self):
         if self.discount_percent is not None and (self.discount_percent < 0 or self.discount_percent > 100):
-            raise ValidationError({'discount_percent': 'Discount percent must be between 0 and 100.'})
+            raise ValidationError({"discount_percent": "Discount percent must be between 0 and 100."})
         if self.price_per_unit is not None and self.price_per_unit <= 0:
-            raise ValidationError({'price_per_unit': 'Price per unit must be greater than zero.'})
+            raise ValidationError({"price_per_unit": "Price per unit must be greater than zero."})
 
     def __str__(self):
         return f"{self.min_quantity}+ units: {self.discount_percent or ''}% off, {self.price_per_unit or ''} per unit"
@@ -511,14 +513,15 @@ class MarketplaceProductVariant(models.Model):
     - additional_price: Additional price for this variant (added to base/original price).
     - stock: Stock available for this variant.
     """
-    product = models.ForeignKey(MarketplaceProduct, related_name='variants', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100, verbose_name=_('Variant Name'))
-    value = models.CharField(max_length=100, verbose_name=_('Variant Value'))
-    additional_price = models.FloatField(default=0, verbose_name=_('Additional Price'))
-    stock = models.PositiveIntegerField(default=0, verbose_name=_('Stock'))
+
+    product = models.ForeignKey(MarketplaceProduct, related_name="variants", on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, verbose_name=_("Variant Name"))
+    value = models.CharField(max_length=100, verbose_name=_("Variant Value"))
+    additional_price = models.FloatField(default=0, verbose_name=_("Additional Price"))
+    stock = models.PositiveIntegerField(default=0, verbose_name=_("Stock"))
 
     class Meta:
-        unique_together = ('product', 'name', 'value')
+        unique_together = ("product", "name", "value")
         verbose_name = _("Product Variant")
         verbose_name_plural = _("Product Variants")
 
@@ -536,21 +539,22 @@ class MarketplaceProductReview(models.Model):
     - review_text: Optional review text.
     - created_at: Timestamp when the review was created.
     """
-    product = models.ForeignKey(MarketplaceProduct, related_name='reviews', on_delete=models.CASCADE)
+
+    product = models.ForeignKey(MarketplaceProduct, related_name="reviews", on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    rating = models.PositiveIntegerField(choices=[(i, str(i)) for i in range(1, 6)], verbose_name=_('Rating'))
-    review_text = models.TextField(blank=True, null=True, verbose_name=_('Review'))
+    rating = models.PositiveIntegerField(choices=[(i, str(i)) for i in range(1, 6)], verbose_name=_("Rating"))
+    review_text = models.TextField(blank=True, null=True, verbose_name=_("Review"))
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('product', 'user')
-        ordering = ['-created_at']
+        unique_together = ("product", "user")
+        ordering = ["-created_at"]
         verbose_name = _("Product Review")
         verbose_name_plural = _("Product Reviews")
 
     def clean(self):
         if self.rating < 1 or self.rating > 5:
-            raise ValidationError({'rating': 'Rating must be between 1 and 5.'})
+            raise ValidationError({"rating": "Rating must be between 1 and 5."})
 
     def __str__(self):
         return f"{self.product} - {self.user} ({self.rating})"

@@ -6,17 +6,22 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0028_stockhistory_is_active_alter_stockhistory_user'),
+        ("producer", "0028_stockhistory_is_active_alter_stockhistory_user"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='marketplaceproduct',
-            name='bid_end_date',
+            model_name="marketplaceproduct",
+            name="bid_end_date",
         ),
         migrations.AddField(
-            model_name='marketplaceproduct',
-            name='min_order',
-            field=models.PositiveIntegerField(blank=True, help_text='Minimum order quantity (required for distributors)', null=True, verbose_name='Minimum Order'),
+            model_name="marketplaceproduct",
+            name="min_order",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="Minimum order quantity (required for distributors)",
+                null=True,
+                verbose_name="Minimum Order",
+            ),
         ),
     ]

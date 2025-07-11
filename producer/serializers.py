@@ -318,19 +318,23 @@ class StockListSerializer(serializers.ModelSerializer):
 
 class MarketplaceBulkPriceTierSerializer(serializers.ModelSerializer):
     class Meta:
-        model = MarketplaceBulkPriceTier    
+        model = MarketplaceBulkPriceTier
         fields = ["min_quantity", "discount_percent", "price_per_unit"]
+
 
 class MarketplaceProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketplaceProductVariant
         fields = ["name", "value", "additional_price", "stock"]
 
+
 class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = MarketplaceProductReview
         fields = ["user", "rating", "review_text", "created_at"]
+
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
@@ -385,7 +389,6 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
     def get_offer_countdown(self, obj):
         return obj.offer_countdown
-
 
 
 class CitySerializer(serializers.ModelSerializer):

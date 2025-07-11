@@ -70,7 +70,7 @@ INSTALLED_APPS = [
     "anymail",
     "ckeditor",
     # localapps
-    "producer",
+    "producer.apps.ProducerConfig",
     "market",
     "user",
     "report",
@@ -270,7 +270,7 @@ ANYMAIL = {
 DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
 
 CKEDITOR_CONFIGS = {
-    'default': {
-        'toolbar': 'full',
+    "default": {
+        "toolbar": "full",
     }
 }
