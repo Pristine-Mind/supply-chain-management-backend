@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework import serializers
 
+from market.utils import notify_event
 from producer.models import MarketplaceProduct
 from producer.serializers import MarketplaceProductSerializer
 
@@ -23,7 +24,6 @@ from .models import (
     Payment,
     Purchase,
 )
-from market.utils import notify_event
 
 
 class PurchaseSerializer(serializers.ModelSerializer):

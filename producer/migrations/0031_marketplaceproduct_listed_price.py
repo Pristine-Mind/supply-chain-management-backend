@@ -6,14 +6,14 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0030_remove_marketplaceproduct_listed_price_and_more'),
+        ("producer", "0030_remove_marketplaceproduct_listed_price_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketplaceproduct',
-            name='listed_price',
-            field=models.FloatField(default=100, help_text='Original price before discount.', verbose_name='Listed Price'),
+            model_name="marketplaceproduct",
+            name="listed_price",
+            field=models.FloatField(default=100, help_text="Original price before discount.", verbose_name="Listed Price"),
             preserve_default=False,
         ),
     ]
