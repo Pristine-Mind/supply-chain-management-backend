@@ -7,6 +7,12 @@ license = "GNU Affero General Public License v3.0"
 readme = "README.md"
 package-mode = false
 
+# Include py.typed for type checking
+packages = [
+    { include = "**/*.py" },
+    { include = "py.typed" },
+]
+
 [tool.poetry.dependencies]
 python = "^3.12"
 requests = "*"
@@ -76,3 +82,27 @@ reportMissingImports = true
 reportMissingTypeStubs = false
 venvPath = "."
 venv = ".venv"
+
+# Enable type checking for Django and third-party packages
+typeCheckingMode = "basic"
+
+# Path to the py.typed file
+pythonVersion = "3.12"
+pythonPlatform = "All"
+
+# Add type stubs for better type checking
+typeStubsPath = "."
+
+# Enable type checking for Django
+django = true
+
+# Add type checking for Django REST framework
+drf = true
+
+# Ignore specific type checking errors
+# [tool.pyright.reportGeneralTypeIssues]
+# reportUnknownMemberType = false
+# reportUnknownVariableType = false
+# reportUnknownArgumentType = false
+# reportUnknownLambdaType = false
+# reportUnknownParameterType = false

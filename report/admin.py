@@ -1,19 +1,23 @@
-from io import BytesIO
 import datetime
-from django.http import HttpResponse
+import logging
+from io import BytesIO
+
 from django.contrib import admin, messages
+from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.utils.exceptions import SheetTitleException
-import logging
-from report.models import DailySalesReport, DailySalesReportItem
 
+from report.models import DailySalesReport, DailySalesReportItem
+from user.admin_mixins import RoleBasedAdminMixin
 
 logger = logging.getLogger(__name__)
 
+
 def safe_sheet_title(title: str) -> str:
-    for ch in ['\n','\r','\t','/','\\','?','*','[',']',':']:
-        title = title.replace(ch, ' ')
-    return title.strip()[:31] or 'Sheet1'
+    for ch in ["\n", "\r", "\t", "/", "\\", "?", "*", "[", "]", ":"]:
+        title = title.replace(ch, " ")
+    return title.strip()[:31] or "Sheet1"
+
 
 def export_to_excel(queryset, filename_prefix, headers, row_iterator):
     """
@@ -38,16 +42,14 @@ def export_to_excel(queryset, filename_prefix, headers, row_iterator):
 
     today = datetime.date.today().strftime("%Y%m%d")
     fname = f"{filename_prefix}_{today}.xlsx"
-    resp = HttpResponse(
-        buf.read(),
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     resp["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
 
 
 @admin.register(DailySalesReport)
-class DailySalesReportAdmin(admin.ModelAdmin):
+class DailySalesReportAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "admin"  # Only admin users can access
     list_display = ("report_date", "generated_at", "total_items", "total_revenue")
     actions = ["export_reports"]
 
@@ -56,6 +58,7 @@ class DailySalesReportAdmin(admin.ModelAdmin):
             self.message_user(request, "No reports selected.", level=messages.WARNING)
             return
         headers = ["Report Date", "Generated At", "Total Items", "Total Revenue"]
+
         def rows():
             for rpt in queryset.order_by("report_date"):
                 yield [
@@ -64,16 +67,19 @@ class DailySalesReportAdmin(admin.ModelAdmin):
                     rpt.total_items,
                     float(rpt.total_revenue),
                 ]
+
         try:
             return export_to_excel(queryset, "daily_sales_reports", headers, rows)
         except Exception as e:
             logger.exception("Failed to export reports")
             self.message_user(request, f"Error: {e}", level=messages.ERROR)
+
     export_reports.short_description = "Export selected reports to Excel"
 
 
 @admin.register(DailySalesReportItem)
-class DailySalesReportItemAdmin(admin.ModelAdmin):
+class DailySalesReportItemAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "admin"  # Only admin users can access
     list_display = ("report", "date", "product", "product_owner", "customer", "unit_price", "quantity", "line_total")
     list_select_related = ("report", "product", "product_owner", "customer")
     actions = ["export_items"]
@@ -83,6 +89,7 @@ class DailySalesReportItemAdmin(admin.ModelAdmin):
             self.message_user(request, "No items selected.", level=messages.WARNING)
             return
         headers = ["Report Date", "Date", "Product", "Product Owner", "Customer", "Unit Price", "Quantity", "Line Total"]
+
         def rows():
             for item in queryset.select_related("report", "product", "product_owner", "customer"):
                 yield [
@@ -95,9 +102,11 @@ class DailySalesReportItemAdmin(admin.ModelAdmin):
                     item.quantity,
                     float(item.line_total),
                 ]
+
         try:
             return export_to_excel(queryset, "daily_sales_items", headers, rows)
         except Exception as e:
             logger.exception("Failed to export items")
             self.message_user(request, f"Error: {e}", level=messages.ERROR)
+
     export_items.short_description = "Export selected items to Excel"

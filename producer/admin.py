@@ -1,4 +1,10 @@
+from typing import Any, cast
+
 from django.contrib import admin
+from django.db.models import QuerySet
+from django.http import HttpRequest
+
+from user.admin_mixins import RoleBasedAdminMixin
 
 from .models import (
     AuditLog,
@@ -20,15 +26,62 @@ from .models import (
 
 
 @admin.register(Producer)
-class ProducerAdmin(admin.ModelAdmin):
+class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
     list_display = ("name", "contact", "email", "registration_number", "created_at", "updated_at")
     search_fields = ("name", "email", "registration_number")
     list_filter = ("created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # Staff and superusers can see everything
+        if request.user.is_staff or request.user.is_superuser:
+            return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
 
 @admin.register(Customer)
-class CustomerAdmin(admin.ModelAdmin):
+class CustomerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view and edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = (
         "name",
         "customer_type",
@@ -45,7 +98,31 @@ class CustomerAdmin(admin.ModelAdmin):
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = (
         "name",
         "producer",
@@ -65,7 +142,31 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
+class OrderAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view and edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = (
         "order_number",
         "customer",
@@ -84,7 +185,31 @@ class OrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(Sale)
-class SaleAdmin(admin.ModelAdmin):
+class SaleAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(order__user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = ("order", "quantity", "sale_price", "sale_date", "payment_status", "payment_due_date")
     search_fields = ("order__customer__name", "order__product__name", "order__order_number")
     list_filter = ("sale_date", "payment_status")
@@ -95,7 +220,31 @@ class SaleAdmin(admin.ModelAdmin):
 
 
 @admin.register(StockList)
-class StockListAdmin(admin.ModelAdmin):
+class StockListAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = ("product", "moved_date")
     search_fields = ("product__name",)
     list_filter = ("moved_date",)
@@ -104,7 +253,31 @@ class StockListAdmin(admin.ModelAdmin):
 
 
 @admin.register(StockHistory)
-class StockHistoryAdmin(admin.ModelAdmin):
+class StockHistoryAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, only managers and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = ("product", "date", "quantity_in", "quantity_out", "user", "notes")
     search_fields = ("product__name", "user__username", "notes")
     list_filter = ("date", "product", "user")
@@ -114,20 +287,47 @@ class StockHistoryAdmin(admin.ModelAdmin):
 
 
 class MarketplaceBulkPriceTierInline(admin.TabularInline):
-    model = MarketplaceBulkPriceTier    
+    model = MarketplaceBulkPriceTier
     extra = 1
 
+
 class MarketplaceProductVariantInline(admin.TabularInline):
-    model = MarketplaceProductVariant   
+    model = MarketplaceProductVariant
     extra = 1
+
 
 class MarketplaceProductReviewInline(admin.TabularInline):
     model = MarketplaceProductReview
     extra = 1
     # readonly_fields = ("user", "rating", "review_text", "created_at")
 
+
 @admin.register(MarketplaceProduct)
-class MarketplaceProductAdmin(admin.ModelAdmin):
+class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = (
         "id",
         "product",
@@ -152,20 +352,26 @@ class MarketplaceProductAdmin(admin.ModelAdmin):
         MarketplaceProductReviewInline,
     ]
 
+
 @admin.register(MarketplaceBulkPriceTier)
-class MarketplaceBulkPriceTierAdmin(admin.ModelAdmin):
+class MarketplaceBulkPriceTierAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_owner"  # Business owners and above can view and edit
     list_display = ("product", "min_quantity", "discount_percent", "price_per_unit")
     search_fields = ("product__product__name",)
     list_filter = ("product",)
 
+
 @admin.register(MarketplaceProductVariant)
-class MarketplaceProductVariantAdmin(admin.ModelAdmin):
+class MarketplaceProductVariantAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
     list_display = ("product", "name", "value", "additional_price", "stock")
     search_fields = ("product__product__name", "name", "value")
     list_filter = ("product", "name")
 
+
 @admin.register(MarketplaceProductReview)
-class MarketplaceProductReviewAdmin(admin.ModelAdmin):
+class MarketplaceProductReviewAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_owner"  # Business owners and above can view, only managers and above can edit
     list_display = ("product", "user", "rating", "created_at")
     search_fields = ("product__product__name", "user__username", "review_text")
     list_filter = ("rating", "created_at")
@@ -173,14 +379,26 @@ class MarketplaceProductReviewAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductImage)
-class ProductImageAdmin(admin.ModelAdmin):
+class ProductImageAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
     autocomplete_fields = [
         "product",
     ]
 
 
 @admin.register(LedgerEntry)
-class LedgerEntryAdmin(admin.ModelAdmin):
+class LedgerEntryAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_owner"  # Business owners and above can view, only managers and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        if not request.user.is_superuser and hasattr(request.user, "user_profile"):
+            role = request.user.user_profile.role.code
+            if role == "business_owner":
+                # Business owners can only see their organization's ledger entries
+                return qs.filter(product__user__user_profile__shop_id=request.user.user_profile.shop_id)
+        return qs.none()
+
     list_display = (
         "id",
         "account_type",
@@ -194,14 +412,46 @@ class LedgerEntryAdmin(admin.ModelAdmin):
 
 
 @admin.register(AuditLog)
-class AuditLogAdmin(admin.ModelAdmin):
+class AuditLogAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "manager"  # Managers and above can view, only admins can edit
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False  # Prevent adding audit logs through admin
+
+    def has_change_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False  # Prevent modifying audit logs through admin
+
     list_display = ("id", "transaction_type", "reference_id", "entity_id", "amount")
     search_fields = ("reference_id", "user__username", "transaction_type")
     list_filter = ("transaction_type", "user")
 
 
 @admin.register(PurchaseOrder)
-class PurchaseOrderAdmin(admin.ModelAdmin):
+class PurchaseOrderAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = super().get_queryset(request)
+        # # Staff and superusers can see everything
+        # if request.user.is_staff or request.user.is_superuser:
+        #     return qs
+
+        if not hasattr(request.user, "user_profile"):
+            return qs.none()
+
+        user_profile = request.user.user_profile
+        if not user_profile.role:
+            return qs.none()
+
+        # Filter by shop_id if user is business_owner or business_staff
+        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+            return qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
+        # For other roles, only show their own records
+        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+            return qs.all()
+
+        return qs.none()
+
     list_display = ("id", "product", "quantity", "created_at", "approved", "sent_to_vendor")
     search_fields = ("product__name",)
     list_filter = ("approved", "sent_to_vendor")
