@@ -95,7 +95,7 @@ class SMSService:
         try:
             # Get buyer's phone number
             buyer = payment.purchase.buyer
-            user_profile = buyer.userprofile
+            user_profile = buyer.user_profile
 
             if not user_profile.phone_number:
                 logger.warning(f"No phone number found for user {buyer.username}")
@@ -130,7 +130,7 @@ class SMSService:
         try:
             # Get buyer's phone number
             buyer = payment.purchase.buyer
-            user_profile = buyer.userprofile
+            user_profile = buyer.user_profile
 
             if not user_profile.phone_number:
                 logger.warning(f"No phone number found for user {buyer.username}")

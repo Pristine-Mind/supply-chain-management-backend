@@ -338,8 +338,8 @@ class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
-    latitude = serializers.FloatField(source="product.user.userprofile.latitude", read_only=True)
-    longitude = serializers.FloatField(source="product.user.userprofile.longitude", read_only=True)
+    latitude = serializers.FloatField(source="product.user.user_profile.latitude", read_only=True)
+    longitude = serializers.FloatField(source="product.user.user_profile.longitude", read_only=True)
     min_order = serializers.IntegerField(required=False, allow_null=True)
     bulk_price_tiers = MarketplaceBulkPriceTierSerializer(many=True, read_only=True)
     variants = MarketplaceProductVariantSerializer(many=True, read_only=True)

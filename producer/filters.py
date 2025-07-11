@@ -45,10 +45,10 @@ class SaleFilter(django_filters.FilterSet):
         request = self.request
         user = getattr(request, "user", None)
         if user and user.is_authenticated:
-            user_profile = getattr(user, "userprofile", None)
+            user_profile = getattr(user, "user_profile", None)
             if user_profile:
-                self.filters["customer"].queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
-                self.filters["product"].queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+                self.filters["customer"].queryset = Customer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+                self.filters["product"].queryset = Product.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
             else:
                 self.filters["customer"].queryset = Customer.objects.none()
                 self.filters["product"].queryset = Product.objects.none()
@@ -86,7 +86,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
     city = django_filters.CharFilter(field_name="product__location__name", lookup_expr="exact")
     profile_type = django_filters.ChoiceFilter(
         choices=UserProfile.BusinessType.choices,
-        field_name="product__user__userprofile__business_type",
+        field_name="product__user__user_profile__business_type",
         label="Profile Type",
     )
 
@@ -121,10 +121,10 @@ class OrderFilter(django_filters.FilterSet):
         request = getattr(self, "request", None)
         user = getattr(request, "user", None) if request else None
         if user and user.is_authenticated:
-            user_profile = getattr(user, "userprofile", None)
+            user_profile = getattr(user, "user_profile", None)
             if user_profile:
-                self.filters["customer"].queryset = Customer.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
-                self.filters["product"].queryset = Product.objects.filter(user__userprofile__shop_id=user_profile.shop_id)
+                self.filters["customer"].queryset = Customer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+                self.filters["product"].queryset = Product.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
             else:
                 self.filters["customer"].queryset = Customer.objects.none()
                 self.filters["product"].queryset = Product.objects.none()
