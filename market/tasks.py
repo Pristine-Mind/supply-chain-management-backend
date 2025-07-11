@@ -6,7 +6,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from requests.exceptions import RequestException
 
-from producer.models import Sale, Order
+from producer.models import Order, Sale
 
 
 @shared_task

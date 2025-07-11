@@ -183,6 +183,7 @@ def notify_event(
             message=message,
         )
         from .tasks import send_email
+
         send_email.delay(
             to_email=email_addr,
             subject=message[:50],
