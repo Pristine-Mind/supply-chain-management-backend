@@ -62,11 +62,25 @@ def order_notifications(sender, instance, created, **kwargs):
             message=msg,
             via_in_app=True,
             via_email=True,
-            email_addr=instance.customer.email,
+            email_addr=instance.user.email,
             email_tpl="order_confirmation.html",
-            email_ctx={"order": instance},
+            email_ctx={
+                "order_id": instance.id,
+                "order_number": instance.order_number,
+                "status": instance.status,
+                "total_amount": str(instance.total_price),
+                "created_at": instance.created_at.isoformat(),
+                "customer_name": instance.user.username if instance.user else "Customer",
+                "order": {
+                    "id": instance.id,
+                    "order_number": instance.order_number,
+                    "status": instance.status,
+                    "total_amount": str(instance.total_price),
+                    "created_at": instance.created_at.isoformat(),
+                }
+            },
             via_sms=True,
-            sms_number=instance.customer.contact,
+            sms_number=instance.user.user_profile.phone_number,
             sms_body=f"Order {instance.order_number} placed successfully!",
         )
     else:
@@ -81,9 +95,16 @@ def order_notifications(sender, instance, created, **kwargs):
                 message=msg,
                 via_in_app=True,
                 via_email=True,
-                email_addr=instance.customer.email,
+                email_addr=instance.user.email,
                 email_tpl=f"order_{status}.html",
-                email_ctx={"order": instance},
+                email_ctx={
+                    "order_id": instance.id,
+                    "order_number": instance.order_number,
+                    "status": instance.status,
+                    "total_amount": str(instance.total_price),
+                    "created_at": instance.created_at.isoformat(),
+                    "customer_name": instance.user.username if instance.user else "Customer"
+                },
             )
 
 
@@ -92,7 +113,7 @@ def sale_notifications(sender, instance, created, **kwargs):
     if not created:
         return
     order = instance.order
-    user = getattr(order.customer, "user", instance.user)
+    user = getattr(order.user, "user", instance.user)   
     msg = f"💰 Sale recorded for Order {order.order_number}."
     notify_event(
         user=user,
@@ -100,11 +121,11 @@ def sale_notifications(sender, instance, created, **kwargs):
         message=msg,
         via_in_app=True,
         via_email=True,
-        email_addr=order.customer.email,
+        email_addr=order.user.email,
         email_tpl="sale_recorded.html",
         email_ctx={"sale_id": instance.id},
         via_sms=True,
-        sms_number=order.customer.contact,
+        sms_number=order.user.user_profile.phone_number,
         sms_body=msg,
     )
 
@@ -121,6 +142,13 @@ def po_notifications(sender, instance, created, **kwargs):
             notif_type=Notification.Type.PURCHASE_ORDER,
             message=msg,
             via_in_app=True,
+            via_email=True,
+            email_addr=user.email,
+            email_tpl="po_approved.html",
+            email_ctx={"po_id": instance.id},
+            via_sms=True,
+            sms_number=user.user_profile.phone_number,
+            sms_body=msg,
         )
 
 
@@ -134,6 +162,13 @@ def stocklist_notifications(sender, instance, created, **kwargs):
             notif_type=Notification.Type.MARKETPLACE,
             message=msg,
             via_in_app=True,
+            via_email=True,
+            email_addr=user.email,
+            email_tpl="stocklist_pushed.html",
+            email_ctx={"stocklist_id": instance.id},
+            via_sms=True,
+            sms_number=user.user_profile.phone_number,
+            sms_body=msg,
         )
 
 
@@ -151,4 +186,11 @@ def low_stock_alert(sender, instance, **kwargs):
                 notif_type=Notification.Type.STOCK,
                 message=msg,
                 via_in_app=True,
+                via_email=True,
+                email_addr=instance.user.email,
+                email_tpl="stock_alert.html",
+                email_ctx={"product_id": instance.id},
+                via_sms=True,
+                sms_number=instance.user.user_profile.phone_number,
+                sms_body=msg,
             )

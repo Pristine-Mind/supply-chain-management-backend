@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
 from django.db.models.functions import TruncDate, TruncMonth
@@ -767,7 +767,7 @@ class StatsAPIView(APIView):
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
 
-        parsed_start_date, parsed_end_date = None, None 
+        parsed_start_date, parsed_end_date = None, None
         if start_date and end_date:
             try:
                 parsed_start_date = timezone.datetime.strptime(start_date, "%Y-%m-%d")
@@ -1300,3 +1300,26 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             return PurchaseOrder.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return PurchaseOrder.objects.none()
+
+
+# @api_view(["GET"])
+# def product_forecasting(request, pk):
+#     p = Product.objects.get(pk=pk)
+#     actuals, forecast = p.forecast_vs_actual()
+#     return Response(
+#         {
+#             "actuals": actuals,
+#             "forecast": forecast,
+#             "projected_stockout": p.projected_stockout_date,
+#         }
+#     )
+
+
+# @api_view(["GET"])
+# def product_seasonality(request, pk):
+#     year = int(request.query_params.get("year", timezone.now().year))
+#     month = int(request.query_params.get("month", timezone.now().month))
+#     start = date(year, month, 1)
+#     end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+#     si = Product.objects.get(pk=pk).seasonality_index(start, end)
+#     return Response({"seasonality_index": si})
