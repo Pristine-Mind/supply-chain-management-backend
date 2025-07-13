@@ -45,6 +45,7 @@ def send_sms(self, to_number: str, body: str) -> dict:
         "to": to_number,
         "text": body,
     }
+    print(payload)
     headers = {
         "Authorization": settings.SPARROWSMS_API_KEY,
         "Idempotency-Key": f"{to_number}-{self.request.id}",
@@ -52,11 +53,13 @@ def send_sms(self, to_number: str, body: str) -> dict:
         "Accept-Language": "en-us",
         "Content-Type": "application/json",
     }
+    print(headers)
 
     try:
         resp = requests.post(settings.SPARROWSMS_ENDPOINT, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        print(data)
     except RequestException as exc:
         # Try to parse SparrowSMS error response
         if exc.response is not None:

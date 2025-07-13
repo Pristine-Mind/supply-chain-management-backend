@@ -1,12 +1,14 @@
 import uuid
 from collections import Counter
-from datetime import timedelta
+from datetime import date, timedelta
 
 from ckeditor.fields import RichTextField
 from django.contrib.auth.models import User
 from django.contrib.gis.db import models
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Sum
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -153,6 +155,7 @@ class Product(models.Model):
     lead_time_days = models.PositiveIntegerField(
         default=7, verbose_name=_("Lead Time (days)"), help_text="Supplier lead time"
     )
+    projected_stockout_date_field = models.DateField(null=True, blank=True, verbose_name=_("Projected Stockout Date"))
 
     def __str__(self):
         return self.name
@@ -160,6 +163,69 @@ class Product(models.Model):
     class Meta:
         verbose_name = _("Product")
         verbose_name_plural = _("Products")
+
+    def actual_sales(self, start: date, end: date):
+        return (
+            Sale.objects.filter(order__product=self, sale_date__date__range=(start, end))
+            .annotate(day=TruncDate("sale_date"))
+            .values("day")
+            .annotate(units_sold=Sum("quantity"))
+            .order_by("day")
+        )
+
+    def forecast_vs_actual(self, days: int = 30, window: int = 7):
+        today = timezone.localdate()
+        start = today - timedelta(days=days)
+        sales = list(self.actual_sales(start, today))
+        day_map = {r["day"]: r["units_sold"] for r in sales}
+
+        actuals, forecast = [], []
+        window_vals = []
+        for i in range(days):
+            d = start + timedelta(days=i + 1)
+            sold = day_map.get(d, 0)
+            actuals.append({"day": d, "units_sold": sold})
+
+            window_vals.append(sold)
+            if len(window_vals) > window:
+                window_vals.pop(0)
+            f = sum(window_vals) / len(window_vals) if window_vals else 0
+            forecast.append({"day": d, "forecasted": round(f, 2)})
+
+        return actuals, forecast
+
+    @property
+    def projected_stockout_date(self):
+        today = timezone.localdate()
+        burn = (
+            self.avg_daily_demand
+            or (
+                Sale.objects.filter(order__product=self, sale_date__date__gte=today - timedelta(days=14)).aggregate(
+                    total=Sum("quantity")
+                )["total"]
+                or 0
+            )
+            / 14
+        )
+        if burn <= 0:
+            return None
+        days_left = self.stock / burn
+        return today + timedelta(days=days_left)
+
+    def seasonality_index(self, period_start: date, period_end: date):
+        def sum_qty(s, e):
+            return (
+                Sale.objects.filter(order__product=self, sale_date__date__range=(s, e)).aggregate(total=Sum("quantity"))[
+                    "total"
+                ]
+                or 0
+            )
+
+        this = sum_qty(period_start, period_end)
+        last_start = period_start.replace(year=period_start.year - 1)
+        last_end = period_end.replace(year=period_end.year - 1)
+        last = sum_qty(last_start, last_end)
+        return round(this / last, 2) if last else None
 
 
 class Order(models.Model):
