@@ -1,12 +1,14 @@
 import math
 from datetime import timedelta
+import statistics
+from collections import defaultdict
 
 from celery import shared_task
 from django.utils import timezone
+from django.db.models import Sum, functions
 
-from market.models import Bid
 
-from .models import MarketplaceProduct, Product, StockList
+from .models import Product, StockList, Sale
 
 
 @shared_task
@@ -45,36 +47,61 @@ def move_large_stock_to_stocklist():
 #         product.update_bid_end_date(bids_last_hour, bids_last_day)
 
 
-SERVICE_LEVEL_Z = 1.65
+SERVICE_LEVEL_Z = 1.65  # ~95% service level
 
 
-@shared_task
+# @shared_task
 def recalc_inventory_parameters():
-    """
-    Recalculate replenishment parameters for every product:
+    today = timezone.localdate()
+    cutoff_90 = today - timedelta(days=90)
+    cutoff_14 = today - timedelta(days=14)
 
-    - safety_stock: service level factor × stddev of demand during lead time
-    - reorder_point: (average daily demand × lead time) + safety_stock
-    - reorder_quantity: Economic Order Quantity (EOQ) = √((2 × annual demand × order cost) / holding cost)
+    # Bulk 90-day sales aggregated by product & day
+    sales_90 = (
+        Sale.objects.filter(sale_date__date__gte=cutoff_90)
+        .annotate(day=functions.TruncDate("sale_date"))
+        .values("order__product_id", "day")
+        .annotate(units_sold=Sum("quantity"))
+    )
+    print(sales_90)
+    sales_map = defaultdict(list)
+    for row in sales_90:
+        sales_map[row["order__product_id"]].append(row["units_sold"])
 
-    Updates each Product’s safety_stock, reorder_point, and reorder_quantity fields.
-    """
-    for product in Product.objects.all():
-        average_daily_demand = product.avg_daily_demand
-        demand_stddev = product.stddev_daily_demand
-        lead_time_days = product.lead_time_days
+    # Bulk 14-day burn aggregated by product
+    burn_14 = (
+        Sale.objects.filter(sale_date__date__gte=cutoff_14).values("order__product_id").annotate(total_sold=Sum("quantity"))
+    )
+    burn_map = {row["order__product_id"]: row["total_sold"] for row in burn_14}
 
-        sigma_demand_lead_time = math.sqrt(lead_time_days * demand_stddev**2)
-        safety_stock = math.ceil(SERVICE_LEVEL_Z * sigma_demand_lead_time)
+    for p in Product.objects.all():
+        vals90 = sales_map.get(p.id, [])
+        p.avg_daily_demand = statistics.mean(vals90) if vals90 else 0
+        p.stddev_daily_demand = statistics.pstdev(vals90) if len(vals90) > 1 else 0
 
-        reorder_point = math.ceil(average_daily_demand * lead_time_days + safety_stock)
+        # Safety stock & reorder point
+        sigma_lt = math.sqrt(p.lead_time_days * p.stddev_daily_demand**2)
+        p.safety_stock = math.ceil(SERVICE_LEVEL_Z * sigma_lt)
+        p.reorder_point = math.ceil(p.avg_daily_demand * p.lead_time_days + p.safety_stock)
 
-        annual_demand = average_daily_demand * 365
-        order_cost = 50
-        holding_cost = 2
-        eoq = math.ceil(math.sqrt((2 * annual_demand * order_cost) / holding_cost))
+        # EOQ
+        annual = p.avg_daily_demand * 365
+        p.reorder_quantity = math.ceil(math.sqrt((2 * annual * 50) / 2))
 
-        product.safety_stock = safety_stock
-        product.reorder_point = reorder_point
-        product.reorder_quantity = eoq
-        product.save()
+        # Projected stock-out (persist to a DateField if you add one)
+        burn = (burn_map.get(p.id, 0) or 0) / 14
+        if burn > 0:
+            p.projected_stockout_date_field = today + timedelta(days=p.stock / burn)
+        else:
+            p.projected_stockout_date_field = None
+
+        p.save(
+            update_fields=[
+                "avg_daily_demand",
+                "stddev_daily_demand",
+                "safety_stock",
+                "reorder_point",
+                "reorder_quantity",
+                "projected_stockout_date_field",
+            ]
+        )
