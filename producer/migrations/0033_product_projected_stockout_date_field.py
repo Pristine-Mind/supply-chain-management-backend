@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0032_alter_product_description'),
+        ("producer", "0032_alter_product_description"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='product',
-            name='projected_stockout_date_field',
-            field=models.DateField(blank=True, null=True, verbose_name='Projected Stockout Date'),
+            model_name="product",
+            name="projected_stockout_date_field",
+            field=models.DateField(blank=True, null=True, verbose_name="Projected Stockout Date"),
         ),
     ]

@@ -1,5 +1,12 @@
-from django.db.models.signals import post_save
+import logging
+import os
+
+from django.core.files import File
+from django.db import transaction
+from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
 
 from producer.models import (
     MarketplaceProduct,
@@ -11,11 +18,35 @@ from producer.models import (
     StockList,
 )
 
-from .models import MarketplaceUserProduct, Notification
+from .models import MarketplaceUserProduct, Notification, UserProductImage
 from .utils import notify_event
 
 
-@receiver(post_save, sender=MarketplaceUserProduct)
+def create_product_images(product, marketplace_product):
+    """Helper function to create product images after the transaction is committed"""
+
+    def _create_images():
+        user_product_images = UserProductImage.objects.filter(product=marketplace_product).order_by("order")
+        for idx, user_image in enumerate(user_product_images):
+            try:
+                with user_image.image.open("rb") as f:
+                    img = ProductImage.objects.create(
+                        product=product,
+                        image=File(f, name=os.path.basename(user_image.image.name)),
+                        alt_text=user_image.alt_text or f"Image {idx + 1} for {product.name}",
+                    )
+                    print(f"Created product image {img.id} from {user_image.image.name}")
+            except Exception as e:
+                logger.error(f"Error creating product image: {str(e)}")
+                logger.error(
+                    f"Image data: {user_image.image}, exists: {user_image.image.storage.exists(user_image.image.name)}"
+                )
+                raise
+
+    transaction.on_commit(_create_images)
+
+
+@receiver(post_save, sender=MarketplaceUserProduct, dispatch_uid="create_marketplace_product")
 def create_marketplace_product(sender, instance, created, **kwargs):
     if created:
         product = Product.objects.create(
@@ -32,22 +63,13 @@ def create_marketplace_product(sender, instance, created, **kwargs):
             is_marketplace_created=True,
             user=instance.user,
             location=instance.location,
-            # unit=instance.unit
         )
-
         MarketplaceProduct.objects.create(
             product=product,
             listed_price=instance.price,
             is_available=not instance.is_sold,
-            bid_end_date=instance.bid_end_date,
         )
-        # If the MarketplaceUserProduct has an image, create a ProductImage
-        if instance.image:
-            ProductImage.objects.create(
-                product=product,
-                image=instance.image,
-                alt_text=f"Image for {instance.name}",
-            )
+        create_product_images(product, instance)
 
 
 @receiver(post_save, sender=Order)
@@ -77,7 +99,7 @@ def order_notifications(sender, instance, created, **kwargs):
                     "status": instance.status,
                     "total_amount": str(instance.total_price),
                     "created_at": instance.created_at.isoformat(),
-                }
+                },
             },
             via_sms=True,
             sms_number=instance.user.user_profile.phone_number,
@@ -103,7 +125,7 @@ def order_notifications(sender, instance, created, **kwargs):
                     "status": instance.status,
                     "total_amount": str(instance.total_price),
                     "created_at": instance.created_at.isoformat(),
-                    "customer_name": instance.user.username if instance.user else "Customer"
+                    "customer_name": instance.user.username if instance.user else "Customer",
                 },
             )
 
@@ -113,7 +135,7 @@ def sale_notifications(sender, instance, created, **kwargs):
     if not created:
         return
     order = instance.order
-    user = getattr(order.user, "user", instance.user)   
+    user = getattr(order.user, "user", instance.user)
     msg = f"💰 Sale recorded for Order {order.order_number}."
     notify_event(
         user=user,
