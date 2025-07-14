@@ -735,3 +735,86 @@ class PurchaseOrder(models.Model):
                 notes="Stock in due to purchase order approval",
                 stock_after=self.product.stock,
             )
+
+
+class DirectSale(models.Model):
+    """
+    Tracks direct sales of products without requiring a customer.
+    Automatically calculates total price and updates inventory.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="direct_sales", verbose_name=_("Product"))
+    quantity = models.PositiveIntegerField(default=1, verbose_name=_("Quantity"), help_text=_("Number of units sold"))
+    unit_price = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name=_("Unit Price"), help_text=_("Price per unit at the time of sale")
+    )
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, editable=False, verbose_name=_("Total Amount"))
+    sale_date = models.DateTimeField(default=timezone.now, verbose_name=_("Sale Date"))
+    reference = models.CharField(
+        max_length=100, blank=True, null=True, verbose_name=_("Reference"), help_text=_("Optional reference number or code")
+    )
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
+    user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name=_("User"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+
+    class Meta:
+        ordering = ["-sale_date"]
+        verbose_name = _("Direct Sale")
+        verbose_name_plural = _("Direct Sales")
+
+    def __str__(self):
+        return f"{self.quantity}x {self.product.name} - {self.total_amount} ({self.sale_date.strftime('%Y-%m-%d')})"
+
+    def clean(self):
+        if not self.pk:
+            if self.quantity > self.product.stock:
+                raise ValidationError({"quantity": f"Not enough stock. Only {self.product.stock} available."})
+
+    def save(self, *args, **kwargs):
+        self.total_amount = self.unit_price * self.quantity
+
+        if not self.pk:
+            self.unit_price = self.product.price
+
+            with transaction.atomic():
+                # Refresh the product to get the latest stock value
+                self.product.refresh_from_db()
+                # Calculate new stock value
+                new_stock = self.product.stock - self.quantity
+                # Update stock directly with the calculated value
+                self.product.stock = new_stock
+                self.product.save(update_fields=["stock"])
+
+                StockHistory.objects.create(
+                    product=self.product,
+                    date=timezone.now().date(),
+                    quantity_out=self.quantity,
+                    notes=f"Direct sale - {self.quantity} units" + (f" (Ref: {self.reference})" if self.reference else ""),
+                    user=self.user,
+                    stock_after=self.product.stock - self.quantity,
+                )
+
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        with transaction.atomic():
+            # Refresh the product to get the latest stock value
+            self.product.refresh_from_db()
+            # Calculate new stock value
+            new_stock = self.product.stock + self.quantity
+            # Update stock directly with the calculated value
+            self.product.stock = new_stock
+            self.product.save(update_fields=["stock"])
+
+            StockHistory.objects.create(
+                product=self.product,
+                date=timezone.now().date(),
+                quantity_in=self.quantity,
+                quantity_out=0,
+                notes=f"Stock returned from deleted direct sale #{self.id}",
+                user=getattr(self, "user", None),
+                stock_after=new_stock,
+            )
+
+            super().delete(*args, **kwargs)
