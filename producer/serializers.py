@@ -8,6 +8,7 @@ from .models import (
     AuditLog,
     City,
     Customer,
+    DirectSale,
     LedgerEntry,
     MarketplaceBulkPriceTier,
     MarketplaceProduct,
@@ -443,6 +444,63 @@ class ReconciliationResponseSerializer(serializers.Serializer):
     net_vat = serializers.DecimalField(max_digits=12, decimal_places=2)
     tds_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     profit = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class DirectSaleSerializer(serializers.ModelSerializer):
+    """
+    Serializer for DirectSale model.
+    Handles creation and updating of direct sales.
+    """
+
+    product_details = ProductSerializer(source="product", read_only=True)
+    user_username = serializers.CharField(source="user.username", read_only=True)   
+    
+    class Meta:
+        model = DirectSale
+        fields = [
+            "id",
+            "product",
+            "quantity",
+            "unit_price",
+            "total_amount",
+            "sale_date",
+            "reference",
+            "notes",
+            "user",
+            "product_details",
+            "user_username",
+        ]
+        read_only_fields = ["total_amount", "user"]
+
+    def validate_quantity(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Quantity must be greater than zero.")
+        return value
+
+    def validate(self, data):
+        """
+        Validate that there's enough stock before creating a sale.
+        """
+        if self.instance is None:
+            product = data.get("product")
+            quantity = data.get("quantity")
+
+            if product and quantity:
+                if product.stock < quantity:
+                    raise serializers.ValidationError({"quantity": f"Not enough stock. Only {product.stock} available."})
+        return data
+
+    def create(self, validated_data):
+        """
+        Create a new DirectSale instance.
+        Sets the current user as the seller and calculates total amount.
+        """
+        validated_data["user"] = self.context["request"].user
+
+        if "total_amount" not in validated_data:
+            validated_data["total_amount"] = validated_data["quantity"] * validated_data["unit_price"]
+
+        return super().create(validated_data)
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):

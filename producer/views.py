@@ -29,6 +29,7 @@ from .models import (
     AuditLog,
     City,
     Customer,
+    DirectSale,
     LedgerEntry,
     MarketplaceProduct,
     Order,
@@ -45,6 +46,7 @@ from .serializers import (
     CustomerOrdersSerializer,
     CustomerSalesSerializer,
     CustomerSerializer,
+    DirectSaleSerializer,
     LedgerEntrySerializer,
     MarketplaceProductSerializer,
     OrderSerializer,
@@ -1285,6 +1287,47 @@ def stats_dashboard(request):
             ],
         }
     )
+
+
+class DirectSaleViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for viewing and editing direct sales.
+    """
+
+    serializer_class = DirectSaleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return direct sales for the current user."""
+        return DirectSale.objects.filter(user=self.request.user).select_related("product")
+
+    def perform_create(self, serializer):
+        """Set the current user as the seller when creating a direct sale."""
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=["get"])
+    def recent_sales(self, request):
+        """Get recent direct sales (last 10 by default)."""
+        limit = int(request.query_params.get("limit", 10))
+        sales = self.get_queryset().order_by("-sale_date")[:limit]
+        serializer = self.get_serializer(sales, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def sales_summary(self, request):
+        """Get summary of direct sales (total sales, count, etc.)."""
+        summary = self.get_queryset().aggregate(
+            total_sales=Sum("total_amount"), total_quantity=Sum("quantity"), avg_sale=Sum("total_amount") / Count("id")
+        )
+
+        top_products = (
+            self.get_queryset()
+            .values("product__name")
+            .annotate(total_sold=Sum("quantity"), total_revenue=Sum("total_amount"))
+            .order_by("-total_sold")[:5]
+        )
+
+        return Response({"summary": summary, "top_products": top_products})
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
