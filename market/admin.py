@@ -20,6 +20,7 @@ from .models import (
     Payment,
     Purchase,
     UserInteraction,
+    UserProductImage,
 )
 
 
@@ -88,6 +89,13 @@ class UserInteractionAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     add_roles = ["admin"]
     change_roles = ["admin"]
     delete_roles = ["admin"]
+
+
+@admin.register(UserProductImage)
+class UserProductImageAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
+    list_display = ("product", "image", "alt_text")
+    list_filter = ("product",)
+    search_fields = ("product__name", "alt_text")
 
 
 @admin.register(Feedback)

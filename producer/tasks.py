@@ -1,14 +1,13 @@
 import math
-from datetime import timedelta
 import statistics
 from collections import defaultdict
+from datetime import timedelta
 
 from celery import shared_task
-from django.utils import timezone
 from django.db.models import Sum, functions
+from django.utils import timezone
 
-
-from .models import Product, StockList, Sale
+from .models import Product, Sale, StockList
 
 
 @shared_task

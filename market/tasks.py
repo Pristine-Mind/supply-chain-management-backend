@@ -33,7 +33,7 @@ def send_email(to_email, subject, template_name, context):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_sms(self, to_number: str, body: str) -> dict:
+def send_sms(to_number: str, body: str) -> dict:
     """
     Send an SMS via SparrowSMS.
     Retries up to 3 times on failure, waiting 60s between attempts.
@@ -48,7 +48,7 @@ def send_sms(self, to_number: str, body: str) -> dict:
     print(payload)
     headers = {
         "Authorization": settings.SPARROWSMS_API_KEY,
-        "Idempotency-Key": f"{to_number}-{self.request.id}",
+        "Idempotency-Key": f"{to_number}",
         "Accept": "application/json",
         "Accept-Language": "en-us",
         "Content-Type": "application/json",
@@ -67,10 +67,10 @@ def send_sms(self, to_number: str, body: str) -> dict:
                 data = exc.response.json()
             except ValueError:
                 # Non-JSON body, treat as temporary network error
-                raise self.retry(exc=exc)
+                raise Exception(exc)
         else:
             # No response at all, network issue
-            raise self.retry(exc=exc)
+            raise Exception(exc)
 
     # Map SparrowSMS response codes to a uniform result
     code = str(data.get("response_code", ""))
@@ -94,22 +94,6 @@ def send_sms(self, to_number: str, body: str) -> dict:
 
     # Retry on unexpected/temporary errors
     if result["code"] != 200 and code not in mapping:
-        raise self.retry(exc=Exception(f"SparrowSMS temporary error: {result}"))
+        raise Exception(f"SparrowSMS temporary error: {result}")
 
     return result
-
-    # try:
-    #     response = requests.post(
-    #         url="https://sms.sociair.com/api/sms",
-    #         headers={
-    #             "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIyIiwianRpIjoiMzdjMDMzOWViYzVhYzA4MzM0YTZlNDdmMzk3NTk1MzBjY2E0YTE3YmIwM2U1MGQxZTQ1NWE3NzczNDFhZTdiNjYwMzY0OTRkY2MwZTY1N2UiLCJpYXQiOjE3MzAwOTQwOTcuNjczMzU5LCJuYmYiOjE3MzAwOTQwOTcuNjczMzYzLCJleHAiOjE3NjE2MzAwOTcuNjYxNDI1LCJzdWIiOiIxMzYxIiwic2NvcGVzIjpbXX0.u1TwO2PK7xbPYA_C3NzH818VAJG_P3xtnizMAa-Zj1822TGPFrx_ROWO8TcVUU38eOueGNmO37zmjPKF_TbnW8PkF3FcQWBcF1hH6CR8NTPymMceUFCoomBjZ57qEJWPfMmZbOobslQrExuaQIfTWkvDVyR046DVCnp6yTX9u38TuNtKX9Oc43pNVkHYm9uvWohHvXwAx42oiUDh9NziPxkqTHTUAOiZ8ghLsaen7HgIj-lszfG32m3w5MgGsGiLo-9DwhRSObLP3IdpR1Dtk48wOo-qp_9_RRgRrwkZmalu8rEro95uPya1HQ1q57iGJXNs03hhQml8CxeKJjvUVKNoPhGAEoh3LzjeOd7j2WbYiCjvIXVcZBA8CuJtSMesjMDtbJMgik2U1Am6GfW4TCya5pDArpctrrvJ4DXZmmUo0h6IE9MI1Om-dvxMonxt-BJQrpVWCzbtSZg3f9nelMv7tCPFwK8NZ6zvzojeThTQWEyl96cVLpKc0DdqdR1fMa5hOfnaFxAdCktfwhAvt1B5IeEcQnuuCGB2hWYQqBiyw46_oMiGdhIEDZj6l4DWxFppc-VvGSPu66SRgW-I0Spn22a5ksSVRi-Ts1jQZTwu_LaUaxnMnylnO0RHBFrTZ-URc9S3DK4UhQBpyS4MmBFDIp8GQvhuwZswCsLbJ1o",
-    #             "Content-Type": "application/json",
-    #             "Accept": "application/json",
-    #         },
-    #         json={"message": body, "mobile": to_number},
-    #     )
-    #     response.raise_for_status()
-    #     return response.json()
-    # except requests.exceptions.RequestException as e:
-    #     error_message = e.response.json().get("message") if e.response else str(e)
-    #     raise Exception(error_message)
