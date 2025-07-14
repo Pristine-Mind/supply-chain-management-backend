@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 from django.contrib import admin
 from django.db.models import QuerySet
@@ -9,6 +9,7 @@ from user.admin_mixins import RoleBasedAdminMixin
 from .models import (
     AuditLog,
     Customer,
+    DirectSale,
     LedgerEntry,
     MarketplaceBulkPriceTier,
     MarketplaceProduct,
@@ -424,6 +425,26 @@ class AuditLogAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_display = ("id", "transaction_type", "reference_id", "entity_id", "amount")
     search_fields = ("reference_id", "user__username", "transaction_type")
     list_filter = ("transaction_type", "user")
+
+
+@admin.register(DirectSale)
+class DirectSaleAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    """
+    Admin interface for managing direct sales.
+    """
+
+    required_role = "business_staff"
+    list_display = ("id", "product", "quantity", "unit_price", "total_amount", "sale_date", "user", "reference")
+    list_filter = ("sale_date", "user")
+    search_fields = ("product__name", "user__username", "reference", "notes")
+    readonly_fields = ("sale_date", "created_at", "updated_at")
+    date_hierarchy = "sale_date"
+    autocomplete_fields = ["product", "user"]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.select_related("product", "user")
+        return qs
 
 
 @admin.register(PurchaseOrder)
