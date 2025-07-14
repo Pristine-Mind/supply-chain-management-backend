@@ -172,39 +172,63 @@ class MarketplaceUserProduct(models.Model):
         OTHER = "OT", "Other"
 
     class ProductUnit(models.TextChoices):
-        KILOGRAM = "KG", "KiloGram"
+        KILOGRAM = "KG", "Kilogram"
         LITER = "LT", "Liter"
 
     name = models.CharField(_("Name"), max_length=255)
     description = models.TextField(_("Description"))
     price = models.DecimalField(_("Price"), max_digits=10, decimal_places=2)
-    stock = models.IntegerField(_("Stock"))
+    stock = models.PositiveIntegerField(_("Stock"))
     category = models.CharField(
-        max_length=2, choices=ProductCategory.choices, default=ProductCategory.VEGETABLES, verbose_name=_("Category")
+        verbose_name=_("Category"),
+        max_length=2,
+        choices=ProductCategory.choices,
+        default=ProductCategory.VEGETABLES,
     )
     unit = models.CharField(
+        verbose_name=_("Unit"),
         max_length=2,
         choices=ProductUnit.choices,
-        verbose_name=_("unit"),
         default=ProductUnit.KILOGRAM,
     )
-    created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
-    updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
-    image = models.ImageField(_("Image"), upload_to="marketplace/products/", null=True, blank=True)
     is_verified = models.BooleanField(_("Is Verified"), default=False)
     is_sold = models.BooleanField(_("Is Sold"), default=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
-    location = models.ForeignKey(
-        City, on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
-    )
-    bid_end_date = models.DateTimeField(verbose_name=_("Bid End Date"), null=True, blank=True)
+    created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
 
-    def __str__(self):
-        return self.name
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Seller"))
+    location = models.ForeignKey(
+        City,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_("Location"),
+        help_text="Location of the product",
+    )
 
     class Meta:
         verbose_name = _("Marketplace User Product")
         verbose_name_plural = _("Marketplace User Products")
+
+    def __str__(self):
+        return self.name
+
+
+class UserProductImage(models.Model):
+    product = models.ForeignKey(
+        MarketplaceUserProduct, on_delete=models.CASCADE, related_name="images", verbose_name=_("Product")
+    )
+    image = models.ImageField(_("Image"), upload_to="marketplace/products/%Y/%m/%d/")
+    alt_text = models.CharField(_("Alt Text"), max_length=255, blank=True, help_text="Alternative text for accessibility")
+    order = models.PositiveSmallIntegerField(_("Display Order"), default=0, help_text="Order of images for carousel display")
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = _("Product Image")
+        verbose_name_plural = _("Product Images")
+
+    def __str__(self):
+        return f"{self.product.name} - Image {self.order}"
 
 
 class Notification(models.Model):

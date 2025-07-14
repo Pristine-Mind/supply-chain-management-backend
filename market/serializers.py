@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -23,6 +24,7 @@ from .models import (
     Notification,
     Payment,
     Purchase,
+    UserProductImage,
 )
 
 
@@ -269,10 +271,34 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         return chat_message
 
 
+class UserProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProductImage
+        fields = ["id", "image", "alt_text", "order"]
+        read_only_fields = ["id"]
+
+
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
+    images = UserProductImageSerializer(many=True, required=False)
+
     class Meta:
         model = MarketplaceUserProduct
-        fields = "__all__"
+        fields = [
+            "id",
+            "name",
+            "description",
+            "price",
+            "stock",
+            "is_sold",
+            "category",
+            "unit",
+            "is_verified",
+            "created_at",
+            "updated_at",
+            "user",
+            "location",
+            "images",
+        ]
         extra_kwargs = {"user": {"read_only": True}}
 
     def validate_price(self, value):
@@ -285,14 +311,33 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Stock cannot be negative.")
         return value
 
-    def validate_bid_end_date(self, bid_end_date):
-        if bid_end_date < datetime.now():
-            raise serializers.ValidationError("Bid end date cannot be in the past.")
-        return bid_end_date
-
     def create(self, validated_data):
+
+        images_data = self.context.get("request").FILES.getlist("images")
+        validated_data.pop("images", None)
         validated_data["user"] = self.context["request"].user
-        return super().create(validated_data)
+
+        with transaction.atomic():
+            product = super().create(validated_data)
+
+            for image_data in images_data:
+                UserProductImage.objects.create(product=product, image=image_data, alt_text=image_data.name, order=0)
+
+        return product
+
+    def update(self, instance, validated_data):
+        images_data = self.context.get("request").FILES.getlist("images")
+
+        with transaction.atomic():
+            instance = super().update(instance, validated_data)
+
+            if images_data:
+                instance.images.all().delete()
+
+                for idx, image_data in enumerate(images_data):
+                    UserProductImage.objects.create(product=instance, image=image_data, alt_text=image_data.name, order=idx)
+
+        return instance
 
 
 class SellerProductSerializer(serializers.ModelSerializer):
