@@ -16,6 +16,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from user.models import UserProfile
+from market.models import MarketplaceProduct
+from market.serializers import MarketplaceProductSerializer
 
 from .filters import (
     CustomerFilter,
@@ -515,6 +517,62 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Order.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Order.objects.none()
+
+    @action(detail=True, methods=['post'])
+    def update_status(self, request, pk=None):
+        """
+        Update the status of an order.
+        Expected payload: {"status": "new_status"}
+        Valid statuses: pending, approved, shipped, delivered, cancelled
+        """
+        order = self.get_object()
+        new_status = request.data.get('status')
+
+        if not new_status:
+            return Response(
+                {"detail": "Status is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get valid status choices from the Order model
+        valid_statuses = [choice[0] for choice in Order.Status.choices]
+
+        if new_status not in valid_statuses:
+            return Response(
+                {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update the order status
+        order.status = new_status
+        
+        # If order is being marked as delivered, set the delivery date
+        if new_status == Order.Status.DELIVERED and not order.delivery_date:
+            order.delivery_date = timezone.now()
+        
+        order.save(update_fields=['status', 'delivery_date', 'updated_at'])
+
+        # If order is being marked as delivered, update product stock
+        if new_status == Order.Status.DELIVERED:
+            product = order.product
+            with transaction.atomic():
+                product.refresh_from_db()
+                product.stock = F('stock') - order.quantity
+                product.save(update_fields=['stock'])
+                
+                # Record stock movement
+                StockHistory.objects.create(
+                    product=product,
+                    quantity_out=order.quantity,
+                    notes=f"Stock out for order #{order.order_number}",
+                    user=request.user,
+                    stock_after=product.stock - order.quantity
+                )
+
+        return Response(
+            OrderSerializer(order).data,
+            status=status.HTTP_200_OK
+        )
 
 
 class SaleViewSet(viewsets.ModelViewSet):
