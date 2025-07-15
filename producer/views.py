@@ -15,9 +15,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from user.models import UserProfile
 from market.models import MarketplaceProduct
 from market.serializers import MarketplaceProductSerializer
+from user.models import UserProfile
 
 from .filters import (
     CustomerFilter,
@@ -151,6 +151,7 @@ class DailyProductStatsView(APIView):
             headers = [
                 "Product ID",
                 "Product Name",
+                "Producer Name",
                 "SKU",
                 "Category",
                 "Price",
@@ -257,6 +258,7 @@ class DailyProductStatsView(APIView):
                         [
                             product.id,
                             product.name,
+                            product.user.get_full_name() or product.user.username if product.user else "N/A",
                             product.sku,
                             product.get_category_display() if hasattr(product, "get_category_display") else product.category,
                             product.price,
@@ -292,6 +294,8 @@ class DailyProductStatsView(APIView):
             product_info = {
                 "product_id": product.id,
                 "product_name": product.name,
+                "producer_name": product.user.get_full_name() or product.user.username if product.user else "N/A",
+                "producer_id": product.user.id if product.user else None,
                 "sku": product.sku,
                 "category": product.get_category_display() if hasattr(product, "get_category_display") else product.category,
                 "price": product.price,
@@ -518,7 +522,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         else:
             return Order.objects.none()
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def update_status(self, request, pk=None):
         """
         Update the status of an order.
@@ -526,53 +530,42 @@ class OrderViewSet(viewsets.ModelViewSet):
         Valid statuses: pending, approved, shipped, delivered, cancelled
         """
         order = self.get_object()
-        new_status = request.data.get('status')
+        new_status = request.data.get("status")
 
         if not new_status:
-            return Response(
-                {"detail": "Status is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Status is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get valid status choices from the Order model
         valid_statuses = [choice[0] for choice in Order.Status.choices]
 
         if new_status not in valid_statuses:
             return Response(
                 {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Update the order status
         order.status = new_status
-        
-        # If order is being marked as delivered, set the delivery date
+
         if new_status == Order.Status.DELIVERED and not order.delivery_date:
             order.delivery_date = timezone.now()
-        
-        order.save(update_fields=['status', 'delivery_date', 'updated_at'])
 
-        # If order is being marked as delivered, update product stock
+        order.save(update_fields=["status", "delivery_date", "updated_at"])
+
         if new_status == Order.Status.DELIVERED:
             product = order.product
             with transaction.atomic():
                 product.refresh_from_db()
-                product.stock = F('stock') - order.quantity
-                product.save(update_fields=['stock'])
-                
-                # Record stock movement
+                product.stock = F("stock") - order.quantity
+                product.save(update_fields=["stock"])
+
                 StockHistory.objects.create(
                     product=product,
                     quantity_out=order.quantity,
                     notes=f"Stock out for order #{order.order_number}",
                     user=request.user,
-                    stock_after=product.stock - order.quantity
+                    stock_after=product.stock - order.quantity,
                 )
 
-        return Response(
-            OrderSerializer(order).data,
-            status=status.HTTP_200_OK
-        )
+        return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
 
 
 class SaleViewSet(viewsets.ModelViewSet):

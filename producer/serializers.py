@@ -453,8 +453,8 @@ class DirectSaleSerializer(serializers.ModelSerializer):
     """
 
     product_details = ProductSerializer(source="product", read_only=True)
-    user_username = serializers.CharField(source="user.username", read_only=True)   
-    
+    user_username = serializers.CharField(source="user.username", read_only=True)
+
     class Meta:
         model = DirectSale
         fields = [
