@@ -43,6 +43,7 @@ from producer.views import (
     CustomerViewSet,
     DailyProductStatsView,
     DashboardAPIView,
+    DirectSaleViewSet,
     LedgerEntryViewSet,
     MarketplaceProductViewSet,
     MarketplaceUserRecommendedProductViewSet,
@@ -67,7 +68,6 @@ from producer.views import (
     sales_view,
     stats_dashboard,
     withdraw_product,
-    DirectSaleViewSet,
 )
 from user.views import (
     BusinessRegisterView,
@@ -94,7 +94,7 @@ router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 router.register(r"feedback", FeedbackViewSet, basename="feedback")
 router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-orders")
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
-router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")     
+router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
