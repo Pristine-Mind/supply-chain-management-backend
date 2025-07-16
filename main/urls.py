@@ -19,18 +19,15 @@ from market.views import (
     DeliveryCreateView,
     FeedbackViewSet,
     GlobalEnumView,
+    MarketplaceSaleViewSet,
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
     NotificationListView,
-    ProductBidsView,
     ProductFeedbackView,
     SellerProductsView,
-    UserBidsForProductView,
     UserBidViewSet,
     UserFeedbackView,
-    WithdrawBidView,
     create_purchase,
-    highest_bidder,
     log_interaction,
     log_product_view,
     payment_confirmation,
@@ -95,6 +92,8 @@ router.register(r"feedback", FeedbackViewSet, basename="feedback")
 router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-orders")
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
+router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
+
 
 urlpatterns = [
     # Admin site with built-in reversion support

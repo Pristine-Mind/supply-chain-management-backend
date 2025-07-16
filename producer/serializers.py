@@ -353,6 +353,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_offer_active = serializers.BooleanField(read_only=True)
     offer_countdown = serializers.SerializerMethodField()
     is_free_shipping = serializers.BooleanField(read_only=True)
+    # views_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = MarketplaceProduct
@@ -383,6 +384,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "average_rating",
             "ratings_breakdown",
             "total_reviews",
+            "view_count",
         ]
 
     def get_ratings_breakdown(self, obj):
