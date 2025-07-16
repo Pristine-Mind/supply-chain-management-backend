@@ -458,6 +458,7 @@ class MarketplaceProduct(models.Model):
     estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Estimated Delivery Days"))
     shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_("Shipping Cost"))
     recent_purchases_count = models.PositiveIntegerField(default=0, verbose_name=_("Recent Purchases (24h)"))
+    view_count = models.PositiveIntegerField(default=0, verbose_name=_("View Count"))
 
     def save(self, *args, **kwargs):
         # Validate min_order for distributors
