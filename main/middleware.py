@@ -1,3 +1,5 @@
+from django.utils.deprecation import MiddlewareMixin
+
 from main.manager import set_current_shop
 from user.models import UserProfile
 
@@ -25,3 +27,15 @@ class ShopIDMiddleware:
 
         response = self.get_response(request)
         return response
+
+
+class EnsureSessionKeyMiddleware(MiddlewareMixin):
+    """
+    Guarantees request.session.session_key exists by saving the session
+    if needed. Add this *above* your view middleware in settings.
+    """
+
+    def process_request(self, request):
+        # touch session so session_key is created
+        if not request.session.session_key:
+            request.session.save()
