@@ -1,13 +1,13 @@
 import requests
 from django.conf import settings
-from django.db.models import F, OuterRef, Subquery
-from django.db.models.query import QuerySet
+from django.db import models, transaction
+from django.db.models import F, OuterRef, Q, QuerySet, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status, views, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
@@ -21,10 +21,15 @@ from producer.models import MarketplaceProduct
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
 from .models import (
+    Bid,
     Cart,
     CartItem,
+    ChatMessage,
     Delivery,
+    Feedback,
+    MarketplaceSale,
     MarketplaceUserProduct,
+    Notification,
     Payment,
     ProductView,
 )
@@ -36,6 +41,7 @@ from .serializers import (
     ChatMessageSerializer,
     DeliverySerializer,
     FeedbackSerializer,
+    MarketplaceSaleSerializer,
     MarketplaceUserProductSerializer,
     NotificationSerializer,
     PurchaseSerializer,
@@ -496,8 +502,98 @@ class DeliveryCreateView(generics.CreateAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class MarketplaceSaleViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for viewing and editing marketplace sales.
+    """
+
+    serializer_class = MarketplaceSaleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return sales for the current user, either as a buyer or seller.
+        Admin users can see all sales.
+        """
+        user = self.request.user
+        queryset = MarketplaceSale.objects.all()
+
+        # If not admin, filter by buyer or seller
+        if not user.is_staff:
+            queryset = queryset.filter(models.Q(buyer=user) | models.Q(seller=user)).distinct()
+
+        # Filter by status if provided
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            queryset = queryset.filter(status=status_param.lower())
+
+        # Filter by payment status if provided
+        payment_status = self.request.query_params.get("payment_status")
+        if payment_status:
+            queryset = queryset.filter(payment_status=payment_status.lower())
+
+        # Filter by date range if provided
+        start_date = self.request.query_params.get("start_date")
+        end_date = self.request.query_params.get("end_date")
+        if start_date:
+            queryset = queryset.filter(sale_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(sale_date__lte=end_date)
+
+        return queryset.order_by("-sale_date")
+
+    def get_serializer_context(self):
+        """Add the request to the serializer context."""
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+    @action(detail=True, methods=["post"])
+    def mark_as_paid(self, request, pk=None):
+        """Mark a sale as paid."""
+        sale = self.get_object()
+        payment_id = request.data.get("payment_id")
+        payment_method = request.data.get("payment_method", "other")
+
+        try:
+            with transaction.atomic():
+                sale.mark_as_paid(payment_id=payment_id, payment_method=payment_method)
+                return Response({"status": "sale marked as paid"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def mark_as_delivered(self, request, pk=None):
+        """Mark a sale as delivered."""
+        sale = self.get_object()
+
+        try:
+            with transaction.atomic():
+                sale.mark_as_delivered()
+                return Response({"status": "sale marked as delivered"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def process_refund(self, request, pk=None):
+        """Process a refund for a sale."""
+        sale = self.get_object()
+        amount = request.data.get("amount")
+        reason = request.data.get("reason", "")
+
+        try:
+            with transaction.atomic():
+                sale.process_refund(amount=amount, reason=reason)
+                return Response({"status": "refund processed successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def perform_destroy(self, instance):
+        """Override delete to use soft delete."""
+        instance.delete()
+
+
 @api_view(["POST"])
-@permission_classes([AllowAny])
 def log_product_view(request, pk):
     """
     Increment the basic counter and log a ProductView.
@@ -505,16 +601,18 @@ def log_product_view(request, pk):
     try:
         mp = MarketplaceProduct.objects.get(pk=pk)
     except MarketplaceProduct.DoesNotExist:
-        return Response(status=404)
+        return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
 
     mp.view_count += 1
     mp.save(update_fields=["view_count"])
+
     session_key = request.session.session_key or request.session.save() or request.session.session_key
     ProductView.objects.create(
         product=mp,
         user=request.user if request.user.is_authenticated else None,
         session_key=session_key,
-        ip_address=request.META.get("REMOTE_ADDR"),
+        ip_address=request.META.get("REMOTE_ADDR", "")[:50],
         user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
     )
+
     return Response({"message": "Product view logged successfully."}, status=status.HTTP_200_OK)
