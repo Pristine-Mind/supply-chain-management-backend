@@ -1,5 +1,15 @@
+import logging
+
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
+
+try:
+    from reversion.admin import VersionAdmin as BaseVersionAdmin
+except ImportError:
+    # Fallback to regular ModelAdmin if reversion is not available
+    BaseVersionAdmin = admin.ModelAdmin
+
+logger = logging.getLogger(__name__)
 
 from user.admin_permissions import (
     MarketplaceProductAdminMixin,
@@ -15,6 +25,7 @@ from .models import (
     ChatMessage,
     Delivery,
     Feedback,
+    MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
     Payment,
@@ -165,6 +176,133 @@ class CartAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
 class CartItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     list_display = ("cart", "product", "quantity")
     search_fields = ("cart__user__username", "product__name")
+
+
+@admin.register(MarketplaceSale)
+class MarketplaceSaleAdmin(BaseVersionAdmin):
+    list_display = (
+        "order_number",
+        "get_buyer_display",
+        "product",
+        "quantity",
+        "status",
+        "payment_status",
+        "sale_date",
+    )
+    list_filter = (
+        "status",
+        "payment_status",
+        "sale_date",
+        "currency",
+        "is_deleted",
+    )
+    search_fields = (
+        "order_number",
+        "buyer__username",
+        "buyer_name",
+        "buyer_email",
+        "product__name",
+        "shipping_address",
+    )
+    readonly_fields = (
+        "order_number",
+        "sale_date",
+        "deleted_at",
+    )
+    fieldsets = (
+        (
+            _("Order Information"),
+            {
+                "fields": (
+                    "order_number",
+                    "status",
+                    "sale_date",
+                    "notes",
+                )
+            },
+        ),
+        (
+            _("Buyer Information"),
+            {
+                "fields": (
+                    "buyer",
+                    "buyer_name",
+                    "buyer_email",
+                    "buyer_phone",
+                )
+            },
+        ),
+        (
+            _("Product Information"),
+            {
+                "fields": (
+                    "product",
+                    "quantity",
+                    "unit_price_at_purchase",
+                    "currency",
+                    "tax_amount",
+                    "shipping_cost",
+                )
+            },
+        ),
+        (
+            _("Payment Information"),
+            {
+                "fields": (
+                    "payment_status",
+                    "payment_method",
+                    "transaction_id",
+                    "payment_date",
+                )
+            },
+        ),
+        (
+            _("Shipping Information"),
+            {
+                "fields": (
+                    "shipping_address",
+                    "tracking_number",
+                    "shipping_carrier",
+                    "delivery_date",
+                )
+            },
+        ),
+        (
+            _("Audit Information"),
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "is_deleted",
+                    "deleted_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            },
+        ),
+    )
+
+    def get_buyer_display(self, obj):
+        return obj.buyer_display
+
+    get_buyer_display.short_description = _("Buyer")
+    get_buyer_display.admin_order_field = "buyer__username"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("buyer", "product", "seller")
+
+    def has_delete_permission(self, request, obj=None):
+        # Only allow soft delete from the admin
+        return False
+
+    def delete_model(self, request, obj):
+        # Override to perform soft delete
+        obj.soft_delete()
+
+    def delete_queryset(self, request, queryset):
+        # Override to perform soft delete on multiple objects
+        for obj in queryset:
+            obj.soft_delete()
 
 
 @admin.register(Delivery)

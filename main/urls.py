@@ -32,6 +32,7 @@ from market.views import (
     create_purchase,
     highest_bidder,
     log_interaction,
+    log_product_view,
     payment_confirmation,
     shipping_address_form,
     verify_khalti_payment,
@@ -67,7 +68,6 @@ from producer.views import (
     reconciliation_view,
     sales_view,
     stats_dashboard,
-    withdraw_product,
 )
 from user.views import (
     BusinessRegisterView,
@@ -97,6 +97,7 @@ router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 
 urlpatterns = [
+    # Admin site with built-in reversion support
     path("admin/", admin.site.urls),
     path("api/v1/", include(router.urls)),
     path("login/", LoginAPIView.as_view()),
@@ -147,6 +148,7 @@ urlpatterns = [
     path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemUpdateView.as_view(), name="cart-item-update"),
     path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemDeleteView.as_view(), name="cart-item-delete"),
     path("api/v1/deliveries/", DeliveryCreateView.as_view(), name="delivery-create"),
+    path("api/products/<int:pk>/log-view/", log_product_view, name="log-product-view"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -6,4 +6,6 @@ class MarketConfig(AppConfig):
     name = "market"
 
     def ready(self):
+        # Import signals
+        import market.receivers  # noqa: F401
         import market.signals  # noqa: F401

@@ -1,6 +1,6 @@
 import requests
 from django.conf import settings
-from django.db.models import OuterRef, Subquery
+from django.db.models import F, OuterRef, Subquery
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -20,7 +20,14 @@ from producer.models import MarketplaceProduct
 
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
-from .models import Cart, CartItem, Delivery, MarketplaceUserProduct, Payment
+from .models import (
+    Cart,
+    CartItem,
+    Delivery,
+    MarketplaceUserProduct,
+    Payment,
+    ProductView,
+)
 from .serializers import (
     BidSerializer,
     BidUserSerializer,
@@ -487,3 +494,27 @@ class DeliveryCreateView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def log_product_view(request, pk):
+    """
+    Increment the basic counter and log a ProductView.
+    """
+    try:
+        mp = MarketplaceProduct.objects.get(pk=pk)
+    except MarketplaceProduct.DoesNotExist:
+        return Response(status=404)
+
+    mp.view_count += 1
+    mp.save(update_fields=["view_count"])
+    session_key = request.session.session_key or request.session.save() or request.session.session_key
+    ProductView.objects.create(
+        product=mp,
+        user=request.user if request.user.is_authenticated else None,
+        session_key=session_key,
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
+    )
+    return Response({"message": "Product view logged successfully."}, status=status.HTTP_200_OK)
