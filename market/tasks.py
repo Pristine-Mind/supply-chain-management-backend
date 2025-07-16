@@ -45,7 +45,6 @@ def send_sms(to_number: str, body: str) -> dict:
         "to": to_number,
         "text": body,
     }
-    print(payload)
     headers = {
         "Authorization": settings.SPARROWSMS_API_KEY,
         "Idempotency-Key": f"{to_number}",
@@ -53,26 +52,20 @@ def send_sms(to_number: str, body: str) -> dict:
         "Accept-Language": "en-us",
         "Content-Type": "application/json",
     }
-    print(headers)
 
     try:
         resp = requests.post(settings.SPARROWSMS_ENDPOINT, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        print(data)
     except RequestException as exc:
-        # Try to parse SparrowSMS error response
         if exc.response is not None:
             try:
                 data = exc.response.json()
             except ValueError:
-                # Non-JSON body, treat as temporary network error
                 raise Exception(exc)
         else:
-            # No response at all, network issue
             raise Exception(exc)
 
-    # Map SparrowSMS response codes to a uniform result
     code = str(data.get("response_code", ""))
     mapping = {
         "200": {"code": 200, "status": "success", "message": "Message sent successfully", "sms_code": "200"},
@@ -92,7 +85,6 @@ def send_sms(to_number: str, body: str) -> dict:
         },
     )
 
-    # Retry on unexpected/temporary errors
     if result["code"] != 200 and code not in mapping:
         raise Exception(f"SparrowSMS temporary error: {result}")
 

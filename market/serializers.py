@@ -20,6 +20,7 @@ from .models import (
     ChatMessage,
     Delivery,
     Feedback,
+    MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
     Payment,
@@ -416,6 +417,138 @@ class CartSerializer(serializers.ModelSerializer):
 
     def get_total(self, obj):
         return self.get_subtotal(obj) + self.get_shipping(obj)
+
+
+class MarketplaceSaleSerializer(serializers.ModelSerializer):
+    """Serializer for the MarketplaceSale model."""
+
+    buyer_username = serializers.CharField(source="buyer.username", read_only=True)
+    seller_username = serializers.CharField(source="seller.username", read_only=True)
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    formatted_subtotal = serializers.CharField(source="formatted_subtotal", read_only=True)
+    formatted_tax = serializers.CharField(source="formatted_tax", read_only=True)
+    formatted_shipping = serializers.CharField(source="formatted_shipping", read_only=True)
+    formatted_total = serializers.CharField(source="formatted_total", read_only=True)
+    buyer_display_name = serializers.CharField(source="buyer_display_name", read_only=True)
+    buyer_contact_email = serializers.EmailField(source="buyer_isplay_name", read_only=True)
+
+    class Meta:
+        model = MarketplaceSale
+        fields = [
+            "id",
+            "order_number",
+            "sale_date",
+            "updated_at",
+            "currency",
+            "buyer",
+            "buyer_username",
+            "buyer_name",
+            "buyer_email",
+            "buyer_phone",
+            "seller",
+            "seller_username",
+            "product",
+            "product_name",
+            "quantity",
+            "unit_price",
+            "unit_price_at_purchase",
+            "subtotal",
+            "tax_amount",
+            "shipping_cost",
+            "total_amount",
+            "status",
+            "payment_status",
+            "payment_method",
+            "transaction_id",
+            "notes",
+            "formatted_subtotal",
+            "formatted_tax",
+            "formatted_shipping",
+            "formatted_total",
+            "buyer_display_name",
+            "buyer_contact_email",
+            "is_deleted",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "order_number",
+            "sale_date",
+            "updated_at",
+            "subtotal",
+            "total_amount",
+            "formatted_subtotal",
+            "formatted_tax",
+            "formatted_shipping",
+            "formatted_total",
+            "buyer_display_name",
+            "buyer_contact_email",
+            "buyer_username",
+            "seller_username",
+            "product_name",
+            "is_deleted",
+            "deleted_at",
+        ]
+
+    def validate(self, data):
+        """Validate the sale data."""
+        product = data.get("product")
+        if product and not product.is_available:
+            raise serializers.ValidationError({"product": "This product is not available for sale."})
+
+        quantity = data.get("quantity", 0)
+        if product and quantity > product.stock:
+            raise serializers.ValidationError({"quantity": "Insufficient stock for this product."})
+
+        if self.instance and "payment_status" in data:
+            old_status = self.instance.payment_status
+            new_status = data["payment_status"]
+
+            if old_status == "paid" and new_status != "refunded":
+                raise serializers.ValidationError(
+                    {"payment_status": "Paid orders can only be refunded or partially refunded."}
+                )
+
+        return data
+
+    def create(self, validated_data):
+        """Create a new sale with proper validation."""
+        if "buyer" not in validated_data and "request" in self.context:
+            validated_data["buyer"] = self.context["request"].user
+
+        if "subtotal" not in validated_data:
+            validated_data["subtotal"] = validated_data.get("unit_price", 0) * validated_data.get("quantity", 0)
+
+        if "total_amount" not in validated_data:
+            validated_data["total_amount"] = (
+                validated_data.get("subtotal", 0)
+                + validated_data.get("tax_amount", 0)
+                + validated_data.get("shipping_cost", 0)
+            )
+
+        sale = super().create(validated_data)
+
+        product = sale.product
+        product.stock -= sale.quantity
+        if product.stock == 0:
+            product.is_available = False
+        product.save()
+
+        return sale
+
+    def update(self, instance, validated_data):
+        """Update an existing sale with proper validation."""
+        if "status" in validated_data:
+            old_status = instance.status
+            new_status = validated_data["status"]
+
+            if new_status not in instance.SaleStatus.get_next_allowed_statuses(old_status):
+                raise serializers.ValidationError({"status": f"Cannot change status from {old_status} to {new_status}."})
+
+            if new_status == "delivered" and instance.payment_status != "paid":
+                raise serializers.ValidationError({"status": "Cannot mark as delivered with unpaid order."})
+
+        return super().update(instance, validated_data)
 
 
 class DeliverySerializer(serializers.ModelSerializer):
