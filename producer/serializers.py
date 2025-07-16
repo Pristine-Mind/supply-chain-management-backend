@@ -385,6 +385,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "ratings_breakdown",
             "total_reviews",
             "view_count",
+            "rank_score",
         ]
 
     def get_ratings_breakdown(self, obj):
