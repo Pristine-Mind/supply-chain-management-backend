@@ -41,6 +41,7 @@ django-ckeditor = "*"
 django-phonenumber-field = {extras = ["phonenumbers"], version = "*"}
 django-reversion = "*"
 phonenumbers = "*"
+pandas = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

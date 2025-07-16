@@ -342,6 +342,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "listed_date",
         "is_available",
         "min_order",
+        "rank_score",
     )
     search_fields = ("product__name",)
     list_filter = ("is_available", "listed_date")

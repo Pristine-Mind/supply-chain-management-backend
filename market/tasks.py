@@ -2,6 +2,7 @@ import requests
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
+from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from requests.exceptions import RequestException
@@ -89,3 +90,15 @@ def send_sms(to_number: str, body: str) -> dict:
         raise Exception(f"SparrowSMS temporary error: {result}")
 
     return result
+
+
+@shared_task
+def update_recent_purchases():
+    """
+    Celery task to update recent_purchases_count for all marketplace products.
+    This should be scheduled to run periodically (e.g., every hour).
+    """
+    from django.core.management import call_command
+
+    call_command("update_recent_purchases")
+    return "Successfully updated recent purchases count"
