@@ -238,6 +238,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "producer.tasks.recalc_inventory_parameters",
         "schedule": crontab(minute=0, hour="*"),
     },
+    "update-recent-purchases-hourly": {
+        "task": "market.tasks.update_recent_purchases",
+        "schedule": crontab(minute=0, hour="*"),
+    },
 }
 
 KHALTI_PUBLIC_KEY = "aaass"
