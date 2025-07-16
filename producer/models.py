@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.gis.db import models
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -457,11 +457,15 @@ class MarketplaceProduct(models.Model):
     offer_end = models.DateTimeField(null=True, blank=True, verbose_name=_("Offer End"))
     estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Estimated Delivery Days"))
     shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_("Shipping Cost"))
-    recent_purchases_count = models.PositiveIntegerField(default=0, verbose_name=_("Recent Purchases (24h)"))
+    recent_purchases_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("Recent Purchases (24h)"),
+        help_text=_("Number of times this product was purchased in the last 24 hours. Used for popularity ranking."),
+    )
     view_count = models.PositiveIntegerField(default=0, verbose_name=_("View Count"))
+    rank_score = models.FloatField(default=0, verbose_name=_("Rank Score"))
 
     def save(self, *args, **kwargs):
-        # Validate min_order for distributors
         user_profile = None
         try:
             user_profile = self.product.user.userprofile
@@ -472,7 +476,6 @@ class MarketplaceProduct(models.Model):
                 raise ValidationError({"min_order": "This field is required for distributors."})
             if self.min_order <= 0:
                 raise ValidationError({"min_order": "Minimum order must be greater than zero."})
-        # Discounted price validation
         if self.discounted_price is not None:
             if self.listed_price is None:
                 raise ValidationError({"listed_price": "Listed price required if discounted price is set."})
@@ -480,7 +483,6 @@ class MarketplaceProduct(models.Model):
                 raise ValidationError({"discounted_price": "Discounted price must be less than listed price."})
             if self.discounted_price <= 0:
                 raise ValidationError({"discounted_price": "Discounted price must be greater than zero."})
-        # Offer period validation
         if self.offer_start and self.offer_end and self.offer_start >= self.offer_end:
             raise ValidationError({"offer_end": "Offer end must be after offer start."})
         super().save(*args, **kwargs)
