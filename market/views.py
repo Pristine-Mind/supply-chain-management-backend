@@ -49,6 +49,9 @@ from .serializers import (
     SellerProductSerializer,
 )
 from .utils import sms_service
+from django.conf import settings
+from chatterbot import ChatBot
+from chatterbot.trainers import ListTrainer
 
 
 @api_view(["POST"])
@@ -616,3 +619,33 @@ def log_product_view(request, pk):
     )
 
     return Response({"message": "Product view logged successfully."}, status=status.HTTP_200_OK)
+
+
+def get_chatbot():
+    try:
+        return ChatBot(**settings.CHATTERBOT)
+    except Exception as e:
+        print(f"Error initializing chatbot: {str(e)}")
+        return None
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def chat_api(request):
+    """
+    POST { "message": "Hello" }
+    → { "reply": "Hi there!" }
+    """
+    user_msg = request.data.get("message", "").strip()
+    if not user_msg:
+        return Response({"reply": "Please say something!"})
+
+    bot = get_chatbot()
+    if not bot:
+        return Response({"reply": "Chat service is currently unavailable. Please try again later."})
+
+    try:
+        bot_reply = bot.get_response(user_msg).text
+        return Response({"reply": bot_reply})
+    except Exception as e:
+        return Response({"reply": "I'm having trouble understanding. Could you rephrase that?"})
