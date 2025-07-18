@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0036_alter_marketplaceproduct_recent_purchases_count'),
+        ("producer", "0036_alter_marketplaceproduct_recent_purchases_count"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketplaceproduct',
-            name='rank_score',
-            field=models.FloatField(default=0, verbose_name='Rank Score'),
+            model_name="marketplaceproduct",
+            name="rank_score",
+            field=models.FloatField(default=0, verbose_name="Rank Score"),
         ),
     ]
