@@ -281,6 +281,29 @@ class Order(models.Model):
         super().save(*args, **kwargs)
 
 
+class Payment(models.Model):
+    class Method(models.TextChoices):
+        CASH = "cash", _("Cash")
+        ONLINE = "online", _("Online (QR)")
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        COMPLETED = "completed", _("Completed")
+        FAILED = "failed", _("Failed")
+
+    order = models.ForeignKey("Order", on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    method = models.CharField(max_length=10, choices=Method.choices, default=Method.CASH)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    gateway_token = models.CharField(max_length=255, blank=True, null=True, help_text="ID/token from gateway")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Payment #{self.pk} ({self.method}) for Order {self.order.order_number}"
+
+
 class Sale(models.Model):
     """
     Represents a sale made by a customer (retailer/wholesaler) to an end-user.
@@ -308,6 +331,7 @@ class Sale(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, verbose_name=_("Order"))
     quantity = models.IntegerField(verbose_name=_("Quantity Sold"))
     sale_price = models.FloatField(verbose_name=_("Sale Price"))
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="sales", null=True, blank=True)
     sale_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Sale Date"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
@@ -330,7 +354,7 @@ class Sale(models.Model):
         self.reduce_product_stock()
         # Only create StockHistory on creation
         if is_new:
-            from .models import StockHistory  # avoid circular import if any
+            from .models import StockHistory  # avoid circular import
 
             StockHistory.objects.create(
                 product=self.order.product,
