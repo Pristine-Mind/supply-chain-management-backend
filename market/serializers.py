@@ -469,7 +469,6 @@ class MarketplaceSaleSerializer(serializers.ModelSerializer):
             "buyer_contact_email",
             "is_deleted",
             "deleted_at",
-            
         ]
         read_only_fields = [
             "id",

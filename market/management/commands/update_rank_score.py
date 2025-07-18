@@ -81,10 +81,7 @@ class Command(BaseCommand):
             if not prod:
                 return None
 
-            sales_vel = MarketplaceSale.objects.filter(
-                product=mp,
-                sale_date__date__gte=today - timedelta(days=30)
-            ).count()
+            sales_vel = MarketplaceSale.objects.filter(product=mp, sale_date__date__gte=today - timedelta(days=30)).count()
 
             mkt_sales = mkt_sales_map.get(mp.id, 0)
 
