@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "anymail",
     "ckeditor",
+    "chatterbot.ext.django_chatterbot",
     # localapps
     "producer.apps.ProducerConfig",
     "market",
@@ -287,4 +288,20 @@ CKEDITOR_CONFIGS = {
     "default": {
         "toolbar": "full",
     }
+}
+
+
+CHATTERBOT = {
+    "name": "MulyaBazzar Bot",
+    "storage_adapter": "chatterbot.storage.DjangoStorageAdapter",
+    "logic_adapters": [
+        {
+            "import_path": "chatterbot.logic.BestMatch",
+            "default_response": "Sorry, I didn’t get that. Can you rephrase?",
+            "maximum_similarity_threshold": 0.90,
+        },
+    ],
+    "read_only": True,
+    # add this to point at a dummy tagger class:
+    "tagger_class": "main.chatterbot_helper.NullTagger",
 }
