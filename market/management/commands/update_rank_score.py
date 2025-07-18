@@ -1,6 +1,6 @@
+import logging
 from datetime import timedelta
 from decimal import InvalidOperation
-import logging
 
 import pandas as pd
 from django.core.management.base import BaseCommand

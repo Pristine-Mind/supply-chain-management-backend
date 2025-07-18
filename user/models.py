@@ -150,6 +150,8 @@ class UserProfile(models.Model):
         default=BusinessType.RETAILER,
         verbose_name=_("Business Type"),
     )
+    payment_qr_payload = models.TextField(blank=True)
+    payment_qr_image = models.ImageField(upload_to="user_qr_codes/", blank=True, null=True)
 
     def save(self, *args, **kwargs):
         # Only set shop_id for business owners

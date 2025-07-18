@@ -4,6 +4,8 @@ from datetime import datetime
 from django.contrib.gis.geos import Point
 from rest_framework import serializers
 
+from user.models import UserProfile
+
 from .models import (
     AuditLog,
     City,
@@ -15,12 +17,12 @@ from .models import (
     MarketplaceProductReview,
     MarketplaceProductVariant,
     Order,
+    Payment,
     Producer,
     Product,
     ProductImage,
     PurchaseOrder,
     Sale,
-    StockHistory,
     StockList,
 )
 
@@ -512,3 +514,34 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
         fields = "__all__"
+
+
+class ShopQRSerializer(serializers.ModelSerializer):
+    qr_image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserProfile
+        fields = ["payment_qr_payload", "qr_image_url"]
+
+    def get_qr_image_url(self, obj):
+        req = self.context.get("request")
+        if obj.payment_qr_image and req:
+            return req.build_absolute_uri(obj.payment_qr_image.url)
+        return None
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ["id", "order", "amount", "method", "status"]
+        read_only_fields = ["id", "status"]
+
+
+class KhaltiInitSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField()
+
+
+class KhaltiVerifySerializer(serializers.Serializer):
+    payment_id = serializers.IntegerField()
+    token = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
