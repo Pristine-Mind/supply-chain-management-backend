@@ -1,10 +1,12 @@
 import logging
 from datetime import date, datetime, timedelta
 
+from django.conf import settings
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -35,6 +37,7 @@ from .models import (
     LedgerEntry,
     MarketplaceProduct,
     Order,
+    Payment,
     Producer,
     Product,
     PurchaseOrder,
@@ -49,9 +52,12 @@ from .serializers import (
     CustomerSalesSerializer,
     CustomerSerializer,
     DirectSaleSerializer,
+    KhaltiInitSerializer,
+    KhaltiVerifySerializer,
     LedgerEntrySerializer,
     MarketplaceProductSerializer,
     OrderSerializer,
+    PaymentSerializer,
     ProcurementRequestSerializer,
     ProcurementResponseSerializer,
     ProducerSerializer,
@@ -62,6 +68,7 @@ from .serializers import (
     SaleSerializer,
     SalesRequestSerializer,
     SalesResponseSerializer,
+    ShopQRSerializer,
     StockHistorySerializer,
     StockListSerializer,
 )
@@ -1417,3 +1424,124 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 #     end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 #     si = Product.objects.get(pk=pk).seasonality_index(start, end)
 #     return Response({"seasonality_index": si})
+
+
+class ShopQRAPIView(APIView):
+    def get(self, request, shop_id):
+        profile = get_object_or_404(UserProfile, shop_id=shop_id)
+        data = ShopQRSerializer(profile, context={"request": request}).data
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class CreatePaymentAPIView(APIView):
+    def post(self, request):
+        serializer = PaymentSerializer(data=request.data)
+        if serializer.is_valid():
+            payment = serializer.save(user=request.user, status=Payment.Status.PENDING)
+            # fetch shop QR from profile
+            profile = request.user.user_profile
+            return Response(
+                {
+                    "payment_id": payment.id,
+                    "qr_payload": profile.payment_qr_payload,
+                    "qr_url": request.build_absolute_uri(profile.payment_qr_image.url) if profile.payment_qr_image else None,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PaymentCallbackAPIView(APIView):
+    def post(self, request):
+        pid = request.data.get("payment_id")
+        try:
+            payment = Payment.objects.get(pk=pid)
+        except Payment.DoesNotExist:
+            return Response({"error": "Invalid payment_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.data.get("status") == "success":
+            payment.status = Payment.Status.COMPLETED
+            payment.save(update_fields=["status"])
+            sale = Sale.objects.create(
+                order=payment.order,
+                user=payment.user,
+                payment=payment,
+                quantity=payment.order.quantity,
+                sale_price=payment.order.product.price,
+            )
+            return Response({"sale_id": sale.id}, status=status.HTTP_201_CREATED)
+        else:
+            payment.status = Payment.Status.FAILED
+            payment.save(update_fields=["status"])
+            return Response({"detail": "Payment failed"}, status=status.HTTP_200_OK)
+
+
+class KhaltiInitAPIView(APIView):
+    """
+    1) Front‑end calls to create a pending Payment and get public key.
+    """
+
+    def post(self, request):
+        data = KhaltiInitSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        order = get_object_or_404(Order, pk=data.validated_data["order_id"])
+
+        payment = Payment.objects.create(
+            order=order, user=request.user, amount=order.total_price, status=Payment.Status.PENDING
+        )
+
+        return Response(
+            {"payment_id": payment.id, "public_key": settings.KHALTI_PUBLIC_KEY, "amount": float(payment.amount)},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class KhaltiVerifyAPIView(APIView):
+    """
+    2) Front‑end calls after the Khalti widget returns `token`.
+       We hit Khalti’s verify endpoint, validate amount, then record the Sale.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        data = KhaltiVerifySerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+
+        # fetch Payment
+        payment = get_object_or_404(Payment, pk=data.validated_data["payment_id"], status=Payment.Status.PENDING)
+
+        # Check amount matches
+        if float(payment.amount) != float(data.validated_data["amount"]):
+            return Response({"error": "Amount mismatch"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify with Khalti
+        resp = requests.post(
+            settings.KHALTI_VERIFY_URL,
+            data={"token": data.validated_data["token"], "amount": int(data.validated_data["amount"] * 100)},
+            headers={"Authorization": f"Key {settings.KHALTI_SECRET_KEY}"},
+        )
+        if resp.status_code != 200:
+            return Response({"error": "Khalti verify failed"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        result = resp.json()
+        if result.get("idx"):
+            # success!
+            payment.status = Payment.Status.COMPLETED
+            payment.gateway_token = data.validated_data["token"]
+            payment.save(update_fields=["status", "gateway_token"])
+
+            sale = Sale.objects.create(
+                order=payment.order,
+                user=payment.user,
+                payment=payment,
+                quantity=payment.order.quantity,
+                sale_price=payment.order.product.price,
+            )
+            return Response({"sale_id": sale.id}, status=status.HTTP_201_CREATED)
+
+        # verification failed on Khalti side
+        payment.status = Payment.Status.FAILED
+        payment.save(update_fields=["status"])
+        return Response({"error": result.get("error_message", "Verification failed")}, status=status.HTTP_400_BAD_REQUEST)

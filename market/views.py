@@ -1,4 +1,6 @@
 import requests
+from chatterbot import ChatBot
+from chatterbot.trainers import ListTrainer
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import F, OuterRef, Q, QuerySet, Subquery
@@ -49,9 +51,6 @@ from .serializers import (
     SellerProductSerializer,
 )
 from .utils import sms_service
-from django.conf import settings
-from chatterbot import ChatBot
-from chatterbot.trainers import ListTrainer
 
 
 @api_view(["POST"])
