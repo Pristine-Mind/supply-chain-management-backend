@@ -40,6 +40,13 @@ class UserProfileInline(admin.StackedInline):
                 "classes": ("collapse",),
             },
         ),
+        (
+            "Payment Information",
+            {
+                "fields": ("payment_qr_payload", "payment_qr_image"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
     def has_add_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:

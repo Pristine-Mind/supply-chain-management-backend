@@ -425,12 +425,12 @@ class MarketplaceSaleSerializer(serializers.ModelSerializer):
     buyer_username = serializers.CharField(source="buyer.username", read_only=True)
     seller_username = serializers.CharField(source="seller.username", read_only=True)
     product_name = serializers.CharField(source="product.name", read_only=True)
-    formatted_subtotal = serializers.CharField(source="formatted_subtotal", read_only=True)
-    formatted_tax = serializers.CharField(source="formatted_tax", read_only=True)
-    formatted_shipping = serializers.CharField(source="formatted_shipping", read_only=True)
-    formatted_total = serializers.CharField(source="formatted_total", read_only=True)
-    buyer_display_name = serializers.CharField(source="buyer_display_name", read_only=True)
-    buyer_contact_email = serializers.EmailField(source="buyer_isplay_name", read_only=True)
+    formatted_subtotal = serializers.CharField(read_only=True)
+    formatted_tax = serializers.CharField(read_only=True)
+    formatted_shipping = serializers.CharField(read_only=True)
+    formatted_total = serializers.CharField(read_only=True)
+    buyer_display_name = serializers.CharField(read_only=True)
+    buyer_contact_email = serializers.EmailField(read_only=True)
 
     class Meta:
         model = MarketplaceSale

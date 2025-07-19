@@ -291,8 +291,8 @@ class Payment(models.Model):
         COMPLETED = "completed", _("Completed")
         FAILED = "failed", _("Failed")
 
-    order = models.ForeignKey("Order", on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    order = models.ForeignKey("Order", on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     method = models.CharField(max_length=10, choices=Method.choices, default=Method.CASH)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
@@ -780,6 +780,7 @@ class DirectSale(models.Model):
     reference = models.CharField(
         max_length=100, blank=True, null=True, verbose_name=_("Reference"), help_text=_("Optional reference number or code")
     )
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="direct_sales", null=True, blank=True)
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name=_("User"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
