@@ -42,9 +42,6 @@ django-phonenumber-field = {extras = ["phonenumbers"], version = "*"}
 django-reversion = "*"
 phonenumbers = "*"
 pandas = "*"
-spacy = "*"
-ChatterBot = "*"
-numpy = "1.24.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
