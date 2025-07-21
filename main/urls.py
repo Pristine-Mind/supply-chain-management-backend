@@ -74,6 +74,9 @@ from user.views import (
     ContactCreateView,
     LoginAPIView,
     RegisterView,
+    RequestOTPView,
+    VerifyOTPView,
+    PhoneLoginView,
 )
 
 router = DefaultRouter()
@@ -144,6 +147,9 @@ urlpatterns = [
     path("api/products/<int:pk>/log-view/", log_product_view, name="log-product-view"),
     path("api/payments/khalti/init/", KhaltiInitAPIView.as_view(), name="khalti-init"),
     path("api/payments/khalti/verify/", KhaltiVerifyAPIView.as_view(), name="khalti-verify"),
+    path("api/otp/request/", RequestOTPView.as_view(), name="request-otp"),
+    path("api/otp/verify/", VerifyOTPView.as_view(), name="verify-otp"),
+    path("api/phone-login/", PhoneLoginView.as_view(), name="phone-login"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
