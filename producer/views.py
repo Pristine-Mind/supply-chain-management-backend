@@ -665,6 +665,7 @@ class UserInfoView(APIView):
                 "username": user.username,
                 "id": user.id,
                 "has_access_to_marketplace": has_access_to_marketplace,
+                "business_type": user_profile.business_type,
             }
         )
 
