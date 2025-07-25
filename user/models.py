@@ -1,8 +1,6 @@
 import random
 import uuid
-from random import choices
 
-from django.conf import settings
 from django.contrib.auth.models import Permission, User
 from django.db import models
 from django.utils import timezone
@@ -55,12 +53,9 @@ class Role(models.Model):
         Create default roles if they don't exist.
         Roles are ordered by permission level (higher number = more permissions).
         """
-        # General User (lowest level, basic access)
         general_user = cls.get_or_create_role(
             code="general_user", name="General User", level=1, description="End users with basic access to the platform."
         )
-
-        # Business Roles
         business_staff = cls.get_or_create_role(
             code="business_staff",
             name="Business Staff",
@@ -74,8 +69,6 @@ class Role(models.Model):
             level=3,
             description="Owners of distributor/retailer businesses with full business access.",
         )
-
-        # Platform Roles
         agent = cls.get_or_create_role(
             code="agent",
             name="Platform Agent",
@@ -91,6 +84,10 @@ class Role(models.Model):
             code="admin", name="Administrator", level=6, description="Full system administrators with all permissions."
         )
 
+        transporter = cls.get_or_create_role(
+            code="transporter", name="Transporter", level=7, description="Transporters with access to transport features."
+        )
+
         return {
             "general_user": general_user,
             "business_staff": business_staff,
@@ -98,6 +95,7 @@ class Role(models.Model):
             "agent": agent,
             "manager": manager,
             "admin": admin,
+            "transporter": transporter,
         }
 
 
@@ -150,7 +148,8 @@ class UserProfile(models.Model):
     business_type = models.CharField(
         max_length=12,
         choices=BusinessType.choices,
-        default=BusinessType.RETAILER,
+        null=True,
+        blank=True,
         verbose_name=_("Business Type"),
     )
     registration_certificate = models.FileField(
@@ -282,7 +281,6 @@ class Contact(models.Model):
 
 
 def generate_otp():
-    # Generate a 6-digit OTP
     return "".join(random.choices(string.digits, k=6))
 
 
@@ -300,19 +298,12 @@ class PhoneOTP(models.Model):
         return f"{self.phone_number} - {self.otp}"
 
     def is_expired(self):
-        # OTP expires after 5 minutes
         return (timezone.now() - self.created_at).total_seconds() > 300
 
     @classmethod
     def generate_otp_for_phone(cls, phone_number):
-        # Delete any existing OTPs for this phone number
         cls.objects.filter(phone_number=phone_number).delete()
-
-        # Generate new OTP
         otp = generate_otp()
-
-        # In a real app, you would send this OTP via SMS here
-        # For now, we'll just store it in the database
         return cls.objects.create(phone_number=phone_number, otp=otp)
 
     @classmethod
