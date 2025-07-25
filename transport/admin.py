@@ -1,10 +1,4 @@
-import json
-from datetime import timedelta
-
 from django.contrib import admin
-from django.db.models import Avg, Count, Sum
-from django.urls import reverse
-from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
@@ -15,7 +9,6 @@ from .models import (
     DeliveryTracking,
     Transporter,
     TransportStatus,
-    VehicleType,
 )
 
 
@@ -56,7 +49,6 @@ class TransporterAdmin(admin.ModelAdmin):
     list_filter = ["vehicle_type", "is_available", "is_verified", "created_at", "rating"]
     search_fields = ["user__first_name", "user__last_name", "user__email", "license_number", "vehicle_number", "phone"]
     readonly_fields = [
-        "user",
         "rating",
         "total_deliveries",
         "successful_deliveries",
@@ -67,7 +59,19 @@ class TransporterAdmin(admin.ModelAdmin):
     ]
     fieldsets = (
         ("User Information", {"fields": ("user", "phone")}),
-        ("License & Vehicle", {"fields": ("license_number", "vehicle_type", "vehicle_number", "vehicle_capacity")}),
+        (
+            "License & Vehicle",
+            {
+                "fields": (
+                    "license_number",
+                    "vehicle_type",
+                    "vehicle_number",
+                    "vehicle_capacity",
+                    "vehicle_image",
+                    "vehicle_documents",
+                )
+            },
+        ),
         ("Location & Availability", {"fields": ("current_location_display", "is_available")}),
         ("Performance Metrics", {"fields": ("rating", "total_deliveries", "successful_deliveries", "success_rate_display")}),
         ("Account Status", {"fields": ("is_verified",)}),

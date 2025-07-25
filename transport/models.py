@@ -52,6 +52,10 @@ class Transporter(models.Model):
     vehicle_capacity = models.DecimalField(
         max_digits=8, decimal_places=2, help_text=_("Maximum weight capacity in kg"), verbose_name=_("Vehicle Capacity (kg)")
     )
+    vehicle_image = models.ImageField(upload_to="vehicle_images", verbose_name=_("Vehicle Image"), null=True, blank=True)
+    vehicle_documents = models.FileField(
+        upload_to="vehicle_documents", verbose_name=_("Vehicle Documents"), null=True, blank=True
+    )
 
     # Location and Availability
     current_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
