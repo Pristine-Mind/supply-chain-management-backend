@@ -20,6 +20,11 @@ from .serializers import (
     PhoneNumberSerializer,
     RegisterSerializer,
     VerifyOTPSerializer,
+    TransporterRegistrationRequestSerializer,
+)
+from transport.serializers import (
+    TransporterCreateSerializer,
+    TransporterSerializer,
 )
 
 
@@ -218,3 +223,42 @@ class PhoneLoginView(APIView):
 
         except UserProfile.DoesNotExist:
             return Response({"error": "No user found with this phone number."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class TransporterRegistrationAPIView(generics.CreateAPIView):
+    """
+    API endpoint for registering a new transporter (creates both User and Transporter)
+    """
+    serializer_class = TransporterRegistrationRequestSerializer
+
+    @extend_schema(
+        request=TransporterRegistrationRequestSerializer,
+        responses={201: TransporterSerializer},
+        description="Register a new transporter (creates both User and Transporter profile). Request body must include user and transporter fields."
+    )
+    def post(self, request, *args, **kwargs):
+        user_fields = [
+            "username", "email", "password", "password2", "first_name", "last_name",
+        ]
+        user_data = {k: v for k, v in request.data.items() if k in user_fields}
+        transporter_fields = [
+            "license_number", "vehicle_type",
+            "vehicle_number", "vehicle_capacity", "phone",
+            "current_latitude", "current_longitude",
+            "vehicle_image", "vehicle_documents"
+        ]
+        transporter_data = {
+            k: v for k, v in request.data.items() if k in transporter_fields
+        }
+
+        user_serializer = RegisterSerializer(data=user_data)
+        if not user_serializer.is_valid():
+            return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = user_serializer.save()
+        transporter_data["user"] = user.id
+        serializer = TransporterCreateSerializer(data=transporter_data, context={"request": request})
+        if not serializer.is_valid():
+            user.delete()
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        transporter = serializer.save(user=user)
+        return Response(TransporterSerializer(transporter).data, status=status.HTTP_201_CREATED)
