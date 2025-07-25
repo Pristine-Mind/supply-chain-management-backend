@@ -69,14 +69,15 @@ from producer.views import (
     sales_view,
     stats_dashboard,
 )
+from transport import views as transport_views
 from user.views import (
     BusinessRegisterView,
     ContactCreateView,
     LoginAPIView,
+    PhoneLoginView,
     RegisterView,
     RequestOTPView,
     VerifyOTPView,
-    PhoneLoginView,
 )
 
 router = DefaultRouter()
@@ -150,6 +151,33 @@ urlpatterns = [
     path("api/otp/request/", RequestOTPView.as_view(), name="request-otp"),
     path("api/otp/verify/", VerifyOTPView.as_view(), name="verify-otp"),
     path("api/phone-login/", PhoneLoginView.as_view(), name="phone-login"),
+    path("profile/", transport_views.TransporterProfileView.as_view(), name="transporter-profile"),
+    path("transporters/", transport_views.TransporterListView.as_view(), name="transporter-list"),
+    path("toggle-availability/", transport_views.ToggleAvailabilityView.as_view(), name="toggle-availability"),
+    path("update-location/", transport_views.UpdateLocationView.as_view(), name="update-location"),
+    path("stats/", transport_views.TransporterStatsView.as_view(), name="transporter-stats"),
+    path("deliveries/available/", transport_views.AvailableDeliveriesView.as_view(), name="available-deliveries"),
+    path("deliveries/my/", transport_views.MyDeliveriesView.as_view(), name="my-deliveries"),
+    path("deliveries/nearby/", transport_views.NearbyDeliveriesView.as_view(), name="nearby-deliveries"),
+    path("deliveries/history/", transport_views.delivery_history, name="delivery-history"),
+    path("deliveries/<uuid:delivery_id>/", transport_views.DeliveryDetailView.as_view(), name="delivery-detail"),
+    path("deliveries/<uuid:delivery_id>/accept/", transport_views.AcceptDeliveryView.as_view(), name="accept-delivery"),
+    path(
+        "deliveries/<uuid:delivery_id>/update-status/",
+        transport_views.UpdateDeliveryStatusView.as_view(),
+        name="update-delivery-status",
+    ),
+    path(
+        "deliveries/<uuid:delivery_id>/tracking/", transport_views.DeliveryTrackingView.as_view(), name="delivery-tracking"
+    ),
+    path(
+        "deliveries/<uuid:delivery_id>/ratings/",
+        transport_views.DeliveryRatingListCreateView.as_view(),
+        name="delivery-ratings",
+    ),
+    path("admin/deliveries/", transport_views.DeliveryListCreateView.as_view(), name="admin-delivery-list"),
+    path("admin/deliveries/<uuid:delivery_id>/", transport_views.DeliveryUpdateView.as_view(), name="admin-delivery-detail"),
+    path("admin/dashboard/", transport_views.DashboardStatsView.as_view(), name="admin-dashboard"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
