@@ -5,6 +5,7 @@ from producer.models import City
 from user.models import Contact
 
 from .models import UserProfile
+from transport.serializers import TransporterCreateSerializer
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -176,3 +177,21 @@ class PhoneLoginSerializer(serializers.Serializer):
         if not UserProfile.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError("No user found with this phone number.")
         return value
+
+
+class TransporterRegistrationRequestSerializer(serializers.Serializer):
+    username = RegisterSerializer().fields['username']
+    email = RegisterSerializer().fields['email']
+    password = RegisterSerializer().fields['password']
+    password2 = RegisterSerializer().fields['password2']
+    first_name = RegisterSerializer().fields['first_name']
+    last_name = RegisterSerializer().fields['last_name']
+    license_number = TransporterCreateSerializer().fields['license_number']
+    phone = TransporterCreateSerializer().fields['phone']
+    vehicle_type = TransporterCreateSerializer().fields['vehicle_type']
+    vehicle_number = TransporterCreateSerializer().fields['vehicle_number']
+    vehicle_capacity = TransporterCreateSerializer().fields['vehicle_capacity']
+    current_latitude = TransporterCreateSerializer().fields['current_latitude']
+    current_longitude = TransporterCreateSerializer().fields['current_longitude']
+    vehicle_image = TransporterCreateSerializer().fields['vehicle_image']
+    vehicle_documents = TransporterCreateSerializer().fields['vehicle_documents']
