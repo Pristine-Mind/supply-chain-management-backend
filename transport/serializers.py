@@ -72,6 +72,8 @@ class TransporterCreateSerializer(serializers.ModelSerializer):
             "vehicle_capacity",
             "current_latitude",
             "current_longitude",
+            "vehicle_image",
+            "vehicle_documents",
         ]
 
     def create(self, validated_data):
