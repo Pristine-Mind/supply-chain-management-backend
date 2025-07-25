@@ -4,6 +4,9 @@ from django.conf import settings
 from django.contrib.auth.models import Permission, User
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+import random
+from random import choices
+from django.utils import timezone
 
 from producer.models import City
 
@@ -150,6 +153,33 @@ class UserProfile(models.Model):
         default=BusinessType.RETAILER,
         verbose_name=_("Business Type"),
     )
+    registration_certificate = models.FileField(
+        upload_to="user_documents/registration_certificates/",
+        null=True,
+        blank=True,
+        verbose_name=_("Registration Certificate"),
+        help_text=_("Upload your business registration certificate (PDF, DOC, DOCX, JPG, PNG)"),
+    )
+    pan_certificate = models.FileField(
+        upload_to="user_documents/pan_certificates/",
+        null=True,
+        blank=True,
+        verbose_name=_("PAN Certificate"),
+        help_text=_("Upload your PAN certificate (PDF, JPG, PNG)"),
+    )
+    profile_image = models.ImageField(
+        upload_to="user_profile_images/",
+        null=True,
+        blank=True,
+        verbose_name=_("Profile Image"),
+        help_text=_("Upload a profile picture (JPG, PNG)"),
+    )
+    registered_business_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name=_("Registered Business Name"),
+    )
     payment_qr_payload = models.TextField(blank=True)
     payment_qr_image = models.ImageField(upload_to="user_qr_codes/", blank=True, null=True)
 
@@ -249,3 +279,51 @@ class Contact(models.Model):
 
     def __str__(self):
         return self.name
+
+
+def generate_otp():
+    # Generate a 6-digit OTP
+    return "".join(random.choices(string.digits, k=6))
+
+
+class PhoneOTP(models.Model):
+    phone_number = models.CharField(max_length=15, unique=True)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_verified = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Phone OTP"
+        verbose_name_plural = "Phone OTPs"
+
+    def __str__(self):
+        return f"{self.phone_number} - {self.otp}"
+
+    def is_expired(self):
+        # OTP expires after 5 minutes
+        return (timezone.now() - self.created_at).total_seconds() > 300
+
+    @classmethod
+    def generate_otp_for_phone(cls, phone_number):
+        # Delete any existing OTPs for this phone number
+        cls.objects.filter(phone_number=phone_number).delete()
+
+        # Generate new OTP
+        otp = generate_otp()
+
+        # In a real app, you would send this OTP via SMS here
+        # For now, we'll just store it in the database
+        return cls.objects.create(phone_number=phone_number, otp=otp)
+
+    @classmethod
+    def verify_otp(cls, phone_number, otp):
+        try:
+            phone_otp = cls.objects.get(phone_number=phone_number, otp=otp, is_verified=False)
+            if phone_otp.is_expired():
+                return False, "OTP has expired"
+
+            phone_otp.is_verified = True
+            phone_otp.save()
+            return True, "OTP verified successfully"
+        except cls.DoesNotExist:
+            return False, "Invalid OTP"
