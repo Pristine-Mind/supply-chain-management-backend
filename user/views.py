@@ -10,6 +10,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from transport.serializers import (
+    TransporterCreateSerializer,
+    TransporterSerializer,
+)
+
 from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
     BusinessRegisterSerializer,
@@ -19,12 +24,8 @@ from .serializers import (
     PhoneLoginSerializer,
     PhoneNumberSerializer,
     RegisterSerializer,
-    VerifyOTPSerializer,
     TransporterRegistrationRequestSerializer,
-)
-from transport.serializers import (
-    TransporterCreateSerializer,
-    TransporterSerializer,
+    VerifyOTPSerializer,
 )
 
 
@@ -229,27 +230,36 @@ class TransporterRegistrationAPIView(generics.CreateAPIView):
     """
     API endpoint for registering a new transporter (creates both User and Transporter)
     """
+
     serializer_class = TransporterRegistrationRequestSerializer
 
     @extend_schema(
         request=TransporterRegistrationRequestSerializer,
         responses={201: TransporterSerializer},
-        description="Register a new transporter (creates both User and Transporter profile). Request body must include user and transporter fields."
+        description="Register a new transporter (creates both User and Transporter profile). Request body must include user and transporter fields.",
     )
     def post(self, request, *args, **kwargs):
         user_fields = [
-            "username", "email", "password", "password2", "first_name", "last_name",
+            "username",
+            "email",
+            "password",
+            "password2",
+            "first_name",
+            "last_name",
         ]
         user_data = {k: v for k, v in request.data.items() if k in user_fields}
         transporter_fields = [
-            "license_number", "vehicle_type",
-            "vehicle_number", "vehicle_capacity", "phone",
-            "current_latitude", "current_longitude",
-            "vehicle_image", "vehicle_documents"
+            "license_number",
+            "vehicle_type",
+            "vehicle_number",
+            "vehicle_capacity",
+            "phone",
+            "current_latitude",
+            "current_longitude",
+            "vehicle_image",
+            "vehicle_documents",
         ]
-        transporter_data = {
-            k: v for k, v in request.data.items() if k in transporter_fields
-        }
+        transporter_data = {k: v for k, v in request.data.items() if k in transporter_fields}
 
         user_serializer = RegisterSerializer(data=user_data)
         if not user_serializer.is_valid():
