@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "user",
     "report",
     "drf_spectacular",
+    "transport",
 ]
 
 MIDDLEWARE = [

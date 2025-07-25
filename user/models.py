@@ -1,12 +1,12 @@
+import random
 import uuid
+from random import choices
 
 from django.conf import settings
 from django.contrib.auth.models import Permission, User
 from django.db import models
-from django.utils.translation import gettext_lazy as _
-import random
-from random import choices
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from producer.models import City
 
