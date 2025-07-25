@@ -78,6 +78,7 @@ from user.views import (
     RegisterView,
     RequestOTPView,
     VerifyOTPView,
+    TransporterRegistrationAPIView,
 )
 
 router = DefaultRouter()
@@ -178,6 +179,7 @@ urlpatterns = [
     path("admin/deliveries/", transport_views.DeliveryListCreateView.as_view(), name="admin-delivery-list"),
     path("admin/deliveries/<uuid:delivery_id>/", transport_views.DeliveryUpdateView.as_view(), name="admin-delivery-detail"),
     path("admin/dashboard/", transport_views.DashboardStatsView.as_view(), name="admin-dashboard"),
+    path('api/register/transporter/', TransporterRegistrationAPIView.as_view(), name='api_register_transporter'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
