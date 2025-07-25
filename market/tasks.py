@@ -34,7 +34,7 @@ def send_email(to_email, subject, template_name, context):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_sms(to_number: str, body: str) -> dict:
+def send_sms(self, to_number: str, body: str) -> dict:
     """
     Send an SMS via SparrowSMS.
     Retries up to 3 times on failure, waiting 60s between attempts.

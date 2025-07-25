@@ -1,4 +1,5 @@
 import requests
+
 # from chatterbot import ChatBot
 # from chatterbot.trainers import ListTrainer
 from django.conf import settings

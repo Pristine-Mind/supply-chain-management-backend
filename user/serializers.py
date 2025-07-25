@@ -43,6 +43,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         latitude = validated_data.pop("latitude", None)
         longitude = validated_data.pop("longitude", None)
         location = validated_data.pop("location")
+
         user = User.objects.create(
             username=validated_data["username"],
             email=validated_data["email"],
@@ -91,6 +92,10 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
     business_type = serializers.ChoiceField(choices=UserProfile.BusinessType.choices, required=True)
     latitude = serializers.FloatField(required=False, allow_null=True)
     longitude = serializers.FloatField(required=False, allow_null=True)
+    registration_certificate = serializers.FileField(required=True)
+    pan_certificate = serializers.FileField(required=True)
+    profile_image = serializers.ImageField(required=False, allow_null=True)
+    registered_business_name = serializers.CharField(required=True)
 
     class Meta:
         model = User
@@ -106,6 +111,10 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
             "business_type",
             "latitude",
             "longitude",
+            "registration_certificate",
+            "pan_certificate",
+            "profile_image",
+            "registered_business_name",
         ]
 
     def validate(self, attrs):
@@ -119,6 +128,10 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
         business_type = validated_data.pop("business_type")
         latitude = validated_data.pop("latitude", None)
         longitude = validated_data.pop("longitude", None)
+        registration_certificate = validated_data.pop("registration_certificate")
+        pan_certificate = validated_data.pop("pan_certificate")
+        profile_image = validated_data.pop("profile_image", None)
+        registered_business_name = validated_data.pop("registered_business_name")
 
         user = User.objects.create(
             username=validated_data["username"],
@@ -135,8 +148,31 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
             phone_number=phone_number,
             location=location,
             business_type=business_type,
+            registration_certificate=registration_certificate,
+            pan_certificate=pan_certificate,
+            profile_image=profile_image,
+            registered_business_name=registered_business_name,
             latitude=latitude,
             longitude=longitude,
             has_access_to_marketplace=True,  # business users get marketplace access
         )
         return user
+
+
+class PhoneNumberSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15, required=True)
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15, required=True)
+    otp = serializers.CharField(max_length=6, required=True)
+
+
+class PhoneLoginSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15, required=True)
+    otp = serializers.CharField(max_length=6, required=False)
+
+    def validate_phone_number(self, value):
+        if not UserProfile.objects.filter(phone_number=value).exists():
+            raise serializers.ValidationError("No user found with this phone number.")
+        return value

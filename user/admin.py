@@ -36,7 +36,21 @@ class UserProfileInline(admin.StackedInline):
         (
             "Business Information",
             {
-                "fields": ("shop_id", "has_access_to_marketplace", "location", "latitude", "longitude"),
+                "fields": (
+                    "shop_id",
+                    "has_access_to_marketplace",
+                    "location",
+                    "latitude",
+                    "longitude",
+                    "registered_business_name",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Documentation",
+            {
+                "fields": ("registration_certificate", "pan_certificate", "profile_image"),
                 "classes": ("collapse",),
             },
         ),
