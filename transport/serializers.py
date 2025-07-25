@@ -354,3 +354,55 @@ class NearbyDeliverySerializer(serializers.ModelSerializer):
             "distance",
             "distance_km",
         ]
+
+
+class AssignmentRequestSerializer(serializers.Serializer):
+    delivery_id = serializers.IntegerField(required=False)
+    priority_filter = serializers.ChoiceField(choices=DeliveryPriority.choices, required=False, allow_blank=True)
+    max_assignments = serializers.IntegerField(default=50, min_value=1, max_value=100)
+
+
+class AssignmentResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField(required=False)
+    error = serializers.CharField(required=False)
+    assigned_transporter = serializers.DictField(required=False)
+    delivery = serializers.DictField(required=False)
+    score_details = serializers.DictField(required=False)
+    alternatives = serializers.ListField(required=False)
+    distance_km = serializers.DecimalField(max_digits=8, decimal_places=2, required=False)
+    estimated_delivery_time = serializers.DateTimeField(required=False)
+
+
+class BulkAssignmentResponseSerializer(serializers.Serializer):
+    total_deliveries = serializers.IntegerField()
+    assigned = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    assignments = serializers.ListField()
+    failures = serializers.ListField()
+    execution_time_seconds = serializers.FloatField()
+
+
+class ReportFilterSerializer(serializers.Serializer):
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
+    transporter_id = serializers.IntegerField(required=False)
+    status = serializers.ChoiceField(choices=TransportStatus.choices, required=False)
+    priority = serializers.ChoiceField(choices=DeliveryPriority.choices, required=False)
+    report_type = serializers.ChoiceField(
+        choices=[
+            ("overview", "Overview"),
+            ("performance", "Performance"),
+            ("geographic", "Geographic"),
+            ("time", "Time Analysis"),
+            ("comprehensive", "Comprehensive"),
+        ],
+        default="comprehensive",
+    )
+
+
+class DistanceCalculationSerializer(serializers.Serializer):
+    pickup_latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    pickup_longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    delivery_latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    delivery_longitude = serializers.DecimalField(max_digits=9, decimal_places=6)

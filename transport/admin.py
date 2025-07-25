@@ -72,7 +72,10 @@ class TransporterAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("Location & Availability", {"fields": ("current_location_display", "is_available")}),
+        (
+            "Location & Availability",
+            {"fields": ("current_location_display", "is_available", "current_latitude", "current_longitude")},
+        ),
         ("Performance Metrics", {"fields": ("rating", "total_deliveries", "successful_deliveries", "success_rate_display")}),
         ("Account Status", {"fields": ("is_verified",)}),
         ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
@@ -94,7 +97,7 @@ class TransporterAdmin(admin.ModelAdmin):
             color = "orange"
         else:
             color = "red"
-        return format_html('<span style="color: {};">{:.1f}%</span>', color, rate)
+        return format_html('<span style="color: {};">{:.1}%</span>', color, rate)
 
     success_rate_display.short_description = "Success Rate"
     success_rate_display.admin_order_field = "successful_deliveries"
