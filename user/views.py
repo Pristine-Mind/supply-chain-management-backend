@@ -10,16 +10,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Contact, UserProfile, PhoneOTP
+from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
     BusinessRegisterSerializer,
     ContactSerializer,
     LoginResponseSerializer,
     LoginSerializer,
-    RegisterSerializer,
-    PhoneNumberSerializer,
-    VerifyOTPSerializer,
     PhoneLoginSerializer,
+    PhoneNumberSerializer,
+    RegisterSerializer,
+    VerifyOTPSerializer,
 )
 
 

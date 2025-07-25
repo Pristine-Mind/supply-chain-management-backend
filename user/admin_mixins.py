@@ -169,6 +169,12 @@ class AdminAdminMixin(ManagerAdminMixin):
     required_role = "admin"
 
 
+class TransporterAdminMixin(AgentAdminMixin):
+    """Mixin for Transporter level access (inherits from Agent)"""
+
+    required_role = "transporter"
+
+
 def role_required(role_codes, raise_exception=False):
     """
     Decorator for function-based views to check user role.
