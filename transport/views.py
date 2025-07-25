@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
@@ -10,6 +10,10 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from transport.services.auto_assignment import DeliveryAutoAssignmentService
+from transport.services.reporting import DeliveryReportingService
+from transport.utils import calculate_delivery_distance, calculate_distance
+
 from .models import (
     Delivery,
     DeliveryRating,
@@ -18,6 +22,7 @@ from .models import (
     TransportStatus,
 )
 from .serializers import (
+    AssignmentRequestSerializer,
     DeliveryCreateSerializer,
     DeliveryDashboardSerializer,
     DeliveryListSerializer,
@@ -25,8 +30,10 @@ from .serializers import (
     DeliverySerializer,
     DeliveryStatusUpdateSerializer,
     DeliveryTrackingSerializer,
+    DistanceCalculationSerializer,
     LocationUpdateSerializer,
     NearbyDeliverySerializer,
+    ReportFilterSerializer,
     TransporterCreateSerializer,
     TransporterSerializer,
     TransporterStatsSerializer,
@@ -624,3 +631,673 @@ def delivery_history(request):
     }
 
     return Response(response_data)
+
+
+class AutoAssignmentAPIView(APIView):
+    """
+    API for auto-assignment functionality.
+
+    POST /api/auto-assign/
+    - Assign specific delivery: {"delivery_id": 123}
+    - Bulk assign: {"priority_filter": "high", "max_assignments": 20}
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def __init__(self):
+        super().__init__()
+        self.assignment_service = DeliveryAutoAssignmentService()
+
+    def post(self, request):
+        serializer = AssignmentRequestSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        try:
+            if "delivery_id" in data:
+                result = self.assignment_service.assign_delivery(data["delivery_id"])
+
+                if result["success"]:
+                    response_data = {
+                        "success": result["success"],
+                        "message": result["message"],
+                        "delivery_id": result["delivery"].id,
+                        "delivery_uuid": str(result["delivery"].delivery_id),
+                        "assigned_transporter": {
+                            "id": result["assigned_transporter"].id,
+                            "name": result["assigned_transporter"].user.get_full_name(),
+                            "vehicle_type": result["assigned_transporter"].vehicle_type,
+                            "rating": float(result["assigned_transporter"].rating),
+                        },
+                        "score_details": result["score_details"],
+                        "alternatives": result["alternatives"],
+                        "distance_km": result["distance_km"],
+                        "estimated_delivery_time": result["estimated_delivery_time"],
+                    }
+                    return Response(response_data, status=status.HTTP_200_OK)
+                else:
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                result = self.assignment_service.bulk_assign_deliveries(
+                    priority_filter=data.get("priority_filter"), max_assignments=data.get("max_assignments", 50)
+                )
+                return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"success": False, "error": f"Assignment failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DeliveryReportingAPIView(APIView):
+    """
+    API for delivery reporting and analytics.
+
+    GET /api/reports/?start_date=2024-01-01&end_date=2024-01-31&report_type=comprehensive
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def __init__(self):
+        super().__init__()
+        self.reporting_service = DeliveryReportingService()
+
+    def get(self, request):
+        serializer = ReportFilterSerializer(data=request.GET)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        filters = serializer.validated_data
+        start_date = filters.get("start_date")
+        end_date = filters.get("end_date")
+        report_type = filters.get("report_type", "comprehensive")
+
+        report_filters = {}
+        if filters.get("transporter_id"):
+            report_filters["transporter_id"] = filters["transporter_id"]
+        if filters.get("status"):
+            report_filters["status"] = filters["status"]
+        if filters.get("priority"):
+            report_filters["priority"] = filters["priority"]
+
+        try:
+            if report_type == "overview":
+                data = self.reporting_service.get_delivery_overview(start_date, end_date, report_filters)
+            elif report_type == "performance":
+                data = self.reporting_service.get_transporter_performance(start_date, end_date)
+            elif report_type == "geographic":
+                data = self.reporting_service.get_geographic_analysis(start_date, end_date)
+            elif report_type == "time":
+                data = self.reporting_service.get_time_based_analysis(start_date, end_date)
+            else:
+                data = self.reporting_service.generate_comprehensive_report(start_date, end_date, report_filters)
+
+            return Response(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Report generation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DistanceCalculationAPIView(APIView):
+    """
+    API for distance calculations using Haversine formula.
+
+    POST /api/distance/
+    {
+        "pickup_latitude": 40.7128,
+        "pickup_longitude": -74.0060,
+        "delivery_latitude": 40.7589,
+        "delivery_longitude": -73.9851
+    }
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = DistanceCalculationSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        try:
+            distance = calculate_distance(
+                float(data["pickup_latitude"]),
+                float(data["pickup_longitude"]),
+                float(data["delivery_latitude"]),
+                float(data["delivery_longitude"]),
+            )
+
+            return Response(
+                {
+                    "distance_km": round(distance, 2),
+                    "distance_miles": round(distance * 0.621371, 2),
+                    "coordinates": {
+                        "pickup": {"latitude": data["pickup_latitude"], "longitude": data["pickup_longitude"]},
+                        "delivery": {"latitude": data["delivery_latitude"], "longitude": data["delivery_longitude"]},
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Distance calculation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DeliveryDistanceUpdateAPIView(APIView):
+    """
+    API to update delivery distance for existing deliveries.
+
+    POST /api/deliveries/{delivery_id}/update-distance/
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def post(self, request, delivery_id):
+        try:
+            delivery = Delivery.objects.get(delivery_id=delivery_id)
+        except Delivery.DoesNotExist:
+            return Response({"error": "Delivery not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            distance = calculate_delivery_distance(delivery)
+
+            if distance is None:
+                return Response(
+                    {"error": "Cannot calculate distance - missing coordinates"}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            delivery.distance_km = distance
+            delivery.save()
+
+            return Response(
+                {
+                    "delivery_id": str(delivery.delivery_id),
+                    "distance_km": round(distance, 2),
+                    "message": "Distance updated successfully",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response({"error": f"Distance update failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class OptimalTransporterAPIView(APIView):
+    """
+    API to find optimal transporters for a delivery without assigning.
+
+    GET /api/deliveries/{delivery_id}/optimal-transporters/
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def __init__(self):
+        super().__init__()
+        self.assignment_service = DeliveryAutoAssignmentService()
+
+    def get(self, request, delivery_id):
+        try:
+            delivery = Delivery.objects.get(delivery_id=delivery_id)
+        except Delivery.DoesNotExist:
+            return Response({"error": "Delivery not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            available_transporters = self.assignment_service.get_available_transporters(delivery)
+
+            if not available_transporters:
+                return Response(
+                    {
+                        "delivery_id": str(delivery.delivery_id),
+                        "available_transporters": [],
+                        "message": "No available transporters found",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            transporter_scores = []
+            for transporter in available_transporters:
+                score_data = self.assignment_service.calculate_transporter_score(transporter, delivery)
+                transporter_scores.append(
+                    {
+                        "transporter": {
+                            "id": transporter.id,
+                            "name": transporter.user.get_full_name(),
+                            "vehicle_type": transporter.vehicle_type,
+                            "vehicle_capacity": float(transporter.vehicle_capacity),
+                            "rating": float(transporter.rating),
+                            "success_rate": transporter.success_rate,
+                            "current_location": {
+                                "latitude": float(transporter.current_latitude) if transporter.current_latitude else None,
+                                "longitude": float(transporter.current_longitude) if transporter.current_longitude else None,
+                            },
+                        },
+                        "score": score_data["total_score"],
+                        "breakdown": score_data["breakdown"],
+                    }
+                )
+
+            transporter_scores.sort(key=lambda x: x["score"], reverse=True)
+
+            return Response(
+                {
+                    "delivery_id": str(delivery.delivery_id),
+                    "delivery_details": {
+                        "pickup_address": delivery.pickup_address,
+                        "delivery_address": delivery.delivery_address,
+                        "package_weight": float(delivery.package_weight),
+                        "priority": delivery.priority,
+                    },
+                    "available_transporters": transporter_scores,
+                    "total_found": len(transporter_scores),
+                    "best_match": transporter_scores[0] if transporter_scores else None,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Optimal transporter search failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DeliveryAnalyticsAPIView(APIView):
+    """
+    API for specific delivery analytics and insights.
+
+    GET /api/analytics/delivery-trends/?period=30
+    GET /api/analytics/transporter-rankings/?limit=10
+    GET /api/analytics/efficiency-metrics/
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def __init__(self):
+        super().__init__()
+        self.reporting_service = DeliveryReportingService()
+
+    def get(self, request):
+        endpoint = request.path.split("/")[-2]
+
+        try:
+            if endpoint == "delivery-trends":
+                return self._get_delivery_trends(request)
+            elif endpoint == "transporter-rankings":
+                return self._get_transporter_rankings(request)
+            elif endpoint == "efficiency-metrics":
+                return self._get_efficiency_metrics(request)
+            else:
+                return Response({"error": "Invalid analytics endpoint"}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": f"Analytics request failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _get_delivery_trends(self, request):
+        """Get delivery trends over specified period"""
+        period_days = int(request.GET.get("period", 30))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=period_days)
+
+        time_analysis = self.reporting_service.get_time_based_analysis(start_date, end_date)
+        overview = self.reporting_service.get_delivery_overview(start_date, end_date)
+
+        return Response(
+            {
+                "period_days": period_days,
+                "trends": time_analysis,
+                "summary": overview["overview"],
+                "generated_at": timezone.now().isoformat(),
+            }
+        )
+
+    def _get_transporter_rankings(self, request):
+        """Get top performing transporters"""
+        limit = int(request.GET.get("limit", 10))
+        period_days = int(request.GET.get("period", 30))
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=period_days)
+
+        performance_data = self.reporting_service.get_transporter_performance(start_date, end_date)
+
+        return Response(
+            {
+                "period_days": period_days,
+                "top_transporters": performance_data[:limit],
+                "total_transporters": len(performance_data),
+                "ranking_criteria": ["Success Rate", "Total Deliveries", "Average Rating", "Revenue Generated"],
+                "generated_at": timezone.now().isoformat(),
+            }
+        )
+
+    def _get_efficiency_metrics(self, request):
+        """Get system efficiency metrics"""
+        period_days = int(request.GET.get("period", 30))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=period_days)
+
+        overview = self.reporting_service.get_delivery_overview(start_date, end_date)
+        geographic = self.reporting_service.get_geographic_analysis(start_date, end_date)
+        performance = self.reporting_service.get_transporter_performance(start_date, end_date)
+
+        total_deliveries = overview["overview"]["total_deliveries"]
+        success_rate = overview["overview"]["success_rate"]
+        avg_delivery_time = overview["overview"]["avg_delivery_time_hours"]
+
+        total_transporters = len(performance)
+        active_transporters = len([t for t in performance if t["period_metrics"]["total_assigned"] > 0])
+        utilization_rate = (active_transporters / total_transporters * 100) if total_transporters > 0 else 0
+
+        avg_distance = geographic["distance_statistics"]["avg_distance"]
+        total_distance = geographic["distance_statistics"]["total_distance"]
+
+        efficiency_score = 0
+        if success_rate and avg_delivery_time and utilization_rate:
+            efficiency_score = min(
+                100, (success_rate * 0.4) + (utilization_rate * 0.3) + (max(0, 100 - (avg_delivery_time * 10)) * 0.3)
+            )
+
+        return Response(
+            {
+                "period_days": period_days,
+                "efficiency_metrics": {
+                    "overall_efficiency_score": round(efficiency_score, 2),
+                    "delivery_success_rate": success_rate,
+                    "average_delivery_time_hours": avg_delivery_time,
+                    "transporter_utilization_rate": round(utilization_rate, 2),
+                    "average_distance_per_delivery": avg_distance,
+                    "total_distance_covered": total_distance,
+                    "deliveries_per_day": round(total_deliveries / period_days, 2) if period_days > 0 else 0,
+                },
+                "recommendations": self._generate_efficiency_recommendations(
+                    success_rate, avg_delivery_time, utilization_rate, avg_distance
+                ),
+                "generated_at": timezone.now().isoformat(),
+            }
+        )
+
+    def _generate_efficiency_recommendations(self, success_rate, avg_time, utilization, avg_distance):
+        """Generate efficiency improvement recommendations"""
+        recommendations = []
+
+        if success_rate < 90:
+            recommendations.append(
+                {
+                    "area": "Success Rate",
+                    "issue": f"Success rate is {success_rate}%, below optimal 90%+",
+                    "suggestion": "Review failed deliveries and improve transporter training",
+                }
+            )
+
+        if avg_time and avg_time > 4:
+            recommendations.append(
+                {
+                    "area": "Delivery Time",
+                    "issue": f"Average delivery time is {avg_time:.1f} hours",
+                    "suggestion": "Optimize routing and improve auto-assignment algorithm",
+                }
+            )
+
+        if utilization < 70:
+            recommendations.append(
+                {
+                    "area": "Transporter Utilization",
+                    "issue": f"Only {utilization:.1f}% of transporters are active",
+                    "suggestion": "Improve transporter engagement and workload distribution",
+                }
+            )
+
+        if avg_distance and avg_distance > 20:
+            recommendations.append(
+                {
+                    "area": "Distance Optimization",
+                    "issue": f"Average delivery distance is {avg_distance:.1f}km",
+                    "suggestion": "Consider regional hubs or improve pickup location optimization",
+                }
+            )
+
+        if not recommendations:
+            recommendations.append(
+                {
+                    "area": "Overall",
+                    "issue": "System performing well",
+                    "suggestion": "Continue monitoring and consider expanding capacity",
+                }
+            )
+
+        return recommendations
+
+
+class BulkDeliveryOperationsAPIView(APIView):
+    """
+    API for bulk operations on deliveries.
+
+    POST /api/deliveries/bulk-operations/
+    {
+        "operation": "update_distances",  // or "auto_assign", "cancel", "reassign"
+        "delivery_ids": [1, 2, 3],
+        "filters": {"status": "available", "priority": "high"},  // alternative to delivery_ids
+        "parameters": {...}  // operation-specific parameters
+    }
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def __init__(self):
+        super().__init__()
+        self.assignment_service = DeliveryAutoAssignmentService()
+
+    def post(self, request):
+        operation = request.data.get("operation")
+        delivery_ids = request.data.get("delivery_ids", [])
+        filters = request.data.get("filters", {})
+        parameters = request.data.get("parameters", {})
+
+        if not operation:
+            return Response({"error": "Operation type is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if delivery_ids:
+                deliveries = Delivery.objects.filter(id__in=delivery_ids)
+            else:
+                deliveries = Delivery.objects.all()
+                if filters.get("status"):
+                    deliveries = deliveries.filter(status=filters["status"])
+                if filters.get("priority"):
+                    deliveries = deliveries.filter(priority=filters["priority"])
+                if filters.get("transporter_id"):
+                    deliveries = deliveries.filter(transporter_id=filters["transporter_id"])
+
+            if operation == "update_distances":
+                return self._bulk_update_distances(deliveries)
+            elif operation == "auto_assign":
+                return self._bulk_auto_assign(deliveries, parameters)
+            elif operation == "cancel":
+                return self._bulk_cancel(deliveries, parameters)
+            elif operation == "reassign":
+                return self._bulk_reassign(deliveries, parameters)
+            else:
+                return Response({"error": f"Unknown operation: {operation}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": f"Bulk operation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _bulk_update_distances(self, deliveries):
+        """Update distances for multiple deliveries"""
+        updated = 0
+        failed = 0
+        results = []
+
+        for delivery in deliveries:
+            try:
+                distance = calculate_delivery_distance(delivery)
+                if distance is not None:
+                    delivery.distance_km = distance
+                    delivery.save()
+                    updated += 1
+                    results.append(
+                        {"delivery_id": str(delivery.delivery_id), "distance_km": round(distance, 2), "status": "updated"}
+                    )
+                else:
+                    failed += 1
+                    results.append(
+                        {"delivery_id": str(delivery.delivery_id), "status": "failed", "error": "Missing coordinates"}
+                    )
+            except Exception as e:
+                failed += 1
+                results.append({"delivery_id": str(delivery.delivery_id), "status": "failed", "error": str(e)})
+
+        return Response(
+            {
+                "operation": "update_distances",
+                "total_processed": deliveries.count(),
+                "updated": updated,
+                "failed": failed,
+                "results": results,
+            }
+        )
+
+    def _bulk_auto_assign(self, deliveries, parameters):
+        """Auto-assign multiple deliveries"""
+        max_assignments = parameters.get("max_assignments", 50)
+        available_deliveries = deliveries.filter(status=TransportStatus.AVAILABLE)[:max_assignments]
+
+        results = {
+            "operation": "auto_assign",
+            "total_eligible": available_deliveries.count(),
+            "assigned": 0,
+            "failed": 0,
+            "assignments": [],
+            "failures": [],
+        }
+
+        for delivery in available_deliveries:
+            assignment_result = self.assignment_service.assign_delivery(delivery.id)
+
+            if assignment_result["success"]:
+                results["assigned"] += 1
+                results["assignments"].append(
+                    {
+                        "delivery_id": str(delivery.delivery_id),
+                        "transporter_name": assignment_result["assigned_transporter"].user.get_full_name(),
+                        "score": assignment_result["score_details"],
+                    }
+                )
+            else:
+                results["failed"] += 1
+                results["failures"].append({"delivery_id": str(delivery.delivery_id), "error": assignment_result["error"]})
+
+        return Response(results)
+
+    def _bulk_cancel(self, deliveries, parameters):
+        """Cancel multiple deliveries"""
+        reason = parameters.get("reason", "Bulk cancellation")
+        cancelled = 0
+        failed = 0
+        results = []
+
+        for delivery in deliveries:
+            try:
+                if delivery.status in [TransportStatus.AVAILABLE, TransportStatus.ASSIGNED]:
+                    delivery.status = TransportStatus.CANCELLED
+                    delivery.save()
+
+                    DeliveryTracking.objects.create(delivery=delivery, status=TransportStatus.CANCELLED, notes=reason)
+
+                    cancelled += 1
+                    results.append({"delivery_id": str(delivery.delivery_id), "status": "cancelled"})
+                else:
+                    failed += 1
+                    results.append(
+                        {
+                            "delivery_id": str(delivery.delivery_id),
+                            "status": "failed",
+                            "error": f"Cannot cancel delivery with status: {delivery.status}",
+                        }
+                    )
+            except Exception as e:
+                failed += 1
+                results.append({"delivery_id": str(delivery.delivery_id), "status": "failed", "error": str(e)})
+
+        return Response(
+            {
+                "operation": "cancel",
+                "total_processed": deliveries.count(),
+                "cancelled": cancelled,
+                "failed": failed,
+                "results": results,
+            }
+        )
+
+    def _bulk_reassign(self, deliveries, parameters):
+        """Reassign multiple deliveries"""
+        new_transporter_id = parameters.get("transporter_id")
+
+        if not new_transporter_id:
+            return Response(
+                {"error": "transporter_id parameter is required for reassignment"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            new_transporter = Transporter.objects.get(id=new_transporter_id)
+        except Transporter.DoesNotExist:
+            return Response({"error": "Transporter not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        reassigned = 0
+        failed = 0
+        results = []
+
+        for delivery in deliveries:
+            try:
+                if (
+                    delivery.status == TransportStatus.ASSIGNED
+                    and delivery.package_weight <= new_transporter.vehicle_capacity
+                ):
+                    old_transporter = delivery.transporter
+                    delivery.assign_to_transporter(new_transporter)
+
+                    DeliveryTracking.objects.create(
+                        delivery=delivery,
+                        status=TransportStatus.ASSIGNED,
+                        notes=f"Reassigned from {old_transporter.user.get_full_name() if old_transporter else 'Unknown'} to \
+                            {new_transporter.user.get_full_name()}",
+                    )
+
+                    reassigned += 1
+                    results.append(
+                        {
+                            "delivery_id": str(delivery.delivery_id),
+                            "status": "reassigned",
+                            "new_transporter": new_transporter.user.get_full_name(),
+                        }
+                    )
+                else:
+                    failed += 1
+                    results.append(
+                        {
+                            "delivery_id": str(delivery.delivery_id),
+                            "status": "failed",
+                            "error": "Delivery not eligible for reassignment or capacity exceeded",
+                        }
+                    )
+            except Exception as e:
+                failed += 1
+                results.append({"delivery_id": str(delivery.delivery_id), "status": "failed", "error": str(e)})
+
+        return Response(
+            {
+                "operation": "reassign",
+                "total_processed": deliveries.count(),
+                "reassigned": reassigned,
+                "failed": failed,
+                "new_transporter": new_transporter.user.get_full_name(),
+                "results": results,
+            }
+        )

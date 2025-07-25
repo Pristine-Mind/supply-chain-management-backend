@@ -77,8 +77,8 @@ from user.views import (
     PhoneLoginView,
     RegisterView,
     RequestOTPView,
-    VerifyOTPView,
     TransporterRegistrationAPIView,
+    VerifyOTPView,
 )
 
 router = DefaultRouter()
@@ -179,7 +179,28 @@ urlpatterns = [
     path("admin/deliveries/", transport_views.DeliveryListCreateView.as_view(), name="admin-delivery-list"),
     path("admin/deliveries/<uuid:delivery_id>/", transport_views.DeliveryUpdateView.as_view(), name="admin-delivery-detail"),
     path("admin/dashboard/", transport_views.DashboardStatsView.as_view(), name="admin-dashboard"),
-    path('api/register/transporter/', TransporterRegistrationAPIView.as_view(), name='api_register_transporter'),
+    path("api/register/transporter/", TransporterRegistrationAPIView.as_view(), name="api_register_transporter"),
+    path("api/auto-assign/", transport_views.AutoAssignmentAPIView.as_view(), name="auto_assign_delivery"),
+    path("api/reports/", transport_views.DeliveryReportingAPIView.as_view(), name="delivery_reports"),
+    path("api/distance/", transport_views.DistanceCalculationAPIView.as_view(), name="calculate_distance"),
+    path(
+        "api/deliveries/<uuid:delivery_id>/update-distance/",
+        transport_views.DeliveryDistanceUpdateAPIView.as_view(),
+        name="update_delivery_distance",
+    ),
+    path(
+        "api/deliveries/<uuid:delivery_id>/optimal-transporters/",
+        transport_views.OptimalTransporterAPIView.as_view(),
+        name="optimal_transporters",
+    ),
+    path("api/analytics/delivery-trends/", transport_views.DeliveryAnalyticsAPIView.as_view(), name="delivery_trends"),
+    path(
+        "api/analytics/transporter-rankings/",
+        transport_views.DeliveryAnalyticsAPIView.as_view(),
+        name="transporter_rankings",
+    ),
+    path("api/analytics/efficiency-metrics/", transport_views.DeliveryAnalyticsAPIView.as_view(), name="efficiency_metrics"),
+    path("api/deliveries/bulk-operations/", transport_views.BulkDeliveryOperationsAPIView.as_view(), name="bulk_operations"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
