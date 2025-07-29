@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delivery Notifications</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  line-height: 1.6;
+}
+
+.notification-container {
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+  max-width: 650px;
+  margin: 0 auto;
+  overflow: hidden;
+  position: relative;
+  animation: slideIn 0.6s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header-section {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.header-section::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(180deg); }
+}
+
+.header-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 2;
+}
+
+.header-subtitle {
+  color: rgba(255,255,255,0.9);
+  font-size: 1.1rem;
+  position: relative;
+  z-index: 2;
+}
+
+.content-section {
+  padding: 2.5rem 2rem;
+}
+
+.status-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 8px 20px rgba(17, 153, 142, 0.3);
+}
+
+.details-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.detail-item {
+  background: #f8fafd;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border-left: 4px solid #4facfe;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.detail-item:hover {
+  transform: translateX(5px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.detail-value {
+  color: #2d3748;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.tracking-section {
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  padding: 2rem;
+  border-radius: 15px;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.tracking-title {
+  font-size: 1.3rem;
+  color: #744210;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.tracking-number {
+  font-family: 'Courier New', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #8b4513;
+  background: rgba(255,255,255,0.7);
+  padding: 1rem;
+  border-radius: 8px;
+  letter-spacing: 2px;
+}
+
+.custom-message {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  border-left: 4px solid #d53f8c;
+}
+
+.custom-message p {
+  color: #2d3748;
+  font-style: italic;
+  font-size: 1.05rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.8rem 2rem;
+  border: none;
+  border-radius: 50px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(240, 147, 251, 0.3);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+}
+
+.footer {
+  background: #f7fafc;
+  padding: 2rem;
+  text-align: center;
+  border-top: 1px solid #e2e8f0;
+  color: #718096;
+  font-size: 0.9rem;
+}
+
+.footer-logo {
+  font-weight: 700;
+  color: #4facfe;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  body {
+    padding: 1rem 0.5rem;
+  }
+  
+  .header-title {
+    font-size: 1.8rem;
+  }
+  
+  .content-section {
+    padding: 2rem 1.5rem;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .btn {
+    width: 100%;
+    max-width: 250px;
+  }
+}
+
+.progress-bar {
+  background: #e2e8f0;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 1rem 0;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  height: 100%;
+  width: 75%;
+  border-radius: 4px;
+  animation: progressFlow 2s ease-out;
+}
+
+@keyframes progressFlow {
+  from { width: 0%; }
+  to { width: 75%; }
+}
+</style>
+</head>
+<body>
+<div class="notification-container">
+  <div class="header-section">
+    <div class="header-title">📦 Delivery Update</div>
+    <div class="header-subtitle">Your package is on its way!</div>
+  </div>
+  
+  <div class="content-section">
+    <div class="status-badge">{{ status }}</div>
+    
+    <div class="tracking-section">
+      <div class="tracking-title">Tracking Number</div>
+      <div class="tracking-number">{{ tracking_number }}</div>
+      <div class="progress-bar">
+        <div class="progress-fill"></div>
+      </div>
+    </div>
+    
+    <div class="details-grid">
+      <div class="detail-item">
+        <div class="detail-label">👤 Recipient</div>
+        <div class="detail-value">{{ recipient_name }}</div>
+      </div>
+      
+      <div class="detail-item">
+        <div class="detail-label">🏠 Delivery Address</div>
+        <div class="detail-value">{{ delivery_address }}</div>
+      </div>
+      
+      <div class="detail-item">
+        <div class="detail-label">📍 Pickup Address</div>
+        <div class="detail-value">{{ pickup_address }}</div>
+      </div>
+      
+      <div class="detail-item">
+        <div class="detail-label">📅 Scheduled Delivery</div>
+        <div class="detail-value">{{ requested_delivery_date }}</div>
+      </div>
+    </div>
+    
+    {% if custom_message %}
+    <div class="custom-message">
+      <p>💬 {{ custom_message }}</p>
+    </div>
+    {% endif %}
+    
+    <div class="action-buttons">
+      <a href="#" class="btn btn-primary">Track Package</a>
+      <a href="#" class="btn btn-secondary">Contact Support</a>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div class="footer-logo">🚚 Swift Delivery</div>
+    <p>Thank you for choosing our delivery service!</p>
+    <p><em>This is an automated notification. Please do not reply to this email.</em></p>
+  </div>
+</div>
+</body>
+</html>
