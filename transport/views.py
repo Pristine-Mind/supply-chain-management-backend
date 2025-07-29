@@ -19,14 +19,18 @@ from .models import (
     DeliveryRating,
     DeliveryTracking,
     Transporter,
+    TransporterStatus,
     TransportStatus,
 )
 from .serializers import (
     AssignmentRequestSerializer,
     DeliveryCreateSerializer,
     DeliveryDashboardSerializer,
+    DeliveryFilterSerializer,
     DeliveryListSerializer,
+    DeliveryProofSerializer,
     DeliveryRatingSerializer,
+    DeliverySearchSerializer,
     DeliverySerializer,
     DeliveryStatusUpdateSerializer,
     DeliveryTrackingSerializer,
@@ -34,7 +38,9 @@ from .serializers import (
     LocationUpdateSerializer,
     NearbyDeliverySerializer,
     ReportFilterSerializer,
+    TransporterAvailabilitySerializer,
     TransporterCreateSerializer,
+    TransporterListSerializer,
     TransporterSerializer,
     TransporterStatsSerializer,
 )
@@ -96,20 +102,44 @@ class TransporterProfileView(APIView):
 
 class TransporterListView(generics.ListAPIView):
     """
-    List all transporters (admin only)
+    List all transporters with filtering and search
     """
 
-    queryset = Transporter.objects.all()
-    serializer_class = TransporterSerializer
+    queryset = Transporter.objects.all().select_related("user")
+    serializer_class = TransporterListSerializer
     permission_classes = [permissions.IsAdminUser]
-    filterset_fields = ["vehicle_type", "is_available", "is_verified"]
-    ordering_fields = ["rating", "total_deliveries", "created_at"]
-    search_fields = ["user__first_name", "user__last_name", "license_number"]
+    filterset_fields = ["vehicle_type", "is_available", "is_verified", "status"]
+    ordering_fields = ["rating", "total_deliveries", "created_at", "success_rate"]
+    search_fields = ["user__first_name", "user__last_name", "license_number", "business_name"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        min_rating = self.request.query_params.get("min_rating")
+        if min_rating:
+            try:
+                queryset = queryset.filter(rating__gte=float(min_rating))
+            except ValueError:
+                pass
+
+        verified_only = self.request.query_params.get("verified_only")
+        if verified_only and verified_only.lower() == "true":
+            queryset = queryset.filter(is_verified=True)
+
+        documents_valid = self.request.query_params.get("documents_valid")
+        if documents_valid and documents_valid.lower() == "true":
+            today = timezone.now().date()
+            queryset = queryset.filter(
+                Q(insurance_expiry__isnull=True) | Q(insurance_expiry__gt=today),
+                Q(license_expiry__isnull=True) | Q(license_expiry__gt=today),
+            )
+
+        return queryset
 
 
 class AvailableDeliveriesView(generics.ListAPIView):
     """
-    List available deliveries for transporters
+    List available deliveries for transporters with enhanced filtering
     """
 
     serializer_class = DeliveryListSerializer
@@ -121,34 +151,44 @@ class AvailableDeliveriesView(generics.ListAPIView):
         except Transporter.DoesNotExist:
             return Delivery.objects.none()
 
+        # Check if transporter is eligible for deliveries
+        if not transporter.is_available or transporter.status != TransporterStatus.ACTIVE:
+            return Delivery.objects.none()
+
         queryset = Delivery.objects.filter(
             status=TransportStatus.AVAILABLE, package_weight__lte=transporter.vehicle_capacity
         ).select_related("marketplace_sale", "marketplace_sale__product")
 
-        priority = self.request.query_params.get("priority")
-        weight_max = self.request.query_params.get("weight_max")
-        distance_max = self.request.query_params.get("distance_max")
-        pickup_date = self.request.query_params.get("pickup_date")
+        # Apply filters
+        filter_serializer = DeliveryFilterSerializer(data=self.request.query_params)
+        if filter_serializer.is_valid():
+            filters = filter_serializer.validated_data
 
-        if priority:
-            queryset = queryset.filter(priority=priority)
+            if filters.get("priority"):
+                queryset = queryset.filter(priority=filters["priority"])
 
-        if weight_max:
+            if filters.get("weight_max"):
+                queryset = queryset.filter(package_weight__lte=filters["weight_max"])
+
+            if filters.get("distance_max"):
+                queryset = queryset.filter(distance_km__lte=filters["distance_max"])
+
+            if filters.get("pickup_date_from"):
+                queryset = queryset.filter(requested_pickup_date__gte=filters["pickup_date_from"])
+
+            if filters.get("pickup_date_to"):
+                queryset = queryset.filter(requested_pickup_date__lte=filters["pickup_date_to"])
+
+            if filters.get("fragile") is not None:
+                queryset = queryset.filter(fragile=filters["fragile"])
+
+            if filters.get("requires_signature") is not None:
+                queryset = queryset.filter(requires_signature=filters["requires_signature"])
+
+        radius = self.request.query_params.get("radius")
+        if radius and transporter.current_latitude and transporter.current_longitude:
             try:
-                queryset = queryset.filter(package_weight__lte=float(weight_max))
-            except ValueError:
-                pass
-
-        if distance_max:
-            try:
-                queryset = queryset.filter(distance_km__lte=float(distance_max))
-            except ValueError:
-                pass
-
-        if pickup_date:
-            try:
-                date_obj = datetime.strptime(pickup_date, "%Y-%m-%d").date()
-                queryset = queryset.filter(requested_pickup_date__date=date_obj)
+                queryset = queryset.filter(pickup_latitude__isnull=False, pickup_longitude__isnull=False)[:100]
             except ValueError:
                 pass
 
@@ -157,7 +197,7 @@ class AvailableDeliveriesView(generics.ListAPIView):
 
 class MyDeliveriesView(generics.ListAPIView):
     """
-    List deliveries assigned to authenticated transporter
+    List deliveries assigned to authenticated transporter with enhanced filtering
     """
 
     serializer_class = DeliveryListSerializer
@@ -173,6 +213,7 @@ class MyDeliveriesView(generics.ListAPIView):
             "marketplace_sale", "marketplace_sale__product"
         )
 
+        # Status filtering
         status_filter = self.request.query_params.get("status")
         if status_filter == "active":
             queryset = queryset.filter(
@@ -180,8 +221,35 @@ class MyDeliveriesView(generics.ListAPIView):
             )
         elif status_filter == "completed":
             queryset = queryset.filter(status=TransportStatus.DELIVERED)
+        elif status_filter == "cancelled":
+            queryset = queryset.filter(status=TransportStatus.CANCELLED)
+        elif status_filter == "failed":
+            queryset = queryset.filter(status__in=[TransportStatus.FAILED, TransportStatus.RETURNED])
         elif status_filter:
             queryset = queryset.filter(status=status_filter)
+
+        # Date filtering
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+
+        if date_from:
+            try:
+                date_obj = datetime.strptime(date_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__gte=date_obj)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                date_obj = datetime.strptime(date_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__lte=date_obj)
+            except ValueError:
+                pass
+
+        # Priority filtering
+        priority = self.request.query_params.get("priority")
+        if priority:
+            queryset = queryset.filter(priority=priority)
 
         return queryset.order_by("-updated_at")
 
@@ -199,18 +267,30 @@ class DeliveryDetailView(generics.RetrieveAPIView):
         user = self.request.user
 
         if user.is_staff:
-            return Delivery.objects.all()
+            return (
+                Delivery.objects.all()
+                .select_related("marketplace_sale", "transporter__user")
+                .prefetch_related("tracking_updates")
+            )
 
         try:
             transporter = user.transporter_profile
-            return Delivery.objects.filter(Q(status=TransportStatus.AVAILABLE) | Q(transporter=transporter))
+            return (
+                Delivery.objects.filter(Q(status=TransportStatus.AVAILABLE) | Q(transporter=transporter))
+                .select_related("marketplace_sale", "transporter__user")
+                .prefetch_related("tracking_updates")
+            )
         except Transporter.DoesNotExist:
-            return Delivery.objects.filter(marketplace_sale__buyer=user)
+            return (
+                Delivery.objects.filter(marketplace_sale__buyer=user)
+                .select_related("marketplace_sale", "transporter__user")
+                .prefetch_related("tracking_updates")
+            )
 
 
 class AcceptDeliveryView(APIView):
     """
-    Accept an available delivery
+    Accept an available delivery with enhanced validation
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -223,30 +303,51 @@ class AcceptDeliveryView(APIView):
 
         delivery = get_object_or_404(Delivery, delivery_id=delivery_id)
 
+        # Enhanced validation
         if delivery.status != TransportStatus.AVAILABLE:
             return Response({"detail": "This delivery is no longer available"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not transporter.is_available:
-            return Response({"detail": "You are currently marked as unavailable"}, status=status.HTTP_400_BAD_REQUEST)
+        if not transporter.is_available or transporter.status != TransporterStatus.ACTIVE:
+            return Response({"detail": "You are currently not available for deliveries"}, status=status.HTTP_400_BAD_REQUEST)
 
         if delivery.package_weight > transporter.vehicle_capacity:
             return Response({"detail": "Package weight exceeds your vehicle capacity"}, status=status.HTTP_400_BAD_REQUEST)
 
-        delivery.assign_to_transporter(transporter)
+        if transporter.is_documents_expired():
+            return Response(
+                {"detail": "Your documents have expired. Please update them before accepting deliveries"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        DeliveryTracking.objects.create(
-            delivery=delivery,
-            status=TransportStatus.ASSIGNED,
-            notes=f"Delivery assigned to {transporter.user.get_full_name()}",
-        )
+        # Check current workload
+        current_deliveries = transporter.get_current_deliveries()
+        max_concurrent = 5  # Could be configurable per transporter
+        if current_deliveries.count() >= max_concurrent:
+            return Response(
+                {"detail": f"You already have {current_deliveries.count()} active deliveries"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        serializer = DeliverySerializer(delivery)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            delivery.assign_to_transporter(transporter)
+
+            # Update estimated delivery time based on distance and current time
+            if delivery.distance_km:
+                # Estimate 30 km/h average speed + 30 minutes pickup time
+                estimated_hours = (delivery.distance_km / 30) + 0.5
+                delivery.estimated_delivery_time = timezone.now() + timedelta(hours=estimated_hours)
+                delivery.save(update_fields=["estimated_delivery_time"])
+
+            serializer = DeliverySerializer(delivery)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UpdateDeliveryStatusView(APIView):
     """
-    Update delivery status with tracking information
+    Update delivery status with enhanced tracking and proof of delivery
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -271,27 +372,87 @@ class UpdateDeliveryStatusView(APIView):
             notes = serializer.validated_data.get("notes", "")
             latitude = serializer.validated_data.get("latitude")
             longitude = serializer.validated_data.get("longitude")
+            delivery_photo = serializer.validated_data.get("delivery_photo")
+            signature_image = serializer.validated_data.get("signature_image")
 
-            if new_status == TransportStatus.PICKED_UP:
-                delivery.mark_picked_up()
-            elif new_status == TransportStatus.IN_TRANSIT:
-                delivery.mark_in_transit()
-            elif new_status == TransportStatus.DELIVERED:
-                delivery.mark_delivered()
+            try:
+                if new_status == TransportStatus.PICKED_UP:
+                    delivery.mark_picked_up(latitude=latitude, longitude=longitude, notes=notes)
+                elif new_status == TransportStatus.IN_TRANSIT:
+                    delivery.mark_in_transit(latitude=latitude, longitude=longitude, notes=notes)
+                elif new_status == TransportStatus.DELIVERED:
+                    delivery.mark_delivered(
+                        latitude=latitude, longitude=longitude, notes=notes, photo=delivery_photo, signature=signature_image
+                    )
+                elif new_status == TransportStatus.CANCELLED:
+                    reason = notes or "Cancelled by transporter"
+                    delivery.cancel_delivery(reason=reason, cancelled_by=request.user)
+                elif new_status == TransportStatus.FAILED:
+                    delivery.increment_delivery_attempt()
+                    if delivery.status == TransportStatus.FAILED:
+                        # Create tracking entry for failed delivery
+                        DeliveryTracking.objects.create(
+                            delivery=delivery,
+                            status=TransportStatus.FAILED,
+                            latitude=latitude,
+                            longitude=longitude,
+                            notes=notes or f"Failed delivery attempt {delivery.delivery_attempts}",
+                            created_by=request.user,
+                        )
 
-            tracking_data = {
-                "delivery": delivery,
-                "status": new_status,
-                "notes": notes,
-            }
+                # Update transporter location if provided
+                if latitude and longitude:
+                    transporter.update_location(latitude, longitude)
 
-            if latitude and longitude:
-                tracking_data["latitude"] = latitude
-                tracking_data["longitude"] = longitude
+                return Response(DeliverySerializer(delivery).data)
 
-            DeliveryTracking.objects.create(**tracking_data)
+            except Exception as e:
+                return Response({"detail": f"Status update failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response(DeliverySerializer(delivery).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeliveryProofView(APIView):
+    """
+    Handle proof of delivery submission
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, delivery_id):
+        try:
+            transporter = request.user.transporter_profile
+        except Transporter.DoesNotExist:
+            return Response({"detail": "Transporter profile not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        delivery = get_object_or_404(Delivery, delivery_id=delivery_id)
+
+        if delivery.transporter != transporter:
+            return Response(
+                {"detail": "You do not have permission to update this delivery"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        if delivery.status != TransportStatus.IN_TRANSIT:
+            return Response(
+                {"detail": "Proof of delivery can only be submitted for in-transit deliveries"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = DeliveryProofSerializer(data=request.data)
+        if serializer.is_valid():
+            data = serializer.validated_data
+
+            delivery.mark_delivered(
+                latitude=data.get("latitude"),
+                longitude=data.get("longitude"),
+                notes=data.get("delivery_notes", ""),
+                photo=data.get("delivery_photo"),
+                signature=data.get("signature_image"),
+            )
+
+            return Response(
+                {"detail": "Proof of delivery submitted successfully", "delivery": DeliverySerializer(delivery).data}
+            )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -336,18 +497,26 @@ class UpdateLocationView(APIView):
 
         serializer = LocationUpdateSerializer(data=request.data)
         if serializer.is_valid():
-            transporter.current_latitude = serializer.validated_data["latitude"]
-            transporter.current_longitude = serializer.validated_data["longitude"]
-            transporter.save()
+            latitude = serializer.validated_data["latitude"]
+            longitude = serializer.validated_data["longitude"]
 
-            return Response({"detail": "Location updated successfully"})
+            transporter.update_location(latitude, longitude)
+
+            return Response(
+                {
+                    "detail": "Location updated successfully",
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "last_update": transporter.last_location_update,
+                }
+            )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ToggleAvailabilityView(APIView):
     """
-    Toggle transporter availability status
+    Toggle transporter availability status with enhanced controls
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -355,22 +524,57 @@ class ToggleAvailabilityView(APIView):
     def post(self, request):
         try:
             transporter = request.user.transporter_profile
-            transporter.is_available = not transporter.is_available
+        except Transporter.DoesNotExist:
+            return Response({"detail": "Transporter profile not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = TransporterAvailabilitySerializer(data=request.data)
+        if serializer.is_valid():
+            is_available = serializer.validated_data.get("is_available")
+            new_status = serializer.validated_data.get("status")
+
+            if is_available is not None:
+                transporter.is_available = is_available
+
+            if new_status:
+                transporter.status = new_status
+
+            # Auto-set status based on availability
+            if transporter.is_available and transporter.status == TransporterStatus.OFFLINE:
+                transporter.status = TransporterStatus.ACTIVE
+            elif not transporter.is_available and transporter.status == TransporterStatus.ACTIVE:
+                transporter.status = TransporterStatus.OFFLINE
+
             transporter.save()
 
             return Response(
                 {
                     "is_available": transporter.is_available,
+                    "status": transporter.status,
+                    "status_display": transporter.get_status_display(),
+                    "detail": f"You are now {transporter.get_status_display().lower()}",
+                }
+            )
+        else:
+            # Toggle availability if no data provided
+            transporter.is_available = not transporter.is_available
+            if transporter.is_available:
+                transporter.status = TransporterStatus.ACTIVE
+            else:
+                transporter.status = TransporterStatus.OFFLINE
+            transporter.save()
+
+            return Response(
+                {
+                    "is_available": transporter.is_available,
+                    "status": transporter.status,
                     "detail": f'You are now {"available" if transporter.is_available else "unavailable"}',
                 }
             )
-        except Transporter.DoesNotExist:
-            return Response({"detail": "Transporter profile not found"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class TransporterStatsView(APIView):
     """
-    Get transporter statistics and earnings
+    Get enhanced transporter statistics and earnings
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -384,28 +588,46 @@ class TransporterStatsView(APIView):
         now = timezone.now()
         start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        completed_deliveries = Delivery.objects.filter(transporter=transporter, status=TransportStatus.DELIVERED)
-
+        all_deliveries = Delivery.objects.filter(transporter=transporter)
+        completed_deliveries = all_deliveries.filter(status=TransportStatus.DELIVERED)
         monthly_deliveries = completed_deliveries.filter(delivered_at__gte=start_of_month)
 
-        active_deliveries = Delivery.objects.filter(
-            transporter=transporter,
-            status__in=[TransportStatus.ASSIGNED, TransportStatus.PICKED_UP, TransportStatus.IN_TRANSIT],
-        ).count()
+        active_deliveries = transporter.get_current_deliveries().count()
 
-        total_earnings = completed_deliveries.aggregate(total=Sum("delivery_fee"))["total"] or 0
+        total_revenue = completed_deliveries.aggregate(total=Sum("delivery_fee"))["total"] or 0
+        commission_amount = total_revenue * (transporter.commission_rate / 100)
+        net_earnings = total_revenue - commission_amount
 
-        monthly_earnings = monthly_deliveries.aggregate(total=Sum("delivery_fee"))["total"] or 0
+        monthly_revenue = monthly_deliveries.aggregate(total=Sum("delivery_fee"))["total"] or 0
+        monthly_commission = monthly_revenue * (transporter.commission_rate / 100)
+        monthly_net_earnings = monthly_revenue - monthly_commission
+
+        completed_with_times = completed_deliveries.filter(picked_up_at__isnull=False, delivered_at__isnull=False)
+
+        avg_delivery_time = 0
+        if completed_with_times.exists():
+            total_time = 0
+            count = 0
+            for delivery in completed_with_times:
+                time_diff = delivery.delivered_at - delivery.picked_up_at
+                total_time += time_diff.total_seconds() / 3600
+                count += 1
+            avg_delivery_time = total_time / count if count > 0 else 0
 
         stats = {
             "total_deliveries": transporter.total_deliveries,
             "successful_deliveries": transporter.successful_deliveries,
+            "cancelled_deliveries": transporter.cancelled_deliveries,
             "success_rate": transporter.success_rate,
+            "cancellation_rate": transporter.cancellation_rate,
             "rating": transporter.rating,
-            "total_earnings": total_earnings,
+            "total_earnings": net_earnings,
+            "commission_rate": transporter.commission_rate,
             "deliveries_this_month": monthly_deliveries.count(),
-            "earnings_this_month": monthly_earnings,
+            "earnings_this_month": monthly_net_earnings,
             "active_deliveries": active_deliveries,
+            "average_delivery_time": round(avg_delivery_time, 2),
+            "is_documents_expired": transporter.is_documents_expired(),
         }
 
         serializer = TransporterStatsSerializer(stats)
@@ -469,6 +691,58 @@ class NearbyDeliveriesView(generics.ListAPIView):
         distance = R * c
 
         return distance
+
+
+class DeliverySearchView(generics.ListAPIView):
+    """
+    Enhanced delivery search functionality
+    """
+
+    serializer_class = DeliveryListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        serializer = DeliverySearchSerializer(data=self.request.query_params)
+
+        if not serializer.is_valid():
+            return Delivery.objects.none()
+
+        search_data = serializer.validated_data
+
+        # Base queryset based on user type
+        if user.is_staff:
+            queryset = Delivery.objects.all()
+        elif hasattr(user, "transporter_profile"):
+            transporter = user.transporter_profile
+            queryset = Delivery.objects.filter(Q(status=TransportStatus.AVAILABLE) | Q(transporter=transporter))
+        else:
+            queryset = Delivery.objects.filter(marketplace_sale__buyer=user)
+
+        # Apply search filters
+        if search_data.get("search"):
+            search_term = search_data["search"]
+            queryset = queryset.filter(
+                Q(tracking_number__icontains=search_term)
+                | Q(pickup_address__icontains=search_term)
+                | Q(delivery_address__icontains=search_term)
+                | Q(marketplace_sale__order_number__icontains=search_term)
+            )
+
+        if search_data.get("tracking_number"):
+            queryset = queryset.filter(tracking_number__iexact=search_data["tracking_number"])
+
+        if search_data.get("pickup_address"):
+            queryset = queryset.filter(pickup_address__icontains=search_data["pickup_address"])
+
+        if search_data.get("delivery_address"):
+            queryset = queryset.filter(delivery_address__icontains=search_data["delivery_address"])
+
+        if search_data.get("contact_phone"):
+            phone = search_data["contact_phone"]
+            queryset = queryset.filter(Q(pickup_contact_phone__icontains=phone) | Q(delivery_contact_phone__icontains=phone))
+
+        return queryset.select_related("marketplace_sale", "transporter__user").order_by("-created_at")
 
 
 class DeliveryRatingListCreateView(generics.ListCreateAPIView):
