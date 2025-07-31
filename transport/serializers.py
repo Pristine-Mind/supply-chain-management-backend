@@ -191,10 +191,10 @@ class MarketplaceSaleBasicSerializer(serializers.Serializer):
     seller_name = serializers.SerializerMethodField()
 
     def get_product_name(self, obj):
-        return obj.product.name if hasattr(obj, "product") and obj.product else "N/A"
+        return obj.product.product.name if hasattr(obj, "product") and obj.product else "N/A"
 
     def get_seller_name(self, obj):
-        return obj.seller.get_full_name() if hasattr(obj, "seller") and obj.seller else "N/A"
+        return obj.product.product.user.get_full_name() if hasattr(obj, "product") and obj.product else "N/A"
 
 
 class DeliverySerializer(serializers.ModelSerializer):
@@ -260,6 +260,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             "time_since_pickup",
             "created_at",
             "updated_at",
+            "success_rate"
         ]
         read_only_fields = [
             "id",

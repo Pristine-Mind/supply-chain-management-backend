@@ -334,7 +334,7 @@ class AcceptDeliveryView(APIView):
             # Update estimated delivery time based on distance and current time
             if delivery.distance_km:
                 # Estimate 30 km/h average speed + 30 minutes pickup time
-                estimated_hours = (delivery.distance_km / 30) + 0.5
+                estimated_hours = (float(delivery.distance_km) / 30.0) + 0.5
                 delivery.estimated_delivery_time = timezone.now() + timedelta(hours=estimated_hours)
                 delivery.save(update_fields=["estimated_delivery_time"])
 
@@ -659,7 +659,6 @@ class NearbyDeliveriesView(generics.ListAPIView):
             pickup_latitude__isnull=False,
             pickup_longitude__isnull=False,
         )
-
         nearby_deliveries = []
         for delivery in queryset:
             distance = self.calculate_distance(
@@ -669,10 +668,10 @@ class NearbyDeliveriesView(generics.ListAPIView):
                 float(delivery.pickup_longitude),
             )
 
-            if distance <= radius:
+            if distance >= radius:
                 delivery.distance = distance
                 nearby_deliveries.append(delivery)
-
+        print(nearby_deliveries)
         nearby_deliveries.sort(key=lambda x: x.distance)
         return nearby_deliveries
 
