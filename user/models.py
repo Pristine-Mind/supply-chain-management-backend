@@ -183,7 +183,6 @@ class UserProfile(models.Model):
     payment_qr_image = models.ImageField(upload_to="user_qr_codes/", blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        # Only set shop_id for business owners
         if self.role and self.role.code == "business_owner" and not self.shop_id:
             self.shop_id = uuid.uuid4()
         elif self.role and self.role.code != "business_owner" and self.shop_id:
@@ -226,7 +225,6 @@ class UserProfile(models.Model):
         except Role.DoesNotExist:
             return False
 
-    # Role-based permission methods
     def is_general_user(self):
         """Check if user has general user role or higher"""
         return self.has_role_or_above("general_user")
@@ -251,7 +249,6 @@ class UserProfile(models.Model):
         """Check if user has admin role"""
         return self.has_role_or_above("admin")
 
-    # Business type checks (complementary to role checks)
     def is_business_user(self):
         """Check if user is associated with a business (staff or owner)"""
         return self.is_business_staff_or_above()
