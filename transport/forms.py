@@ -350,5 +350,4 @@ class BulkDeliveryActionForm(forms.Form):
 
         if action == "assign" and not transporter:
             raise ValidationError("Transporter is required for assignment action.")
-
         return cleaned_data
