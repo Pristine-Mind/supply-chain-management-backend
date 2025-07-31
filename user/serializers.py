@@ -13,9 +13,9 @@ class RegisterSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
     first_name = serializers.CharField(required=True)
     last_name = serializers.CharField(required=True)
-    phone_number = serializers.CharField(required=True)
+    phone_number = serializers.CharField(required=False)
     email = serializers.EmailField(required=True)
-    location = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=True)
+    location = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=False)
     latitude = serializers.FloatField(required=False, allow_null=True)
     longitude = serializers.FloatField(required=False, allow_null=True)
 
@@ -40,10 +40,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        phone_number = validated_data.pop("phone_number")
-        latitude = validated_data.pop("latitude", None)
-        longitude = validated_data.pop("longitude", None)
-        location = validated_data.pop("location")
+        phone_number = validated_data.get("phone_number", None)
+        latitude = validated_data.get("latitude", None)
+        longitude = validated_data.get("longitude", None)
+        location = validated_data.get("location", None)
 
         user = User.objects.create(
             username=validated_data["username"],

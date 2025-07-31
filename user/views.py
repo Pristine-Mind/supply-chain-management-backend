@@ -265,6 +265,7 @@ class TransporterRegistrationAPIView(generics.CreateAPIView):
         if not user_serializer.is_valid():
             return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         user = user_serializer.save()
+        print(user, "user")
         transporter_data["user"] = user.id
         serializer = TransporterCreateSerializer(data=transporter_data, context={"request": request})
         if not serializer.is_valid():
