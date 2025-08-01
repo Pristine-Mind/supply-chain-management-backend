@@ -667,6 +667,7 @@ class UserInfoView(APIView):
                 "has_access_to_marketplace": has_access_to_marketplace,
                 "business_type": user_profile.business_type,
                 "role": user_profile.role.code,
+                "email": user.email,
             }
         )
 
