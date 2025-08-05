@@ -609,7 +609,6 @@ class DashboardAPIView(APIView):
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
-        # Filter data based on the shop_id of the user's profile
         shop_id = user_profile.shop_id
         current_year = timezone.now().year
 
@@ -627,7 +626,6 @@ class DashboardAPIView(APIView):
             or 0
         )
 
-        # Group sales by month for the current year
         sales_trends = (
             Sale.objects.filter(user__user_profile__shop_id=shop_id, sale_date__year=current_year)
             .annotate(month=TruncMonth("sale_date"))
@@ -685,7 +683,6 @@ class TopSalesCustomersView(APIView):
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
-        # Filter data based on the shop_id of the user's profile
         shop_id = user_profile.shop_id
 
         top_sales_customers = (
@@ -712,7 +709,6 @@ class TopOrdersCustomersView(APIView):
         if not user_profile:
             return Response({"detail": "User profile not found"}, status=404)
 
-        # Filter data based on the shop_id of the user's profile
         shop_id = user_profile.shop_id
 
         top_orders_customers = (
@@ -761,7 +757,6 @@ class StockListView(viewsets.ModelViewSet):
             bid_end_date=timezone.now() + timedelta(days=7),
         )
 
-        # Update the product to have moved to marketplace
         stock_item.is_pushed_to_marketplace = True
         stock_item.moved_date = timezone.now()
         stock_item.save(update_fields=["is_pushed_to_marketplace"])
@@ -774,7 +769,6 @@ class StockListView(viewsets.ModelViewSet):
 class MarketplaceProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer
     filterset_class = MarketplaceProductFilter
-    # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return (
@@ -909,13 +903,11 @@ def withdraw_product(request, product_id):
     try:
         product = MarketplaceProduct.objects.get(pk=product_id, product__user=request.user)
 
-        # Ensure that the bid end date has not expired
         if product.bid_end_date and product.bid_end_date < timezone.now():
             return Response(
                 {"error": "Cannot withdraw product. The bidding period has ended."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Withdraw the product
         product.is_available = False
         product.save()
 
@@ -1081,7 +1073,6 @@ def export_orders_to_excel(request):
     if end_date:
         try:
             end_date = timezone.datetime.strptime(end_date, "%Y-%m-%d").date()
-            # Include the entire end date by adding 1 day
             end_date = end_date + timezone.timedelta(days=1)
             queryset = queryset.filter(order_date__lt=end_date)
         except ValueError:

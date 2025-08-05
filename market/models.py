@@ -11,7 +11,6 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
-from reversion import register as reversion_register
 from reversion.models import Version
 
 try:
