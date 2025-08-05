@@ -2,7 +2,11 @@ import uuid
 from decimal import Decimal
 
 from django.contrib.auth.models import User
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import (
+    FileExtensionValidator,
+    MaxValueValidator,
+    MinValueValidator,
+)
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -521,3 +525,81 @@ class RouteDelivery(models.Model):
     class Meta:
         unique_together = ["route", "delivery"]
         ordering = ["order"]
+
+    def __str__(self):
+        return f"{self.route.name} - {self.delivery.tracking_number or self.delivery.id} (Order: {self.order})"
+
+
+class DocumentType(models.TextChoices):
+    """Types of documents that can be uploaded for transporters"""
+
+    DRIVING_LICENSE = "driving_license", _("Driving License")
+    VEHICLE_REGISTRATION = "vehicle_registration", _("Vehicle Registration")
+    VEHICLE_INSURANCE = "vehicle_insurance", _("Vehicle Insurance")
+    ID_PROOF = "id_proof", _("ID Proof")
+    ADDRESS_PROOF = "address_proof", _("Address Proof")
+    OTHER = "other", _("Other")
+
+
+class TransporterDocument(models.Model):
+    """Model to store documents related to transporters"""
+
+    transporter = models.ForeignKey(
+        Transporter, on_delete=models.CASCADE, related_name="documents", verbose_name=_("Transporter")
+    )
+    document_type = models.CharField(max_length=50, choices=DocumentType.choices, verbose_name=_("Document Type"))
+    document_number = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Document Number"))
+    document_file = models.FileField(
+        upload_to="transporter_documents/%Y/%m/%d/",
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=["pdf", "jpg", "jpeg", "png"], message=_("Only PDF, JPG, and PNG files are allowed.")
+            )
+        ],
+        verbose_name=_("Document File"),
+    )
+    issue_date = models.DateField(null=True, blank=True, verbose_name=_("Issue Date"))
+    expiry_date = models.DateField(null=True, blank=True, verbose_name=_("Expiry Date"))
+    is_verified = models.BooleanField(default=False, verbose_name=_("Is Verified"))
+    verified_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_documents",
+        verbose_name=_("Verified By"),
+    )
+    verified_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Verified At"))
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Verification Notes"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Transporter Document")
+        verbose_name_plural = _("Transporter Documents")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"{self.get_document_type_display()} - {self.transporter.business_name or self.transporter.user.get_full_name()}"
+        )
+
+    def is_expired(self):
+        """Check if the document is expired"""
+        if not self.expiry_date:
+            return False
+        return timezone.now().date() > self.expiry_date
+
+    @property
+    def status(self):
+        """Get document status"""
+        if not self.is_verified:
+            return _("Pending Verification")
+        if self.is_expired():
+            return _("Expired")
+        return _("Valid")
+
+    def clean(self):
+        """Validate document data"""
+        if self.expiry_date and self.issue_date and self.expiry_date < self.issue_date:
+            raise ValidationError({"expiry_date": _("Expiry date cannot be before issue date.")})

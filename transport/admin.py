@@ -18,6 +18,7 @@ from .models import (
     DeliveryTracking,
     RouteDelivery,
     Transporter,
+    TransporterDocument,
     TransporterStatus,
     TransportStatus,
 )
@@ -1101,6 +1102,37 @@ def generate_performance_report(modeladmin, request, queryset):
 
 
 generate_performance_report.short_description = "Generate performance report"
+
+
+@admin.register(TransporterDocument)
+class TransporterDocumentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "transporter",
+        "get_document_type_display",
+        "document_number",
+        "status",
+        "is_verified",
+        "expiry_date",
+    )
+    list_filter = ("document_type", "is_verified")
+    search_fields = ("transporter__user__username", "transporter__business_name", "document_number")
+    readonly_fields = ("created_at", "updated_at", "verified_at")
+    list_editable = ("is_verified",)
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        ("Document Information", {"fields": ("transporter", "document_type", "document_number", "document_file")}),
+        ("Validity", {"fields": ("issue_date", "expiry_date")}),
+        ("Verification", {"fields": ("is_verified", "verified_by", "verified_at", "notes")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if "is_verified" in form.changed_data and obj.is_verified:
+            obj.verified_by = request.user
+            obj.verified_at = timezone.now()
+        super().save_model(request, obj, form, change)
 
 
 transport_admin_site = TransportAdminSite(name="transport_admin")

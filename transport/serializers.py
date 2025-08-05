@@ -9,6 +9,7 @@ from .models import (
     DeliveryTracking,
     RouteDelivery,
     Transporter,
+    TransporterDocument,
     TransporterStatus,
     TransportStatus,
     VehicleType,
@@ -260,7 +261,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             "time_since_pickup",
             "created_at",
             "updated_at",
-            "success_rate"
+            "success_rate",
         ]
         read_only_fields = [
             "id",
@@ -695,6 +696,35 @@ class DeliveryProofSerializer(serializers.Serializer):
     longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
 
 
+class TransporterStatusUpdateSerializer(serializers.Serializer):
+    """Serializer for updating transporter status"""
+
+    status = serializers.ChoiceField(choices=TransporterStatus.choices)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_status(self, value):
+        """Validate status transition"""
+        transporter = self.context.get("transporter")
+        if not transporter:
+            return value
+
+        current_status = transporter.status
+        allowed_transitions = {
+            TransporterStatus.ACTIVE: [TransporterStatus.INACTIVE, TransporterStatus.SUSPENDED, TransporterStatus.OFFLINE],
+            TransporterStatus.INACTIVE: [TransporterStatus.ACTIVE, TransporterStatus.SUSPENDED],
+            TransporterStatus.SUSPENDED: [TransporterStatus.ACTIVE, TransporterStatus.INACTIVE],
+            TransporterStatus.OFFLINE: [TransporterStatus.ACTIVE, TransporterStatus.INACTIVE],
+        }
+
+        if not current_status:
+            return value
+
+        if value != current_status and value not in allowed_transitions.get(current_status, []):
+            raise serializers.ValidationError(f"Invalid status transition from {current_status} to {value}")
+
+        return value
+
+
 class DeliverySearchSerializer(serializers.Serializer):
     """Serializer for delivery search parameters"""
 
@@ -703,3 +733,48 @@ class DeliverySearchSerializer(serializers.Serializer):
     pickup_address = serializers.CharField(required=False, allow_blank=True)
     delivery_address = serializers.CharField(required=False, allow_blank=True)
     contact_phone = serializers.CharField(required=False, allow_blank=True)
+
+
+class TransporterDocumentSerializer(serializers.ModelSerializer):
+    document_type_display = serializers.CharField(source="get_document_type_display", read_only=True)
+    status = serializers.CharField(source="get_status_display", read_only=True)
+    file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransporterDocument
+        fields = [
+            "id",
+            "transporter",
+            "document_type",
+            "document_type_display",
+            "document_number",
+            "document_file",
+            "file_url",
+            "file_name",
+            "issue_date",
+            "expiry_date",
+            "is_verified",
+            "verified_at",
+            "notes",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "verified_at", "status"]
+
+    def get_file_url(self, obj):
+        if obj.document_file:
+            return self.context["request"].build_absolute_uri(obj.document_file.url)
+        return None
+
+    def get_file_name(self, obj):
+        if obj.document_file:
+            return obj.document_file.name.split("/")[-1]
+        return None
+
+
+class TransporterDocumentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransporterDocument
+        fields = ["document_type", "document_number", "document_file", "issue_date", "expiry_date", "notes"]
