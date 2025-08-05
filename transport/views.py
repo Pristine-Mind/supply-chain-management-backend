@@ -34,6 +34,7 @@ from .serializers import (
     DeliverySearchSerializer,
     DeliverySerializer,
     DeliveryStatusUpdateSerializer,
+    DeliverySuggestionRequestSerializer,
     DeliveryTrackingSerializer,
     DistanceCalculationSerializer,
     LocationUpdateSerializer,
@@ -48,6 +49,7 @@ from .serializers import (
     TransporterStatsSerializer,
     TransporterStatusUpdateSerializer,
 )
+from .services.delivery_suggestions import DeliverySuggestionService
 
 
 class IsTransporterOrReadOnly(permissions.BasePermission):
@@ -288,10 +290,6 @@ class DeliveryDetailView(generics.RetrieveAPIView):
 
 
 class AcceptDeliveryView(APIView):
-    """
-    Accept an available delivery with enhanced validation
-    """
-
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, delivery_id):
@@ -299,6 +297,17 @@ class AcceptDeliveryView(APIView):
             transporter = request.user.transporter_profile
         except Transporter.DoesNotExist:
             return Response({"detail": "Transporter profile not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        pending_deliveries = transporter.get_current_deliveries()
+
+        if pending_deliveries.exists():
+            return Response(
+                {
+                    "detail": "You already have an active or pending delivery. Please complete it before accepting new ones.",
+                    "active_delivery_id": str(pending_deliveries.first().delivery_id),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         delivery = get_object_or_404(Delivery, delivery_id=delivery_id)
 
@@ -317,14 +326,6 @@ class AcceptDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        current_deliveries = transporter.get_current_deliveries()
-        max_concurrent = 5
-        if current_deliveries.count() >= max_concurrent:
-            return Response(
-                {"detail": f"You already have {current_deliveries.count()} active deliveries"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             delivery.assign_to_transporter(transporter)
 
@@ -335,8 +336,7 @@ class AcceptDeliveryView(APIView):
 
             serializer = DeliverySerializer(delivery)
             return Response(serializer.data, status=status.HTTP_200_OK)
-
-        except ValueError as e:
+        except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1650,3 +1650,36 @@ class TransporterDocumentViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(document)
         return Response(serializer.data)
+
+
+class DeliverySuggestionView(APIView):
+    """
+    API endpoint to get suggested deliveries for a transporter based on their location.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        serializer = DeliverySuggestionRequestSerializer(data=request.query_params)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        service = DeliverySuggestionService()
+
+        try:
+            transporter = request.user.transporter_profile
+            vehicle_type = data.get("vehicle_type") or transporter.vehicle_type
+        except Exception as e:
+            raise Exception("Failed to get transporter profile: " + str(e))
+        deliveries = service.get_suggested_deliveries(
+            latitude=data["latitude"],
+            longitude=data["longitude"],
+            max_distance_km=data["max_distance_km"],
+            vehicle_type=vehicle_type,
+            limit=data["limit"],
+        )
+
+        serializer = DeliveryListSerializer(deliveries, many=True, context={"request": request})
+
+        return Response({"count": len(deliveries), "suggestions": serializer.data})
