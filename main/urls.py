@@ -69,6 +69,8 @@ from producer.views import (
     sales_view,
     stats_dashboard,
 )
+
+# Import transport views for direct URL patterns
 from transport import views as transport_views
 from user.views import (
     BusinessRegisterView,
@@ -101,6 +103,7 @@ router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-ord
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
+router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 
 
 urlpatterns = [
@@ -201,6 +204,12 @@ urlpatterns = [
     ),
     path("api/analytics/efficiency-metrics/", transport_views.DeliveryAnalyticsAPIView.as_view(), name="efficiency_metrics"),
     path("api/deliveries/bulk-operations/", transport_views.BulkDeliveryOperationsAPIView.as_view(), name="bulk_operations"),
+    path(
+        "transporters/<transporter_id>/status/",
+        transport_views.UpdateTransporterStatusView.as_view(),
+        name="transporter-status-update",
+    ),
+    # path("transporters/documents/", transport_views.TransporterDocumentViewSet.as_view()),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

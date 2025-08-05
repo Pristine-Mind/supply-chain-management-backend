@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import generics, permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +19,7 @@ from .models import (
     DeliveryRating,
     DeliveryTracking,
     Transporter,
+    TransporterDocument,
     TransporterStatus,
     TransportStatus,
 )
@@ -40,9 +41,12 @@ from .serializers import (
     ReportFilterSerializer,
     TransporterAvailabilitySerializer,
     TransporterCreateSerializer,
+    TransporterDocumentCreateSerializer,
+    TransporterDocumentSerializer,
     TransporterListSerializer,
     TransporterSerializer,
     TransporterStatsSerializer,
+    TransporterStatusUpdateSerializer,
 )
 
 
@@ -151,7 +155,6 @@ class AvailableDeliveriesView(generics.ListAPIView):
         except Transporter.DoesNotExist:
             return Delivery.objects.none()
 
-        # Check if transporter is eligible for deliveries
         if not transporter.is_available or transporter.status != TransporterStatus.ACTIVE:
             return Delivery.objects.none()
 
@@ -159,7 +162,6 @@ class AvailableDeliveriesView(generics.ListAPIView):
             status=TransportStatus.AVAILABLE, package_weight__lte=transporter.vehicle_capacity
         ).select_related("marketplace_sale", "marketplace_sale__product")
 
-        # Apply filters
         filter_serializer = DeliveryFilterSerializer(data=self.request.query_params)
         if filter_serializer.is_valid():
             filters = filter_serializer.validated_data
@@ -213,7 +215,6 @@ class MyDeliveriesView(generics.ListAPIView):
             "marketplace_sale", "marketplace_sale__product"
         )
 
-        # Status filtering
         status_filter = self.request.query_params.get("status")
         if status_filter == "active":
             queryset = queryset.filter(
@@ -228,7 +229,6 @@ class MyDeliveriesView(generics.ListAPIView):
         elif status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        # Date filtering
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
 
@@ -246,7 +246,6 @@ class MyDeliveriesView(generics.ListAPIView):
             except ValueError:
                 pass
 
-        # Priority filtering
         priority = self.request.query_params.get("priority")
         if priority:
             queryset = queryset.filter(priority=priority)
@@ -303,7 +302,6 @@ class AcceptDeliveryView(APIView):
 
         delivery = get_object_or_404(Delivery, delivery_id=delivery_id)
 
-        # Enhanced validation
         if delivery.status != TransportStatus.AVAILABLE:
             return Response({"detail": "This delivery is no longer available"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -319,9 +317,8 @@ class AcceptDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check current workload
         current_deliveries = transporter.get_current_deliveries()
-        max_concurrent = 5  # Could be configurable per transporter
+        max_concurrent = 5
         if current_deliveries.count() >= max_concurrent:
             return Response(
                 {"detail": f"You already have {current_deliveries.count()} active deliveries"},
@@ -331,9 +328,7 @@ class AcceptDeliveryView(APIView):
         try:
             delivery.assign_to_transporter(transporter)
 
-            # Update estimated delivery time based on distance and current time
             if delivery.distance_km:
-                # Estimate 30 km/h average speed + 30 minutes pickup time
                 estimated_hours = (float(delivery.distance_km) / 30.0) + 0.5
                 delivery.estimated_delivery_time = timezone.now() + timedelta(hours=estimated_hours)
                 delivery.save(update_fields=["estimated_delivery_time"])
@@ -390,7 +385,6 @@ class UpdateDeliveryStatusView(APIView):
                 elif new_status == TransportStatus.FAILED:
                     delivery.increment_delivery_attempt()
                     if delivery.status == TransportStatus.FAILED:
-                        # Create tracking entry for failed delivery
                         DeliveryTracking.objects.create(
                             delivery=delivery,
                             status=TransportStatus.FAILED,
@@ -400,7 +394,6 @@ class UpdateDeliveryStatusView(APIView):
                             created_by=request.user,
                         )
 
-                # Update transporter location if provided
                 if latitude and longitude:
                     transporter.update_location(latitude, longitude)
 
@@ -709,7 +702,6 @@ class DeliverySearchView(generics.ListAPIView):
 
         search_data = serializer.validated_data
 
-        # Base queryset based on user type
         if user.is_staff:
             queryset = Delivery.objects.all()
         elif hasattr(user, "transporter_profile"):
@@ -718,7 +710,6 @@ class DeliverySearchView(generics.ListAPIView):
         else:
             queryset = Delivery.objects.filter(marketplace_sale__buyer=user)
 
-        # Apply search filters
         if search_data.get("search"):
             search_term = search_data["search"]
             queryset = queryset.filter(
@@ -1348,6 +1339,52 @@ class DeliveryAnalyticsAPIView(APIView):
         return recommendations
 
 
+class UpdateTransporterStatusView(APIView):
+    """
+    API to update transporter status.
+
+    PATCH /transporters/{transporter_id}/status/
+    {
+        "status": "active" | "inactive" | "suspended" | "offline",
+        "notes": "Optional notes about the status change"
+    }
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, transporter_id):
+        try:
+            transporter = Transporter.objects.get(id=transporter_id)
+            print(transporter, "hhhhhhh")
+            serializer = TransporterStatusUpdateSerializer(data=request.data, context={"transporter": transporter})
+
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            new_status = serializer.validated_data["status"]
+            notes = serializer.validated_data.get("notes", "")
+            old_status = transporter.status
+
+            transporter.status = new_status
+            transporter.save(update_fields=["status", "updated_at"])
+
+            return Response(
+                {
+                    "status": "success",
+                    "message": f"Transporter status updated from {old_status} to {new_status}",
+                    "transporter_id": str(transporter.id),
+                    "new_status": new_status,
+                    "notes": notes,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Transporter.DoesNotExist:
+            return Response({"error": "Transporter not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class BulkDeliveryOperationsAPIView(APIView):
     """
     API for bulk operations on deliveries.
@@ -1574,3 +1611,42 @@ class BulkDeliveryOperationsAPIView(APIView):
                 "results": results,
             }
         )
+
+
+class TransporterDocumentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing transporter documents.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = TransporterDocumentSerializer
+    lookup_field = "id"
+
+    def get_queryset(self):
+        return TransporterDocument.objects.filter(transporter__user=self.request.user).select_related("transporter")
+
+    def get_serializer_class(self):
+        if self.action in ["create", "update", "partial_update"]:
+            return TransporterDocumentCreateSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        transporter = get_object_or_404(Transporter, user=self.request.user)
+        serializer.save(transporter=transporter)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def verify(self, request, id=None):
+        # TODO: Implement these later
+        document = self.get_object()
+        is_verified = request.data.get("is_verified", None)
+
+        if is_verified is None:
+            return Response({"error": "is_verified field is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        document.is_verified = is_verified
+        document.verified_by = request.user
+        document.verified_at = timezone.now()
+        document.save()
+
+        serializer = self.get_serializer(document)
+        return Response(serializer.data)
