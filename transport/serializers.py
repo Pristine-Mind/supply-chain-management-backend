@@ -778,3 +778,13 @@ class TransporterDocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransporterDocument
         fields = ["document_type", "document_number", "document_file", "issue_date", "expiry_date", "notes"]
+
+
+class DeliverySuggestionRequestSerializer(serializers.Serializer):
+    latitude = serializers.FloatField(required=True)
+    longitude = serializers.FloatField(required=True)
+    max_distance_km = serializers.FloatField(default=20.0, min_value=1.0, max_value=100.0)
+    limit = serializers.IntegerField(default=10, min_value=1, max_value=50)
+    vehicle_type = serializers.ChoiceField(
+        choices=VehicleType.choices, required=False, help_text="Filter by compatible vehicle type"
+    )
