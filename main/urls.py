@@ -209,6 +209,7 @@ urlpatterns = [
         transport_views.UpdateTransporterStatusView.as_view(),
         name="transporter-status-update",
     ),
+    path("api/deliveries/suggestions/", transport_views.DeliverySuggestionView.as_view(), name="delivery-suggestions"),
     # path("transporters/documents/", transport_views.TransporterDocumentViewSet.as_view()),
 ]
 
