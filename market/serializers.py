@@ -23,6 +23,7 @@ from .models import (
     MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
+    OrderTrackingEvent,
     Payment,
     Purchase,
     UserProductImage,
@@ -570,3 +571,25 @@ class DeliverySerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
         ]
+
+
+class OrderTrackingEventSerializer(serializers.ModelSerializer):
+    """Serializer for order tracking events tied to `MarketplaceSale`."""
+
+    order_number = serializers.CharField(source="order.order_number", read_only=True)
+
+    class Meta:
+        model = OrderTrackingEvent
+        fields = [
+            "id",
+            "order",
+            "order_number",
+            "status",
+            "message",
+            "location",
+            "latitude",
+            "longitude",
+            "metadata",
+            "created_at",
+        ]
+        read_only_fields = ["id", "order_number", "created_at"]
