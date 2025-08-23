@@ -18,7 +18,13 @@ from producer.models import (
     StockList,
 )
 
-from .models import MarketplaceUserProduct, Notification, UserProductImage
+from .models import (
+    MarketplaceSale,
+    MarketplaceUserProduct,
+    Notification,
+    OrderTrackingEvent,
+    UserProductImage,
+)
 from .utils import notify_event
 
 
@@ -128,6 +134,21 @@ def order_notifications(sender, instance, created, **kwargs):
                     "customer_name": instance.user.username if instance.user else "Customer",
                 },
             )
+
+
+@receiver(post_save, sender=MarketplaceSale, dispatch_uid="create_initial_order_tracking_event")
+def create_initial_order_tracking_event(sender, instance: "MarketplaceSale", created: bool, **kwargs):
+    """Create an initial tracking event when a marketplace sale is created."""
+    if not created:
+        return
+    try:
+        OrderTrackingEvent.objects.create(
+            order=instance,
+            status=instance.status,
+            message="Order created",
+        )
+    except Exception:
+        pass
 
 
 @receiver(post_save, sender=Sale)

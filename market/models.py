@@ -588,6 +588,15 @@ class MarketplaceSale(models.Model):
         """Save the model with additional validations and auto-fields."""
         self.full_clean()
 
+        # Track status change for creating tracking events post-save
+        old_status = None
+        is_create = self.pk is None
+        if not is_create:
+            try:
+                old_status = MarketplaceSale.objects.only("status").get(pk=self.pk).status
+            except MarketplaceSale.DoesNotExist:
+                old_status = None
+
         # Generate order number if not set
         if not self.order_number:
             self.order_number = f"ORD-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
@@ -814,3 +823,34 @@ class ProductView(models.Model):
     def __str__(self):
         who = self.user.username if self.user else self.session_key or "anon"
         return f"{who} viewed {self.product} at {self.timestamp}"
+
+
+class OrderTrackingEvent(models.Model):
+    """
+    Discrete tracking event for a marketplace order (`MarketplaceSale`).
+
+    Stores the timeline of an order for buyers/sellers to track progress.
+    """
+
+    order = models.ForeignKey(
+        "MarketplaceSale", on_delete=models.CASCADE, related_name="tracking_events", verbose_name=_("Order")
+    )
+    status = models.CharField(max_length=20, choices=SaleStatus.choices, verbose_name=_("Status"))
+    message = models.CharField(max_length=255, blank=True, verbose_name=_("Message"))
+    location = models.CharField(max_length=255, blank=True, verbose_name=_("Location"))
+    latitude = models.FloatField(null=True, blank=True, verbose_name=_("Latitude"))
+    longitude = models.FloatField(null=True, blank=True, verbose_name=_("Longitude"))
+    metadata = models.JSONField(null=True, blank=True, verbose_name=_("Metadata"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+
+    class Meta:
+        verbose_name = _("Order Tracking Event")
+        verbose_name_plural = _("Order Tracking Events")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["order", "created_at"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Order {self.order.order_number} → {self.status} at {self.created_at}"

@@ -1,6 +1,7 @@
 import logging
 
 from django.contrib import admin
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 try:
@@ -28,6 +29,7 @@ from .models import (
     MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
+    OrderTrackingEvent,
     Payment,
     Purchase,
     UserInteraction,
@@ -100,6 +102,25 @@ class UserInteractionAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     add_roles = ["admin"]
     change_roles = ["admin"]
     delete_roles = ["admin"]
+
+
+@admin.register(OrderTrackingEvent)
+class OrderTrackingEventAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
+    list_display = ("order", "status", "message", "location", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("order__order_number", "message", "location")
+    readonly_fields = ("created_at",)
+
+    view_roles = ["admin", "manager", "agent", "business_owner", "business_staff"]
+    add_roles = ["admin", "manager", "agent", "business_owner", "business_staff"]
+    change_roles = ["admin", "manager", "agent", "business_owner", "business_staff"]
+    delete_roles = ["admin", "manager"]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("order")
+        if not request.user.is_staff and hasattr(request.user, "user_profile"):
+            return qs.filter(Q(order__buyer=request.user) | Q(order__seller=request.user))
+        return qs
 
 
 @admin.register(UserProductImage)

@@ -23,6 +23,7 @@ from market.views import (
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
     NotificationListView,
+    OrderTrackingEventViewSet,
     ProductFeedbackView,
     SellerProductsView,
     UserBidViewSet,
@@ -104,6 +105,7 @@ router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
+router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
 
 
 urlpatterns = [

@@ -18,7 +18,14 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 
 from main.enums import GlobalEnumSerializer, get_enum_values
-from market.models import Bid, ChatMessage, Feedback, Notification, UserInteraction
+from market.models import (
+    Bid,
+    ChatMessage,
+    Feedback,
+    Notification,
+    OrderTrackingEvent,
+    UserInteraction,
+)
 from producer.models import MarketplaceProduct
 
 from .filters import BidFilter, ChatFilter, UserBidFilter
@@ -47,6 +54,7 @@ from .serializers import (
     MarketplaceSaleSerializer,
     MarketplaceUserProductSerializer,
     NotificationSerializer,
+    OrderTrackingEventSerializer,
     PurchaseSerializer,
     SellerBidSerializer,
     SellerProductSerializer,
@@ -619,6 +627,49 @@ def log_product_view(request, pk):
     )
 
     return Response({"message": "Product view logged successfully."}, status=status.HTTP_200_OK)
+
+
+class OrderTrackingEventViewSet(viewsets.ModelViewSet):
+    """ViewSet for listing and creating `OrderTrackingEvent` records."""
+
+    serializer_class = OrderTrackingEventSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = OrderTrackingEvent.objects.select_related("order", "order__buyer", "order__seller")
+        user = self.request.user
+        # Restrict non-staff to their own orders
+        if not user.is_staff:
+            qs = qs.filter(models.Q(order__buyer=user) | models.Q(order__seller=user))
+
+        # Optional filter by order id
+        order_id = self.request.query_params.get("order") or self.request.query_params.get("order_id")
+        if order_id:
+            qs = qs.filter(order_id=order_id)
+
+        return qs.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        order = serializer.validated_data.get("order")
+        user = self.request.user
+        if not (user.is_staff or order.buyer_id == user.id or order.seller_id == user.id):
+            raise serializers.ValidationError("You do not have permission to add events for this order.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        user = self.request.user
+        order = instance.order
+        if not (user.is_staff or order.buyer_id == user.id or order.seller_id == user.id):
+            raise serializers.ValidationError("You do not have permission to modify events for this order.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        order = instance.order
+        if not (user.is_staff or order.buyer_id == user.id or order.seller_id == user.id):
+            raise serializers.ValidationError("You do not have permission to delete events for this order.")
+        instance.delete()
 
 
 # def get_chatbot():
