@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "report",
     "drf_spectacular",
     "transport",
+    "payment",
 ]
 
 MIDDLEWARE = [
@@ -245,15 +246,17 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-KHALTI_PUBLIC_KEY = "aaass"
-KHALTI_SECRET_KEY = "aa"
+KHALTI_BASE_URL = "https://dev.khalti.com/api/v5/"
+SITE_URL = "http://localhost:8000"
 
-# Khalti test credentials
+KHALTI_SECRET_KEY = "dc7b150742684eb69eeeec8f30b32f5c"
+KHALTI_BASE_URL = "https://dev.khalti.com/api/v2/"
+KHALTI_WEBSITE_URL = "http://localhost:8000/"
+KHALTI_RETURN_URL = "http://localhost:8000/api/v1/khalti/return-url/"
+
 KHALTI_TEST_MOBILE_NUMBER = "9800000001"
 KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
 
-# SMS Configuration (SparrowSMS)
-# These values are now loaded from environment variables for security
 SMS_TOKEN = os.environ.get("SMS_TOKEN")
 SMS_API_URL = os.environ.get("SMS_API_URL")
 SMS_SENDER = os.environ.get("SMS_SENDER")
@@ -267,12 +270,9 @@ SPECTACULAR_SETTINGS = {
     "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
 }
 
-
-# SparrowSMS config now loaded from environment variables
 SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
 SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
 SPARROWSMS_ENDPOINT = os.environ.get("SPARROWSMS_ENDPOINT")
-
 
 EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
 ANYMAIL = {

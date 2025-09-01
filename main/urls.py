@@ -213,6 +213,8 @@ urlpatterns = [
     ),
     path("api/deliveries/suggestions/", transport_views.DeliverySuggestionView.as_view(), name="delivery-suggestions"),
     # path("transporters/documents/", transport_views.TransporterDocumentViewSet.as_view()),
+    # Payment URLs
+    path("api/v1/payments/", include("payment.urls")),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
