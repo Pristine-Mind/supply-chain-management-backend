@@ -562,6 +562,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             "cart",
             "customer_name",
             "phone_number",
+            "email",
             "address",
             "city",
             "state",
