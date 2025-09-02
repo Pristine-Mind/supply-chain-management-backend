@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponseRedirect, JsonResponse
+from django.conf import settings
+
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -40,7 +42,7 @@ def initiate_payment(request: HttpRequest) -> Response:
         data = request.data
 
         cart_id = data.get("cart_id")
-        return_url = data.get("return_url")
+        return_url = settings.KHALTI_RETURN_URL
         gateway = data.get("gateway")
 
         bank = data.get("bank")

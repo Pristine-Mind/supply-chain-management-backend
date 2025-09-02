@@ -445,13 +445,20 @@ class CartCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        user = request.user
-        if user:
-            cart, created = Cart.objects.get_or_create(user=user)
-            serializer = self.get_serializer(cart)
-            return Response(serializer.data, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
-        else:
-            return super().post(request, *args, **kwargs)
+        cart, created = Cart.objects.get_or_create(user=request.user)
+        serializer = self.get_serializer(cart)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class UserCartView(views.APIView):
+    """Return the authenticated user's cart (create if missing) with items."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        cart, _ = Cart.objects.get_or_create(user=request.user)
+        serializer = CartSerializer(cart)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class CartItemCreateView(generics.CreateAPIView):
@@ -461,17 +468,14 @@ class CartItemCreateView(generics.CreateAPIView):
         cart_id = self.kwargs["cart_id"]
         cart = get_object_or_404(Cart, id=cart_id)
 
-        # Check if item already exists in cart
         product_id = request.data.get("product_id")
         existing_item = CartItem.objects.filter(cart=cart, product_id=product_id).first()
 
         if existing_item:
-            # Update quantity if item exists
             existing_item.quantity += request.data.get("quantity", 1)
             existing_item.save()
             serializer = self.get_serializer(existing_item)
         else:
-            # Create new item
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save(cart=cart)
@@ -530,21 +534,17 @@ class MarketplaceSaleViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = MarketplaceSale.objects.all()
 
-        # If not admin, filter by buyer or seller
         if not user.is_staff:
             queryset = queryset.filter(models.Q(buyer=user) | models.Q(seller=user)).distinct()
 
-        # Filter by status if provided
         status_param = self.request.query_params.get("status")
         if status_param:
             queryset = queryset.filter(status=status_param.lower())
 
-        # Filter by payment status if provided
         payment_status = self.request.query_params.get("payment_status")
         if payment_status:
             queryset = queryset.filter(payment_status=payment_status.lower())
 
-        # Filter by date range if provided
         start_date = self.request.query_params.get("start_date")
         end_date = self.request.query_params.get("end_date")
         if start_date:
@@ -639,11 +639,9 @@ class OrderTrackingEventViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = OrderTrackingEvent.objects.select_related("order", "order__buyer", "order__seller")
         user = self.request.user
-        # Restrict non-staff to their own orders
         if not user.is_staff:
             qs = qs.filter(models.Q(order__buyer=user) | models.Q(order__seller=user))
 
-        # Optional filter by order id
         order_id = self.request.query_params.get("order") or self.request.query_params.get("order_id")
         if order_id:
             qs = qs.filter(order_id=order_id)
