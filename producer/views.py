@@ -1369,7 +1369,9 @@ class DirectSaleViewSet(viewsets.ModelViewSet):
     def sales_summary(self, request):
         """Get summary of direct sales (total sales, count, etc.)."""
         summary = self.get_queryset().aggregate(
-            total_sales=Sum("total_amount"), total_quantity=Sum("quantity"), avg_sale=Sum("total_amount") / Count("id")
+            total_sales=Sum("total_amount"),
+            total_quantity=Sum("quantity"),
+            avg_sale=Sum("total_amount") / Count("id"),
         )
 
         top_products = (
