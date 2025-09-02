@@ -442,9 +442,10 @@ class UserFeedbackView(views.APIView):
 class CartCreateView(generics.CreateAPIView):
     queryset = Cart.objects.all()
     serializer_class = CartSerializer
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        user = request.user if request.user.is_authenticated else None
+        user = request.user
         if user:
             cart, created = Cart.objects.get_or_create(user=user)
             serializer = self.get_serializer(cart)
