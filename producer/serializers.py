@@ -103,9 +103,21 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductImage
         fields = ["id", "image", "alt_text", "created_at"]
+
+    def get_image(self, obj):
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if obj.image:
+            try:
+                # Prefer absolute URL if request is available
+                return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+            except Exception:
+                return obj.image.url
+        return None
 
 
 class ProductStockUpdateSerializer(serializers.Serializer):
@@ -139,13 +151,13 @@ class ProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cost price must be greater than zero.")
         return value
 
-    def validate(self, data):
-        """
-        Ensure that the cost price is not greater than the selling price.
-        """
-        if data["cost_price"] > data["price"]:
-            raise serializers.ValidationError("Cost price cannot be greater than selling price.")
-        return data
+    # def validate(self, data):
+    #     """
+    #     Ensure that the cost price is not greater than the selling price.
+    #     """
+    #     if data["cost_price"] > data["price"]:
+    #         raise serializers.ValidationError("Cost price cannot be greater than selling price.")
+    #     return data
 
     def create(self, validated_data):
         uploaded_images = validated_data.pop("uploaded_images", [])
@@ -205,13 +217,13 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid status choice.")
         return value
 
-    def validate_delivery_date(self, value):
-        """
-        Ensure the delivery date is not in the past or before the order date.
-        """
-        if value and value < datetime.now():
-            raise serializers.ValidationError("Delivery date cannot be in the past.")
-        return value
+    # def validate_delivery_date(self, value):
+    #     """
+    #     Ensure the delivery date is not in the past or before the order date.
+    #     """
+    #     if value and value < datetime.now():
+    #         raise serializers.ValidationError("Delivery date cannot be in the past.")
+    #     return value
 
     def validate(self, data):
         # Ensure delivery_date is after order_date
@@ -262,9 +274,9 @@ class SaleSerializer(serializers.ModelSerializer):
         """
         Ensure that the sale price does not exceed the original product price.
         """
-        product = data["order"]
-        if data["sale_price"] > product.product.price:
-            raise serializers.ValidationError("Sale price cannot be greater than the original product price.")
+        # product = data["order"]
+        # if data["sale_price"] > product.product.price:
+        #     raise serializers.ValidationError("Sale price cannot be greater than the original product price.")
         return data
 
     def create(self, validated_data):
