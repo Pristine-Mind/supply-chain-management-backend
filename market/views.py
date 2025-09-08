@@ -468,8 +468,8 @@ class CartItemCreateView(generics.CreateAPIView):
         cart_id = self.kwargs["cart_id"]
         cart = get_object_or_404(Cart, id=cart_id)
 
-        product_id = request.data.get("product_id")
-        existing_item = CartItem.objects.filter(cart=cart, product_id=product_id).first()
+        product = request.data.get("product")
+        existing_item = CartItem.objects.filter(cart=cart, product=product).first()
 
         if existing_item:
             existing_item.quantity += request.data.get("quantity", 1)

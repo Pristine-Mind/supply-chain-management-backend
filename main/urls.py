@@ -125,6 +125,7 @@ urlpatterns = [
     path("khalti/verify/", verify_khalti_payment, name="verify_khalti_payment"),
     path("register/", RegisterView.as_view(), name="register"),
     path("register/business/", BusinessRegisterView.as_view(), name="business-register"),
+    path("api/register/user/", RegisterView.as_view(), name="api-user-register"),
     path("api/v1/stats/", StatsAPIView.as_view(), name="stats-api"),
     path("api/v1/notifications/", NotificationListView.as_view(), name="notification-list"),
     path("api/v1/notifications/<int:pk>/mark-read/", MarkNotificationAsReadView.as_view(), name="mark-notification-as-read"),
