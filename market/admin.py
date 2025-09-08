@@ -7,7 +7,6 @@ from django.utils.translation import gettext_lazy as _
 try:
     from reversion.admin import VersionAdmin as BaseVersionAdmin
 except ImportError:
-    # Fallback to regular ModelAdmin if reversion is not available
     BaseVersionAdmin = admin.ModelAdmin
 
 logger = logging.getLogger(__name__)
@@ -203,7 +202,6 @@ class CartItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
 class MarketplaceSaleAdmin(admin.ModelAdmin):
     list_display = (
         "order_number",
-        "get_buyer_display",
         "product",
         "quantity",
         "status",
@@ -302,26 +300,23 @@ class MarketplaceSaleAdmin(admin.ModelAdmin):
         ),
     )
 
-    def get_buyer_display(self, obj):
-        return obj.buyer_display
+    # def get_buyer_display(self, obj):
+    #     return obj.buyer_display
 
-    get_buyer_display.short_description = _("Buyer")
-    get_buyer_display.admin_order_field = "buyer__username"
+    # get_buyer_display.short_description = _("Buyer")
+    # get_buyer_display.admin_order_field = "buyer__username"
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related("buyer", "product", "seller")
 
     def has_delete_permission(self, request, obj=None):
-        # Only allow soft delete from the admin
         return False
 
     def delete_model(self, request, obj):
-        # Override to perform soft delete
         obj.soft_delete()
 
     def delete_queryset(self, request, queryset):
-        # Override to perform soft delete on multiple objects
         for obj in queryset:
             obj.soft_delete()
 
