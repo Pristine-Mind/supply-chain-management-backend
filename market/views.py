@@ -1,10 +1,8 @@
 import requests
 
-# from chatterbot import ChatBot
-# from chatterbot.trainers import ListTrainer
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models import F, OuterRef, Q, QuerySet, Subquery
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
