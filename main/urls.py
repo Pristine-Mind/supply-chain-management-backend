@@ -151,7 +151,11 @@ urlpatterns = [
     path("api/v1/my-cart/", UserCartView.as_view(), name="user-cart"),
     path("api/v1/carts/<int:cart_id>/items/", CartItemCreateView.as_view(), name="cart-item-create"),
     path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemUpdateView.as_view(), name="cart-item-update"),
-    path("api/v1/carts/<int:cart_id>/items/<int:item_id>/", CartItemDeleteView.as_view(), name="cart-item-delete"),
+    path(
+        "api/v1/carts/<int:cart_id>/items/<int:item_id>/delete/",
+        CartItemDeleteView.as_view(),
+        name="cart-item-delete",
+    ),
     path("api/v1/deliveries/", DeliveryCreateView.as_view(), name="delivery-create"),
     path("api/shops/<uuid:shop_id>/qr/", ShopQRAPIView.as_view(), name="shop-qr"),
     path("api/products/<int:pk>/log-view/", log_product_view, name="log-product-view"),
