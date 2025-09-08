@@ -200,7 +200,7 @@ class CartItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(MarketplaceSale)
-class MarketplaceSaleAdmin(BaseVersionAdmin):
+class MarketplaceSaleAdmin(admin.ModelAdmin):
     list_display = (
         "order_number",
         "get_buyer_display",

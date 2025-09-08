@@ -485,6 +485,8 @@ class CartItemCreateView(generics.CreateAPIView):
 
 class CartItemUpdateView(generics.UpdateAPIView):
     serializer_class = CartItemSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "item_id"
 
     def get_queryset(self):
         cart_id = self.kwargs["cart_id"]
@@ -501,6 +503,8 @@ class CartItemUpdateView(generics.UpdateAPIView):
 
 class CartItemDeleteView(generics.DestroyAPIView):
     serializer_class = CartItemSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "item_id"
 
     def get_queryset(self):
         cart_id = self.kwargs["cart_id"]
@@ -640,13 +644,13 @@ class OrderTrackingEventViewSet(viewsets.ModelViewSet):
         qs = OrderTrackingEvent.objects.select_related("order", "order__buyer", "order__seller")
         user = self.request.user
         if not user.is_staff:
-            qs = qs.filter(models.Q(order__buyer=user) | models.Q(order__seller=user))
+            qs = qs.filter(models.Q(order__buyer=user) | models.Q(order__seller=user)).distinct()
 
         order_id = self.request.query_params.get("order") or self.request.query_params.get("order_id")
         if order_id:
             qs = qs.filter(order_id=order_id)
 
-        return qs.order_by("-created_at")
+        return qs.order_by("-created_at").distinct()
 
     def perform_create(self, serializer):
         order = serializer.validated_data.get("order")
