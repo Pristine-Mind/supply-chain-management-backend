@@ -80,6 +80,7 @@ class LoginResponseSerializer(serializers.Serializer):
     token = serializers.CharField()
     has_access_to_marketplace = serializers.BooleanField()
     error = serializers.CharField(required=False)
+    role = serializers.CharField(required=False)
 
 
 class BusinessRegisterSerializer(serializers.ModelSerializer):

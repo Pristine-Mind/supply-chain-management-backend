@@ -71,6 +71,7 @@ class LoginAPIView(APIView):
                     "has_access_to_marketplace": has_access_to_marketplace,
                     "business_type": user_profile.business_type if hasattr(user_profile, "business_type") else None,
                     "shop_id": user_profile.shop_id if hasattr(user_profile, "shop_id") else None,
+                    "role": user_profile.role.code if hasattr(user_profile, "role") else None,
                 }
             )
         else:
