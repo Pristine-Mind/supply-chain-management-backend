@@ -43,6 +43,8 @@ django-reversion = "*"
 phonenumbers = "*"
 pandas = "*"
 django-admin-rangefilter = "*"
+firebase-admin = "*"
+pyfcm = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

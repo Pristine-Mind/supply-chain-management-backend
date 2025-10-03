@@ -35,8 +35,8 @@ env = environ.Env(
     DJANGO_STATIC_URL=(str, "/static/"),
     DJANGO_MEDIA_URL=(str, "/media/"),
     # -- File System
-    DJANGO_STATIC_ROOT=(str, os.path.join(BASE_DIR, "assets/static")),
-    DJANGO_MEDIA_ROOT=(str, os.path.join(BASE_DIR, "assets/media")),
+    DJANGO_STATIC_ROOT=(str, os.path.join(BASE_DIR, "staticfiles")),
+    DJANGO_MEDIA_ROOT=(str, os.path.join(BASE_DIR, "media")),
     # Redis
     CELERY_REDIS_URL=str,
     CACHE_REDIS_URL=str,
@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "transport",
     "payment",
+    "notification.apps.NotificationConfig",
 ]
 
 MIDDLEWARE = [
@@ -149,9 +150,15 @@ USE_I18N = True
 
 USE_TZ = True
 
-STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 STATIC_URL = env("DJANGO_STATIC_URL")
 MEDIA_URL = env("DJANGO_MEDIA_URL")
+
+# In development, we serve additional static files from the 'static' directory.
+# In production, leave STATICFILES_DIRS empty to avoid including STATIC_ROOT.
+if DEBUG:
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+else:
+    STATICFILES_DIRS = []
 
 STORAGES = {
     "default": {
@@ -244,6 +251,31 @@ CELERY_BEAT_SCHEDULE = {
         "task": "market.tasks.update_recent_purchases",
         "schedule": crontab(minute=0, hour="*"),
     },
+    # Notification tasks
+    "send-scheduled-notifications": {
+        "task": "notification.tasks.send_scheduled_notifications_task",
+        "schedule": crontab(minute="*/5"),  # Every 5 minutes
+    },
+    "retry-failed-notifications": {
+        "task": "notification.tasks.retry_failed_notifications_task",
+        "schedule": crontab(minute=0, hour="*/2"),  # Every 2 hours
+    },
+    "cleanup-old-notifications": {
+        "task": "notification.tasks.cleanup_old_notifications_task",
+        "schedule": crontab(minute=0, hour=2),  # Daily at 2 AM
+    },
+    "update-device-token-status": {
+        "task": "notification.tasks.update_device_token_status_task",
+        "schedule": crontab(minute=0, hour=4),  # Daily at 4 AM
+    },
+    "generate-notification-analytics": {
+        "task": "notification.tasks.generate_notification_analytics_task",
+        "schedule": crontab(minute=0, hour=6),  # Daily at 6 AM
+    },
+    "process-notification-queue": {
+        "task": "notification.tasks.process_notification_queue_task",
+        "schedule": crontab(minute="*/2"),  # Every 2 minutes
+    },
 }
 
 KHALTI_BASE_URL = "https://dev.khalti.com/api/v5/"
@@ -289,3 +321,11 @@ CKEDITOR_CONFIGS = {
         "toolbar": "full",
     }
 }
+
+# Notification Settings
+FCM_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("FCM_SERVICE_ACCOUNT_KEY_PATH")
+APNS_TEAM_ID = os.environ.get("APNS_TEAM_ID")
+APNS_KEY_ID = os.environ.get("APNS_KEY_ID")
+APNS_KEY_PATH = os.environ.get("APNS_KEY_PATH")
+APNS_BUNDLE_ID = os.environ.get("APNS_BUNDLE_ID")
+APNS_USE_SANDBOX = os.environ.get("APNS_USE_SANDBOX", "True").lower() == "true"
