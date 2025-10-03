@@ -15,7 +15,6 @@ from market.views import (
     CartItemCreateView,
     CartItemDeleteView,
     CartItemUpdateView,
-    UserCartView,
     ChatMessageViewSet,
     DeliveryCreateView,
     FeedbackViewSet,
@@ -28,6 +27,7 @@ from market.views import (
     ProductFeedbackView,
     SellerProductsView,
     UserBidViewSet,
+    UserCartView,
     UserFeedbackView,
     create_purchase,
     log_interaction,
@@ -166,7 +166,9 @@ urlpatterns = [
     path("api/phone-login/", PhoneLoginView.as_view(), name="phone-login"),
     path("api/profile/", transport_views.TransporterProfileView.as_view(), name="transporter-profile"),
     path("api/transporters/", transport_views.TransporterListView.as_view(), name="transporter-list"),
-    path("api/transporters/toggle-availability/", transport_views.ToggleAvailabilityView.as_view(), name="toggle-availability"),
+    path(
+        "api/transporters/toggle-availability/", transport_views.ToggleAvailabilityView.as_view(), name="toggle-availability"
+    ),
     path("api/transporters/update-location/", transport_views.UpdateLocationView.as_view(), name="update-location"),
     path("api/transporters/stats/", transport_views.TransporterStatsView.as_view(), name="transporter-stats"),
     path("api/deliveries/available/", transport_views.AvailableDeliveriesView.as_view(), name="available-deliveries"),
@@ -181,7 +183,9 @@ urlpatterns = [
         name="update-delivery-status",
     ),
     path(
-        "api/deliveries/<uuid:delivery_id>/tracking/", transport_views.DeliveryTrackingView.as_view(), name="delivery-tracking"
+        "api/deliveries/<uuid:delivery_id>/tracking/",
+        transport_views.DeliveryTrackingView.as_view(),
+        name="delivery-tracking",
     ),
     path(
         "api/deliveries/<uuid:delivery_id>/ratings/",
@@ -189,7 +193,11 @@ urlpatterns = [
         name="delivery-ratings",
     ),
     path("api/admin/deliveries/", transport_views.DeliveryListCreateView.as_view(), name="admin-delivery-list"),
-    path("api/admin/deliveries/<uuid:delivery_id>/", transport_views.DeliveryUpdateView.as_view(), name="admin-delivery-detail"),
+    path(
+        "api/admin/deliveries/<uuid:delivery_id>/",
+        transport_views.DeliveryUpdateView.as_view(),
+        name="admin-delivery-detail",
+    ),
     path("api/admin/dashboard/", transport_views.DashboardStatsView.as_view(), name="admin-dashboard"),
     path("api/register/transporter/", TransporterRegistrationAPIView.as_view(), name="api_register_transporter"),
     path("api/auto-assign/", transport_views.AutoAssignmentAPIView.as_view(), name="auto_assign_delivery"),
