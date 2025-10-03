@@ -6,14 +6,14 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0026_ordertrackingevent'),
+        ("market", "0026_ordertrackingevent"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='delivery',
-            name='email',
-            field=models.CharField(default='test@gmail.com', max_length=255),
+            model_name="delivery",
+            name="email",
+            field=models.CharField(default="test@gmail.com", max_length=255),
             preserve_default=False,
         ),
     ]

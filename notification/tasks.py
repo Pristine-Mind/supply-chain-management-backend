@@ -286,19 +286,32 @@ def generate_notification_analytics_task():
     try:
         from datetime import timedelta
 
-        from django.db.models import Avg, Count
+        from django.db.models import Avg, Count, DurationField, ExpressionWrapper
 
         # Calculate statistics for the last 7 days
         end_date = timezone.now()
         start_date = end_date - timedelta(days=7)
 
-        stats = Notification.objects.filter(created_at__gte=start_date, created_at__lt=end_date).aggregate(
+        base_qs = Notification.objects.filter(created_at__gte=start_date, created_at__lt=end_date)
+
+        stats = base_qs.aggregate(
             total_notifications=Count("id"),
             sent_notifications=Count("id", filter=Q(status="sent")),
             delivered_notifications=Count("id", filter=Q(status="delivered")),
             failed_notifications=Count("id", filter=Q(status="failed")),
             read_notifications=Count("id", filter=Q(status="read")),
-            avg_delivery_time=Avg("delivered_at") - Avg("sent_at"),
+        )
+
+        # Compute average delivery time (only where both timestamps are present)
+        avg_delivery_time = (
+            base_qs.filter(sent_at__isnull=False, delivered_at__isnull=False)
+            .annotate(
+                delivery_delta=ExpressionWrapper(
+                    F("delivered_at") - F("sent_at"), output_field=DurationField()
+                )
+            )
+            .aggregate(value=Avg("delivery_delta"))
+            .get("value")
         )
 
         # Calculate rates
@@ -308,12 +321,15 @@ def generate_notification_analytics_task():
         failure_rate = (stats["failed_notifications"] / total) * 100
 
         # Log analytics
+        avg_delivery_seconds = avg_delivery_time.total_seconds() if avg_delivery_time else None
+
         logger.info(
             f"Notification Analytics (7 days): "
             f"Total: {total}, "
             f"Delivery Rate: {delivery_rate:.2f}%, "
             f"Read Rate: {read_rate:.2f}%, "
-            f"Failure Rate: {failure_rate:.2f}%"
+            f"Failure Rate: {failure_rate:.2f}%, "
+            f"Avg Delivery Time (s): {avg_delivery_seconds}"
         )
 
         # You can store these stats in a separate model or send to analytics service
@@ -324,6 +340,7 @@ def generate_notification_analytics_task():
             "delivery_rate": round(delivery_rate, 2),
             "read_rate": round(read_rate, 2),
             "failure_rate": round(failure_rate, 2),
+            "avg_delivery_time_seconds": round(avg_delivery_seconds, 3) if avg_delivery_seconds is not None else None,
         }
 
     except Exception as e:
