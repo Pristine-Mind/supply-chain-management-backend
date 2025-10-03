@@ -1,10 +1,9 @@
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest, HttpResponseRedirect, JsonResponse
-from django.conf import settings
-
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
