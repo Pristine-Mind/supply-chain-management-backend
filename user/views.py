@@ -55,7 +55,6 @@ class LoginAPIView(APIView):
         username = request.data.get("username")
         password = request.data.get("password")
         user = authenticate(request, username=username, password=password)
-        print(user, "user")
         if user is not None:
             token, created = Token.objects.get_or_create(user=user)
 
