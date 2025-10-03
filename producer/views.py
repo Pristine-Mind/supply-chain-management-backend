@@ -502,7 +502,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         stock = serializer.validated_data["stock"]
-        product.stock += stock
+        product.stock = stock
         product.updated_at = timezone.now()
         product.save(update_fields=["stock", "updated_at"])
         return Response(ProductSerializer(product).data)
