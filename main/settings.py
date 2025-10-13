@@ -278,13 +278,12 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-KHALTI_BASE_URL = "https://dev.khalti.com/api/v5/"
 SITE_URL = "http://localhost:8000"
 
 KHALTI_SECRET_KEY = "dc7b150742684eb69eeeec8f30b32f5c"
 KHALTI_BASE_URL = "https://dev.khalti.com/api/v2/"
-KHALTI_WEBSITE_URL = "http://localhost:8000/"
-KHALTI_RETURN_URL = "http://localhost:8000/api/v1/khalti/return-url/"
+KHALTI_WEBSITE_URL = ""
+KHALTI_RETURN_URL = "https://appmulyabazzar.com/api/v1/khalti/return-url/"
 
 KHALTI_TEST_MOBILE_NUMBER = "9800000001"
 KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
