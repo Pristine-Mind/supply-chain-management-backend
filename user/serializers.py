@@ -156,7 +156,7 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
             registered_business_name=registered_business_name,
             latitude=latitude,
             longitude=longitude,
-            has_access_to_marketplace=True,  # business users get marketplace access
+            has_access_to_marketplace=True,
         )
         return user
 
