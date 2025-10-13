@@ -16,7 +16,7 @@ class Khalti(PaymentGatewayInterface):
 
     def __init__(self):
         self.amount: Optional[float] = None
-        self.base_url: str = getattr(settings, "KHALTI_BASE_URL", "https://dev.khalti.com/api/v5/")
+        self.base_url: str = "https://dev.khalti.com/api/v2/"
         self.purchase_order_id: Optional[str] = None
         self.purchase_order_name: Optional[str] = None
         self.inquiry_response: Optional[Dict[str, Any]] = None
