@@ -77,7 +77,6 @@ from .utils import export_queryset_to_excel
 
 logger = logging.getLogger(__name__)
 
-
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
@@ -1463,7 +1462,7 @@ class PaymentCallbackAPIView(APIView):
                 user=payment.user,
                 payment=payment,
                 quantity=payment.order.quantity,
-                sale_price=payment.order.product.price,
+                sale_price=payment.order.product.listed_price,
             )
             return Response({"sale_id": sale.id}, status=status.HTTP_201_CREATED)
         else:
@@ -1533,7 +1532,7 @@ class KhaltiVerifyAPIView(APIView):
                 user=payment.user,
                 payment=payment,
                 quantity=payment.order.quantity,
-                sale_price=payment.order.product.price,
+                sale_price=payment.order.product.listed_price,
             )
             return Response({"sale_id": sale.id}, status=status.HTTP_201_CREATED)
 
