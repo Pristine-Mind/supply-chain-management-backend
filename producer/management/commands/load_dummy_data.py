@@ -81,6 +81,6 @@ class Command(BaseCommand):
                                 sale_price=product.price * fake.random_int(min=1, max=50),
                                 user_id=1,
                             )
-                        self.stdout.write(self.style.SUCCESS(f"      Created Sale ID: {sale.id}"))
+                        self.stdout.write(self.style.SUCCESS(f"Created Sale ID: {sale.id}"))
 
         self.stdout.write(self.style.SUCCESS("Successfully created at least 100 dummy records for each model!"))

@@ -288,7 +288,6 @@ def generate_notification_analytics_task():
 
         from django.db.models import Avg, Count, DurationField, ExpressionWrapper
 
-        # Calculate statistics for the last 7 days
         end_date = timezone.now()
         start_date = end_date - timedelta(days=7)
 
@@ -302,7 +301,6 @@ def generate_notification_analytics_task():
             read_notifications=Count("id", filter=Q(status="read")),
         )
 
-        # Compute average delivery time (only where both timestamps are present)
         avg_delivery_time = (
             base_qs.filter(sent_at__isnull=False, delivered_at__isnull=False)
             .annotate(
@@ -314,13 +312,11 @@ def generate_notification_analytics_task():
             .get("value")
         )
 
-        # Calculate rates
         total = stats["total_notifications"] or 1
         delivery_rate = (stats["delivered_notifications"] / total) * 100
         read_rate = (stats["read_notifications"] / total) * 100
         failure_rate = (stats["failed_notifications"] / total) * 100
 
-        # Log analytics
         avg_delivery_seconds = avg_delivery_time.total_seconds() if avg_delivery_time else None
 
         logger.info(
@@ -331,8 +327,6 @@ def generate_notification_analytics_task():
             f"Failure Rate: {failure_rate:.2f}%, "
             f"Avg Delivery Time (s): {avg_delivery_seconds}"
         )
-
-        # You can store these stats in a separate model or send to analytics service
 
         return {
             "period": "7_days",
@@ -348,28 +342,22 @@ def generate_notification_analytics_task():
         return f"Error generating analytics: {e}"
 
 
-# Periodic task to process notification queue
 @shared_task
 def process_notification_queue_task():
     """Process pending notifications in the queue"""
     try:
-        # Get high priority pending notifications
         high_priority_notifications = Notification.objects.filter(
             status="pending", scheduled_at__lte=timezone.now(), priority__gte=7
         ).order_by("-priority", "scheduled_at")[:50]
 
-        # Get regular priority notifications
         regular_notifications = Notification.objects.filter(
             status="pending", scheduled_at__lte=timezone.now(), priority__lt=7
         ).order_by("scheduled_at")[:50]
-
-        # Process high priority first
         processed_count = 0
         for notification in high_priority_notifications:
             send_notification_task.delay(str(notification.id))
             processed_count += 1
 
-        # Then process regular notifications
         for notification in regular_notifications:
             send_notification_task.delay(str(notification.id))
             processed_count += 1
