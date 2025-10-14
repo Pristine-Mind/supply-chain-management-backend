@@ -152,6 +152,7 @@ class Khalti(PaymentGatewayInterface):
         purchase_order_id: str,
         purchase_order_name: str,
         gateway: str,
+        bank: Optional[str] = None,
     ):
         print(
             f"Initiating payment: amount={amount}, return_url={return_url}, purchase_order_id={purchase_order_id}, purchase_order_name={purchase_order_name}, gateway={gateway}, bank={bank}"
@@ -159,10 +160,10 @@ class Khalti(PaymentGatewayInterface):
         """Perform payment process"""
         self.purchase_order_id = purchase_order_id
         self.purchase_order_name = purchase_order_name
-        return self.initiate(amount, return_url, gateway)
+        return self.initiate(amount, return_url, gateway, bank)
 
     def initiate(
-        self, amount: float, return_url: str, gateway: str,
+        self, amount: float, return_url: str, gateway: str, bank: Optional[str] = None
     ) -> Union[HttpResponseRedirect, Dict[str, Any]]:
         print(
             f"Starting Khalti payment initiation: amount={amount}, return_url={return_url}, gateway={gateway}, bank={bank}"
@@ -175,6 +176,7 @@ class Khalti(PaymentGatewayInterface):
         if "|" in gateway:
             gateway_parts = gateway.split("|")
             gateway_type = gateway_parts[0]
+            bank = bank or gateway_parts[1]
         else:
             gateway_type = gateway
 
@@ -186,6 +188,9 @@ class Khalti(PaymentGatewayInterface):
             "purchase_order_name": self.purchase_order_name,
             "modes": [gateway_type],
         }
+        # Only add bank for MOBILE_BANKING and EBANKING
+        if bank and gateway_type in ["MOBILE_BANKING", "EBANKING"]:
+            data["bank"] = bank
 
         headers = {"Content-Type": "application/json", "Authorization": f"Key {self.secret_key}"}
 
