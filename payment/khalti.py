@@ -16,7 +16,7 @@ class Khalti(PaymentGatewayInterface):
 
     def __init__(self):
         self.amount: Optional[float] = None
-        self.base_url: str = "https://dev.khalti.com/api/v2/"
+        self.base_url: str = "https://khalti.com/api/v2/"
         self.purchase_order_id: Optional[str] = None
         self.purchase_order_name: Optional[str] = None
         self.inquiry_response: Optional[Dict[str, Any]] = None
@@ -174,19 +174,33 @@ class Khalti(PaymentGatewayInterface):
 
         process_url = urljoin(self.base_url, "epayment/initiate/")
 
-        # Build the data payload
+        # Build the data payload according to Khalti docs
         data = {
             "return_url": settings.KHALTI_RETURN_URL,
             "website_url": getattr(settings, "SITE_URL", "http://localhost:8000"),
             "amount": int(amount * 100),  # Convert to paisa
             "purchase_order_id": self.purchase_order_id,
             "purchase_order_name": self.purchase_order_name,
+            "customer_info": {
+                "name": self.customer_name,
+                "email": self.customer_email,
+                "phone": self.customer_phone,
+            },
+            # Uncomment and populate these if needed:
+            # "amount_breakdown": [
+            #     {"label": "Mark Price", "amount": 1000},
+            #     {"label": "VAT", "amount": 300},
+            # ],
+            # "product_details": [
+            #     {"identity": "1234567890", "name": "Khalti logo", "total_price": 1300, "quantity": 1, "unit_price": 1300}
+            # ],
+            # "merchant_extra": "any extra info",
             "modes": [gateway],
         }
         if bank:
             data["bank"] = bank
 
-        headers = {"Content-Type": "application/json", "Authorization": f"key {self.secret_key}"}
+        headers = {"Content-Type": "application/json", "Authorization": f"Key {self.secret_key}"}
 
         # Log all request details for debugging
         print(f"Khalti initiate called with: process_url={process_url}, data={data}, headers={headers}")
