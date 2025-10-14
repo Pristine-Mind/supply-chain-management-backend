@@ -161,6 +161,25 @@ def payment_callback(request: HttpRequest) -> Response:
                 success = payment_transaction.mark_as_completed(khalti_transaction_id)
 
                 if success:
+                    # Generate invoice (placeholder: implement actual logic if needed)
+                    # payment_transaction.generate_invoice()
+
+                    # Send email notification to user
+                    from market.utils import notify_event
+                    notify_event(
+                        user=payment_transaction.user,
+                        notif_type="payment_success",
+                        message=f"Your payment for order {payment_transaction.order_number} was successful.",
+                        via_email=True,
+                        email_addr=payment_transaction.customer_email if hasattr(payment_transaction, 'customer_email') else payment_transaction.user.email,
+                        email_tpl="order_confirmation.html",
+                        email_ctx={
+                            "order_number": payment_transaction.order_number,
+                            "amount": float(khalti.requested_amount(inquiry_result)),
+                            "transaction_id": khalti_transaction_id,
+                        },
+                    )
+
                     marketplace_sales = []
                     for item in payment_transaction.transaction_items.select_related("marketplace_sale"):
                         if item.marketplace_sale:
