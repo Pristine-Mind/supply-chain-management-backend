@@ -173,36 +173,26 @@ class Khalti(PaymentGatewayInterface):
         self.amount = 1000 if settings.DEBUG else (amount * 100)
 
         process_url = urljoin(self.base_url, "epayment/initiate/")
+        if "|" in gateway:
+            gateway_parts = gateway.split("|")
+            gateway_type = gateway_parts[0]
+            bank = bank or gateway_parts[1]
+        else:
+            gateway_type = gateway
 
-        # Build the data payload according to Khalti docs
         data = {
             "return_url": settings.KHALTI_RETURN_URL,
             "website_url": getattr(settings, "SITE_URL", "http://localhost:8000"),
-            "amount": int(amount * 100),  # Convert to paisa
+            "amount": int(amount * 100),
             "purchase_order_id": self.purchase_order_id,
             "purchase_order_name": self.purchase_order_name,
-            "customer_info": {
-                "name": self.customer_name or "",
-                "email": self.customer_email or "",
-                "phone": self.customer_phone or "",
-            },
-            # Uncomment and populate these if needed:
-            # "amount_breakdown": [
-            #     {"label": "Mark Price", "amount": 1000},
-            #     {"label": "VAT", "amount": 300},
-            # ],
-            # "product_details": [
-            #     {"identity": "1234567890", "name": "Khalti logo", "total_price": 1300, "quantity": 1, "unit_price": 1300}
-            # ],
-            # "merchant_extra": "any extra info",
-            "modes": [gateway],
+            "modes": [gateway_type],
         }
-        if bank:
+        if bank and gateway_type not in ["MOBILE_BANKING", "EBANKING"]:
             data["bank"] = bank
 
         headers = {"Content-Type": "application/json", "Authorization": f"Key {self.secret_key}"}
 
-        # Log all request details for debugging
         print(f"Khalti initiate called with: process_url={process_url}, data={data}, headers={headers}")
 
         try:
