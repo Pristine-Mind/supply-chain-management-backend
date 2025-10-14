@@ -278,7 +278,7 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-SITE_URL = "http://localhost:8000"
+SITE_URL = "https://appmulyabazzar.com"
 
 KHALTI_SECRET_KEY = "dc7b150742684eb69eeeec8f30b32f5c"
 KHALTI_BASE_URL = "https://dev.khalti.com/api/v2/"

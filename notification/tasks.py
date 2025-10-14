@@ -303,11 +303,7 @@ def generate_notification_analytics_task():
 
         avg_delivery_time = (
             base_qs.filter(sent_at__isnull=False, delivered_at__isnull=False)
-            .annotate(
-                delivery_delta=ExpressionWrapper(
-                    F("delivered_at") - F("sent_at"), output_field=DurationField()
-                )
-            )
+            .annotate(delivery_delta=ExpressionWrapper(F("delivered_at") - F("sent_at"), output_field=DurationField()))
             .aggregate(value=Avg("delivery_delta"))
             .get("value")
         )
