@@ -43,7 +43,7 @@ def initiate_payment(request: HttpRequest) -> Response:
     return_url = settings.KHALTI_RETURN_URL
     gateway = data.get("gateway")
 
-    bank = data.get("bank")
+    bank = data.get("bank", None)
     customer_name = data.get("customer_name")
     customer_email = data.get("customer_email")
     customer_phone = data.get("customer_phone")
@@ -90,16 +90,13 @@ def initiate_payment(request: HttpRequest) -> Response:
                 customer_phone=customer_phone,
                 status=PaymentTransactionStatus.PROCESSING,
             )
-            print("Khalit Called")
             khalti = Khalti()
-            print("Khalti Instance Created")
             result = khalti.pay(
                 amount=float(total_amount),
                 return_url=return_url,
                 purchase_order_id=str(payment_transaction.transaction_id),
                 purchase_order_name=payment_transaction.order_number,
                 gateway=gateway,
-                bank=bank,
             )
 
             if isinstance(result, HttpResponseRedirect):
