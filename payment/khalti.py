@@ -182,9 +182,9 @@ class Khalti(PaymentGatewayInterface):
             "purchase_order_id": self.purchase_order_id,
             "purchase_order_name": self.purchase_order_name,
             "customer_info": {
-                "name": self.customer_name,
-                "email": self.customer_email,
-                "phone": self.customer_phone,
+                "name": self.customer_name or "",
+                "email": self.customer_email or "",
+                "phone": self.customer_phone or "",
             },
             # Uncomment and populate these if needed:
             # "amount_breakdown": [
