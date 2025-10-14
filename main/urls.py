@@ -232,7 +232,6 @@ urlpatterns = [
     path("api/v1/payments/", include("payment.urls")),
     # Notification URLs
     path("api/v1/notifications/", include("notification.urls")),
-
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
