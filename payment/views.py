@@ -29,7 +29,7 @@ class PaymentGatewayListView(View):
             gateways = khalti.get_payment_gateways()
             return JsonResponse({"status": "success", "data": gateways})
         except Exception as e:
-            logger.error(f"Error fetching payment gateways: {e}")
+            print(f"Error fetching payment gateways: {e}")
             return JsonResponse({"status": "error", "message": "Failed to fetch payment gateways"}, status=500)
 
 
@@ -72,6 +72,9 @@ def initiate_payment(request: HttpRequest) -> Response:
 
     try:
         with transaction.atomic():
+            print(
+                f"Initiating payment transaction for user={request.user}, cart_id={cart_id}, gateway={gateway}, bank={bank}, subtotal={subtotal}, total_amount={total_amount}"
+            )
             payment_transaction = PaymentTransaction.objects.create(
                 user=request.user,
                 cart=cart,
@@ -87,9 +90,9 @@ def initiate_payment(request: HttpRequest) -> Response:
                 customer_phone=customer_phone,
                 status=PaymentTransactionStatus.PROCESSING,
             )
-
+            print("Khalit Called")
             khalti = Khalti()
-
+            print("Khalti Instance Created")
             result = khalti.pay(
                 amount=float(total_amount),
                 return_url=return_url,
