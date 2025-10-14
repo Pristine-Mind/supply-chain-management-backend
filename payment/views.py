@@ -37,40 +37,40 @@ class PaymentGatewayListView(View):
 @permission_classes([IsAuthenticated])
 def initiate_payment(request: HttpRequest) -> Response:
     """Initiate payment with Khalti for cart items"""
+    data = request.data
+
+    cart_id = data.get("cart_id")
+    return_url = settings.KHALTI_RETURN_URL
+    gateway = data.get("gateway")
+
+    bank = data.get("bank")
+    customer_name = data.get("customer_name")
+    customer_email = data.get("customer_email")
+    customer_phone = data.get("customer_phone")
+    tax_amount = Decimal(str(data.get("tax_amount", 0)))
+    shipping_cost = Decimal(str(data.get("shipping_cost", 0)))
+
+    if not all([cart_id, return_url, gateway]):
+        return Response({"status": "error", "message": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if gateway not in [choice[0] for choice in PaymentGateway.choices]:
+        return Response({"status": "error", "message": "Invalid payment gateway"}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
-        data = request.data
+        cart = Cart.objects.prefetch_related("items__product__product").get(id=cart_id, user=request.user)
+    except Cart.DoesNotExist:
+        return Response({"status": "error", "message": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        cart_id = data.get("cart_id")
-        return_url = settings.KHALTI_RETURN_URL
-        gateway = data.get("gateway")
+    if not cart.items.exists():
+        return Response({"status": "error", "message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
 
-        bank = data.get("bank")
-        customer_name = data.get("customer_name")
-        customer_email = data.get("customer_email")
-        customer_phone = data.get("customer_phone")
-        tax_amount = Decimal(str(data.get("tax_amount", 0)))
-        shipping_cost = Decimal(str(data.get("shipping_cost", 0)))
+    subtotal = sum(Decimal(str(item.product.listed_price)) * Decimal(str(item.quantity)) for item in cart.items.all())
+    total_amount = subtotal + tax_amount + shipping_cost
 
-        if not all([cart_id, return_url, gateway]):
-            return Response({"status": "error", "message": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+    if total_amount <= 0:
+        return Response({"status": "error", "message": "Invalid total amount"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if gateway not in [choice[0] for choice in PaymentGateway.choices]:
-            return Response({"status": "error", "message": "Invalid payment gateway"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            cart = Cart.objects.prefetch_related("items__product__product").get(id=cart_id, user=request.user)
-        except Cart.DoesNotExist:
-            return Response({"status": "error", "message": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        if not cart.items.exists():
-            return Response({"status": "error", "message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
-
-        subtotal = sum(item.product.listed_price * item.quantity for item in cart.items.all())
-        total_amount = subtotal + tax_amount + shipping_cost
-
-        if total_amount <= 0:
-            return Response({"status": "error", "message": "Invalid total amount"}, status=status.HTTP_400_BAD_REQUEST)
-
+    try:
         with transaction.atomic():
             payment_transaction = PaymentTransaction.objects.create(
                 user=request.user,
@@ -117,7 +117,6 @@ def initiate_payment(request: HttpRequest) -> Response:
                         "order_number": payment_transaction.order_number,
                     }
                 )
-
     except Exception as e:
         logger.error(f"Error initiating payment: {e}")
         return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
