@@ -283,7 +283,7 @@ SITE_URL = "https://appmulyabazzar.com"
 KHALTI_SECRET_KEY = "dc7b150742684eb69eeeec8f30b32f5c"
 KHALTI_BASE_URL = "https://dev.khalti.com/api/v2/"
 KHALTI_WEBSITE_URL = ""
-KHALTI_RETURN_URL = "https://appmulyabazzar.com/api/v1/khalti/return-url/"
+KHALTI_RETURN_URL = "https://appmulyabazzar.com/payment/success/"
 
 KHALTI_TEST_MOBILE_NUMBER = "9800000001"
 KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
