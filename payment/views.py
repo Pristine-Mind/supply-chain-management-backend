@@ -65,7 +65,7 @@ def initiate_payment(request: HttpRequest) -> Response:
         if not cart.items.exists():
             return Response({"status": "error", "message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
 
-        subtotal = sum(item.product.price * item.quantity for item in cart.items.all())
+        subtotal = sum(item.product.listed_price * item.quantity for item in cart.items.all())
         total_amount = subtotal + tax_amount + shipping_cost
 
         if total_amount <= 0:
