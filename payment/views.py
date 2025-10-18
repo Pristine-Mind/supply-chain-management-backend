@@ -1,3 +1,29 @@
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import PaymentTransaction
+# ...existing code...
+
+class MyOrdersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        transactions = PaymentTransaction.objects.filter(user=request.user).order_by('-created_at')
+        data = []
+        for tx in transactions:
+            data.append({
+                "transaction_id": str(tx.transaction_id),
+                "order_number": tx.order_number,
+                "amount": float(tx.total_amount),
+                "status": tx.status,
+                "gateway": tx.gateway,
+                "created_at": tx.created_at.isoformat(),
+                "customer_name": tx.customer_name if hasattr(tx, 'customer_name') else request.user.get_full_name(),
+                "customer_email": tx.customer_email if hasattr(tx, 'customer_email') else request.user.email,
+                # Add marketplace_sales if available
+                "marketplace_sales": getattr(tx, 'marketplace_sales', None),
+            })
+        return Response({"data": data})
 import logging
 from decimal import Decimal
 
@@ -100,6 +126,20 @@ def initiate_payment(request: HttpRequest) -> Response:
             )
 
             if isinstance(result, HttpResponseRedirect):
+                from market.utils import notify_event
+                notify_event(
+                    user=payment_transaction.user,
+                    notif_type="payment_success",
+                    message=f"Your payment for order {payment_transaction.order_number} was successful.",
+                    via_email=True,
+                    email_addr=payment_transaction.customer_email if hasattr(payment_transaction, 'customer_email') else payment_transaction.user.email,
+                    email_tpl="order_confirmation.html",
+                    email_ctx={
+                        "order_number": payment_transaction.order_number,
+                        "amount": float(khalti.requested_amount(inquiry_result)),
+                        "transaction_id": khalti_transaction_id,
+                    },
+                )
                 return Response(
                     {
                         "status": "success",
@@ -163,22 +203,6 @@ def payment_callback(request: HttpRequest) -> Response:
                 if success:
                     # Generate invoice (placeholder: implement actual logic if needed)
                     # payment_transaction.generate_invoice()
-
-                    # Send email notification to user
-                    from market.utils import notify_event
-                    notify_event(
-                        user=payment_transaction.user,
-                        notif_type="payment_success",
-                        message=f"Your payment for order {payment_transaction.order_number} was successful.",
-                        via_email=True,
-                        email_addr=payment_transaction.customer_email if hasattr(payment_transaction, 'customer_email') else payment_transaction.user.email,
-                        email_tpl="order_confirmation.html",
-                        email_ctx={
-                            "order_number": payment_transaction.order_number,
-                            "amount": float(khalti.requested_amount(inquiry_result)),
-                            "transaction_id": khalti_transaction_id,
-                        },
-                    )
 
                     marketplace_sales = []
                     for item in payment_transaction.transaction_items.select_related("marketplace_sale"):

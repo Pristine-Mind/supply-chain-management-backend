@@ -174,16 +174,13 @@ class ShippingAddress(models.Model):
 
 class MarketplaceUserProduct(models.Model):
     class ProductCategory(models.TextChoices):
-        FRUITS = "FR", "Fruits"
-        VEGETABLES = "VG", "Vegetables"
-        GRAINS_AND_CEREALS = "GR", "Grains & Cereals"
-        PULSES_AND_LEGUMES = "PL", "Pulses & Legumes"
-        SPICES_AND_HERBS = "SP", "Spices & Herbs"
-        NUTS_AND_SEEDS = "NT", "Nuts & Seeds"
-        DAIRY_AND_ANIMAL_PRODUCTS = "DF", "Dairy & Animal Products"
-        FODDER_AND_FORAGE = "FM", "Fodder & Forage"
-        FLOWERS_AND_ORNAMENTAL_PLANTS = "FL", "Flowers & Ornamental Plants"
-        HERBS_AND_MEDICINAL_PLANTS = "HR", "Herbs & Medicinal Plants"
+        FASHION_APPAREL = "FA", "Fashion & Apparel"
+        ELECTRONICS_GADGETS = "EG", "Electronics & Gadgets"
+        GROCERIES_ESSENTIALS = "GE", "Groceries & Essentials"
+        HEALTH_BEAUTY = "HB", "Health & Beauty"
+        HOME_LIVING = "HL", "Home & Living"
+        TRAVEL_TOURISM = "TT", "Travel & Tourism"
+        INDUSTRIAL_SUPPLIES = "IS", "Industrial Supplies"
         OTHER = "OT", "Other"
 
     class ProductUnit(models.TextChoices):
@@ -198,7 +195,7 @@ class MarketplaceUserProduct(models.Model):
         verbose_name=_("Category"),
         max_length=2,
         choices=ProductCategory.choices,
-        default=ProductCategory.VEGETABLES,
+        default=ProductCategory.OTHER,
     )
     unit = models.CharField(
         verbose_name=_("Unit"),
