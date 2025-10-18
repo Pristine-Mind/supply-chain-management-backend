@@ -100,7 +100,7 @@ class MarketplaceUserProductTests(APITestCase):
             "description": "This is a test product.",
             "price": "10.00",
             "stock": 100,
-            "category": "EL",
+            "category": "EG",
             "is_verified": True,
             "is_sold": False,
             "image": image,
