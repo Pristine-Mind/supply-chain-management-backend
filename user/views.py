@@ -291,7 +291,7 @@ class ProfileView(APIView):
     def get(self, request):
         """Get current user profile"""
         try:
-            profile = request.user.userprofile
+            profile = request.user.user_profile
         except UserProfile.DoesNotExist:
             # Create profile if it doesn't exist
             profile = UserProfile.objects.create(user=request.user)
@@ -305,7 +305,7 @@ class ProfileView(APIView):
     def put(self, request):
         """Update user profile (full update)"""
         try:
-            profile = request.user.userprofile
+            profile = request.user.user_profile
         except UserProfile.DoesNotExist:
             profile = UserProfile.objects.create(user=request.user)
             
@@ -332,7 +332,7 @@ class ProfileView(APIView):
     def patch(self, request):
         """Update user profile (partial update)"""
         try:
-            profile = request.user.userprofile
+            profile = request.user.user_profile
         except UserProfile.DoesNotExist:
             profile = UserProfile.objects.create(user=request.user)
             

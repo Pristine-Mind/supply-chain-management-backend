@@ -36,6 +36,12 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
+    marketplace_order_detail,
+    my_marketplace_orders,
+    payment_confirmation,
+    reorder_marketplace_order,
+    cancel_marketplace_order,
+    create_order,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -243,6 +249,12 @@ urlpatterns = [
     path("api/v1/payments/", include("payment.urls")),
     # Notification URLs
     path("api/v1/notifications/", include("notification.urls")),
+    # Marketplace Orders URLs - matching frontend API calls exactly
+    path("api/v1/marketplace/orders/my-orders/", my_marketplace_orders, name="my-marketplace-orders"),
+    path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),
+    path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
+    path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
+    path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
