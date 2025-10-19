@@ -1,5 +1,6 @@
 import re
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -110,7 +111,7 @@ class Bid(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         # Notify the seller about the new bid
-        Notification.objects.create(
+        _ = Notification.objects.create(
             user=self.product.product.user,
             message=f"New bid of NPR {self.bid_amount} by {self.bidder.username} on your product {self.product.product.name}",
         )
@@ -471,8 +472,8 @@ class MarketplaceSale(models.Model):
     # Pricing
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Subtotal"))
-    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_("Tax Amount"))
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name=_("Shipping Cost"))
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name=_("Tax Amount"))
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name=_("Shipping Cost"))
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
 
     # Status
@@ -823,17 +824,543 @@ class ProductView(models.Model):
         return f"{who} viewed {self.product} at {self.timestamp}"
 
 
+# Extended marketplace order status choices for better granularity
+class OrderStatus(models.TextChoices):
+    PENDING = "pending", _("Pending")
+    CONFIRMED = "confirmed", _("Confirmed")
+    PROCESSING = "processing", _("Processing")
+    SHIPPED = "shipped", _("Shipped")
+    IN_TRANSIT = "in_transit", _("In Transit")
+    DELIVERED = "delivered", _("Delivered")
+    COMPLETED = "completed", _("Completed")
+    CANCELLED = "cancelled", _("Cancelled")
+    FAILED = "failed", _("Failed")
+
+    @classmethod
+    def get_next_allowed_statuses(cls, current_status):
+        """Returns a list of statuses that can be transitioned to from the current status."""
+        status_flow = {
+            cls.PENDING: [cls.CONFIRMED, cls.CANCELLED],
+            cls.CONFIRMED: [cls.PROCESSING, cls.CANCELLED],
+            cls.PROCESSING: [cls.SHIPPED, cls.CANCELLED],
+            cls.SHIPPED: [cls.IN_TRANSIT, cls.DELIVERED],
+            cls.IN_TRANSIT: [cls.DELIVERED],
+            cls.DELIVERED: [cls.COMPLETED],
+            cls.COMPLETED: [],
+            cls.CANCELLED: [],
+            cls.FAILED: [],
+        }
+        return status_flow.get(current_status, [])
+
+
+class MarketplaceOrderQuerySet(models.QuerySet):
+    """Custom QuerySet for MarketplaceOrder with common queries."""
+
+    def with_related(self):
+        """Optimize related object fetching."""
+        return self.select_related("customer", "delivery").prefetch_related(
+            "items__product__product_details", 
+            "items__product__product_details__images",
+            "tracking_events"
+        )
+
+    def active(self):
+        """Return only non-deleted orders."""
+        return self.filter(is_deleted=False)
+
+    def for_customer(self, user):
+        """Filter orders for a specific customer."""
+        return self.filter(customer=user)
+
+    def by_status(self, status):
+        """Filter orders by status."""
+        return self.filter(order_status=status)
+
+    def by_payment_status(self, status):
+        """Filter orders by payment status."""
+        return self.filter(payment_status=status)
+
+
+class MarketplaceOrderManager(models.Manager):
+    """Custom manager for MarketplaceOrder model."""
+
+    def get_queryset(self):
+        return MarketplaceOrderQuerySet(self.model, using=self._db)
+
+    def with_related(self):
+        return self.get_queryset().with_related()
+
+    def active(self):
+        return self.get_queryset().active()
+
+    def for_customer(self, user):
+        return self.get_queryset().for_customer(user)
+
+    @transaction.atomic
+    def create_order(self, **kwargs):
+        """Create a new order with transaction handling."""
+        return self.create(**kwargs)
+
+    @transaction.atomic
+    def create_order_from_cart(self, cart, delivery_info, payment_method=None):
+        """
+        Create a new order from cart items.
+        
+        Args:
+            cart: Cart instance with items
+            delivery_info: DeliveryInfo instance
+            payment_method: Optional payment method
+            
+        Returns:
+            MarketplaceOrder instance
+        """
+        if not cart.items.exists():
+            raise ValidationError("Cannot create order from empty cart.")
+        
+        # Calculate total amount
+        total_amount = sum(
+            (item.product.discounted_price or item.product.listed_price) * item.quantity 
+            for item in cart.items.all()
+        )
+        
+        # Create the order
+        order = self.create(
+            customer=cart.user,
+            delivery=delivery_info,
+            total_amount=total_amount,
+            payment_method=payment_method,
+        )
+        
+        # Create order items from cart items
+        for cart_item in cart.items.all():
+            _ = MarketplaceOrderItem.objects.create(
+                order=order,
+                product=cart_item.product,
+                quantity=cart_item.quantity,
+                unit_price=cart_item.product.discounted_price or cart_item.product.listed_price,
+            )
+            
+            # Update product stock
+            cart_item.product.stock -= cart_item.quantity
+            cart_item.product.save()
+        
+        # Create initial tracking event
+        _ = OrderTrackingEvent.objects.create(
+            marketplace_order=order,
+            status=OrderStatus.PENDING,
+            message="Order created successfully"
+        )
+        
+        return order
+
+
+class DeliveryInfo(models.Model):
+    """
+    Delivery information for marketplace orders.
+    Separated from the order to allow for multiple delivery addresses in the future.
+    """
+    customer_name = models.CharField(max_length=255, verbose_name=_("Customer Name"))
+    phone_number = models.CharField(max_length=20, verbose_name=_("Phone Number"))
+    address = models.TextField(verbose_name=_("Address"))
+    city = models.CharField(max_length=100, verbose_name=_("City"))
+    state = models.CharField(max_length=100, verbose_name=_("State"))
+    zip_code = models.CharField(max_length=20, verbose_name=_("ZIP Code"))
+    latitude = models.FloatField(verbose_name=_("Latitude"))
+    longitude = models.FloatField(verbose_name=_("Longitude"))
+    delivery_instructions = models.TextField(blank=True, null=True, verbose_name=_("Delivery Instructions"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+
+    class Meta:
+        verbose_name = _("Delivery Information")
+        verbose_name_plural = _("Delivery Information")
+        indexes = [
+            models.Index(fields=["city", "state"]),
+            models.Index(fields=["latitude", "longitude"]),
+        ]
+
+    def __str__(self):
+        return f"Delivery for {self.customer_name} - {self.city}, {self.state}"
+
+    @property
+    def full_address(self):
+        """Returns the complete formatted address."""
+        return f"{self.address}, {self.city}, {self.state} {self.zip_code}"
+
+
+class MarketplaceOrder(models.Model):
+    """
+    Main order model for marketplace purchases supporting multiple items per order.
+    This replaces the single-item MarketplaceSale for multi-item shopping cart orders.
+    """
+
+    # Custom manager
+    objects = MarketplaceOrderManager()
+
+    # Basic Information
+    order_number = models.CharField(max_length=50, unique=True, editable=False, verbose_name=_("Order Number"))
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="marketplace_orders",
+        verbose_name=_("Customer"),
+    )
+    
+    # Order Status and Payment
+    order_status = models.CharField(
+        max_length=20, 
+        choices=OrderStatus.choices, 
+        default=OrderStatus.PENDING, 
+        verbose_name=_("Order Status")
+    )
+    payment_status = models.CharField(
+        max_length=20, 
+        choices=PaymentStatus.choices, 
+        default=PaymentStatus.PENDING, 
+        verbose_name=_("Payment Status")
+    )
+    
+    # Financial Information
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
+    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.NPR, verbose_name=_("Currency"))
+    
+    # Payment Information
+    payment_method = models.CharField(max_length=50, verbose_name=_("Payment Method"), blank=True, null=True)
+    transaction_id = models.CharField(max_length=100, verbose_name=_("Transaction ID"), blank=True, null=True)
+    
+    # Delivery Information
+    delivery = models.ForeignKey(
+        DeliveryInfo, 
+        on_delete=models.PROTECT, 
+        related_name="orders", 
+        verbose_name=_("Delivery Information")
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivered At"))
+    estimated_delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Estimated Delivery Date"))
+    
+    # Additional Information
+    tracking_number = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Tracking Number"))
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Order Notes"))
+    
+    # Soft delete functionality
+    is_deleted = models.BooleanField(default=False, verbose_name=_("Is Deleted"))
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Deleted At"))
+
+    class Meta:
+        verbose_name = _("Marketplace Order")
+        verbose_name_plural = _("Marketplace Orders")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["order_number"]),
+            models.Index(fields=["customer"]),
+            models.Index(fields=["order_status", "payment_status"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["is_deleted", "deleted_at"]),
+        ]
+
+    def __str__(self):
+        return f"Order #{self.order_number} - {self.customer.username}"
+
+    def clean(self):
+        """Validate model fields before saving."""
+        super().clean()
+
+        # Validate status transitions if this is an existing instance
+        if self.pk:
+            old_instance = MarketplaceOrder.objects.get(pk=self.pk)
+            self._validate_status_transition(old_instance.order_status, self.order_status)
+            self._validate_payment_status_transition(old_instance.payment_status, self.payment_status)
+
+    def _validate_status_transition(self, old_status, new_status):
+        """Validate if the status transition is allowed."""
+        if old_status == new_status:
+            return
+
+        allowed_statuses = OrderStatus.get_next_allowed_statuses(old_status)
+        if new_status not in allowed_statuses:
+            raise ValidationError(f"Cannot change status from {old_status} to {new_status}.")
+
+    def _validate_payment_status_transition(self, old_status, new_status):
+        """Validate payment status changes."""
+        if old_status == new_status:
+            return
+
+        # Can't mark as delivered without payment
+        if self.order_status in [OrderStatus.DELIVERED, OrderStatus.COMPLETED] and new_status != PaymentStatus.PAID:
+            raise ValidationError("Cannot mark as delivered/completed with unpaid order.")
+
+    def save(self, *args, **kwargs):
+        """Save the model with additional validations and auto-fields."""
+        self.full_clean()
+
+        # Generate order number if not set
+        if not self.order_number:
+            self.order_number = f"MP-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+        # Set delivered_at when status changes to delivered
+        if self.order_status == OrderStatus.DELIVERED and not self.delivered_at:
+            self.delivered_at = timezone.now()
+
+        super().save(*args, **kwargs)
+
+    # Status Properties
+    @property
+    def is_paid(self):
+        """Check if the order is paid."""
+        return self.payment_status == PaymentStatus.PAID
+
+    @property
+    def is_delivered(self):
+        """Check if the order is delivered."""
+        return self.order_status in [OrderStatus.DELIVERED, OrderStatus.COMPLETED]
+
+    @property
+    def can_cancel(self):
+        """Check if the order can be cancelled."""
+        return self.order_status in [OrderStatus.PENDING, OrderStatus.CONFIRMED]
+
+    @property
+    def can_refund(self):
+        """Check if the order can be refunded."""
+        return self.payment_status == PaymentStatus.PAID and self.order_status != OrderStatus.CANCELLED
+
+    # Display Properties
+    @property
+    def order_status_display(self):
+        """Get human-readable order status."""
+        for choice_value, choice_label in OrderStatus.choices:
+            if choice_value == self.order_status:
+                return choice_label
+        return self.order_status
+
+    @property
+    def payment_status_display(self):
+        """Get human-readable payment status."""
+        for choice_value, choice_label in PaymentStatus.choices:
+            if choice_value == self.payment_status:
+                return choice_label
+        return self.payment_status
+
+    # Price formatting
+    def format_price(self, amount):
+        """Format price according to the currency."""
+        if format_currency:
+            return format_currency(amount, self.currency, locale=settings.LANGUAGE_CODE)
+        return f"{self.currency} {amount:.2f}"
+
+    @property
+    def formatted_total(self):
+        """Returns formatted total amount."""
+        return self.format_price(self.total_amount)
+
+    # Order Actions
+    @transaction.atomic
+    def mark_as_paid(self, payment_id=None, payment_method=None):
+        """Mark the order as paid."""
+        if self.payment_status == PaymentStatus.PAID:
+            return  # Already paid
+
+        self.payment_status = PaymentStatus.PAID
+        if payment_id:
+            self.transaction_id = payment_id
+        if payment_method:
+            self.payment_method = payment_method
+        self.save()
+
+        # Create tracking event
+        _ = OrderTrackingEvent.objects.create(
+            marketplace_order=self,
+            status=self.order_status,
+            message="Payment confirmed",
+            metadata={"payment_method": payment_method, "transaction_id": payment_id}
+        )
+
+    @transaction.atomic
+    def mark_as_delivered(self):
+        """Mark the order as delivered."""
+        if self.order_status == OrderStatus.DELIVERED:
+            return  # Already delivered
+
+        if self.payment_status != PaymentStatus.PAID:
+            raise ValidationError("Cannot mark as delivered with unpaid order.")
+
+        self.order_status = OrderStatus.DELIVERED
+        self.delivered_at = timezone.now()
+        self.save()
+
+        # Create tracking event
+        _ = OrderTrackingEvent.objects.create(
+            marketplace_order=self,
+            status=OrderStatus.DELIVERED,
+            message="Order delivered successfully"
+        )
+
+    @transaction.atomic
+    def cancel_order(self, reason=None):
+        """Cancel the order."""
+        if not self.can_cancel:
+            raise ValidationError("This order cannot be cancelled.")
+
+        self.order_status = OrderStatus.CANCELLED
+        if reason:
+            self.notes = f"{self.notes or ''}\nCancellation reason: {reason}"
+        self.save()
+
+        # Return stock for all items
+        for item in self.items.all():
+            item.product.stock += item.quantity
+            item.product.save()
+
+        # Create tracking event
+        _ = OrderTrackingEvent.objects.create(
+            marketplace_order=self,
+            status=OrderStatus.CANCELLED,
+            message=f"Order cancelled{': ' + reason if reason else ''}"
+        )
+
+    # Soft delete implementation
+    def delete(self, using=None, keep_parents=False, **kwargs):
+        """Soft delete the order."""
+        if not self.is_deleted:
+            self.is_deleted = True
+            self.deleted_at = timezone.now()
+            self.save(update_fields=["is_deleted", "deleted_at"])
+
+            # Return stock if not already delivered
+            if not self.is_delivered:
+                for item in self.items.all():
+                    item.product.stock += item.quantity
+                    item.product.save()
+
+    def hard_delete(self, *args, **kwargs):
+        """Permanently delete the order."""
+        _ = super().delete(*args, **kwargs)
+
+    def get_absolute_url(self):
+        """Get the URL for the order detail view."""
+        return reverse("market:order-detail", kwargs={"order_number": self.order_number})
+
+
+class MarketplaceOrderItem(models.Model):
+    """
+    Individual items within a marketplace order.
+    Each item represents a product and quantity purchased.
+    """
+    order = models.ForeignKey(
+        MarketplaceOrder, 
+        on_delete=models.CASCADE, 
+        related_name="items", 
+        verbose_name=_("Order")
+    )
+    product = models.ForeignKey(
+        MarketplaceProduct, 
+        on_delete=models.PROTECT, 
+        related_name="order_items", 
+        verbose_name=_("Product")
+    )
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)], verbose_name=_("Quantity"))
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Price"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+
+    class Meta:
+        verbose_name = _("Marketplace Order Item")
+        verbose_name_plural = _("Marketplace Order Items")
+        indexes = [
+            models.Index(fields=["order"]),
+            models.Index(fields=["product"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(quantity__gt=0),
+                name="positive_quantity_orderitem",
+                violation_error_message="Quantity must be greater than zero.",
+            ),
+            models.CheckConstraint(
+                check=models.Q(unit_price__gte=0) & models.Q(total_price__gte=0),
+                name="non_negative_prices_orderitem",
+                violation_error_message="Prices cannot be negative.",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product.product.name} in Order #{self.order.order_number}"
+
+    def clean(self):
+        """Validate model fields before saving."""
+        super().clean()
+
+        # Validate prices
+        if self.quantity < 1:
+            raise ValidationError({"quantity": "Quantity must be at least 1."})
+
+        if self.unit_price < 0 or self.total_price < 0:
+            raise ValidationError("Prices cannot be negative.")
+
+        # Validate that total_price = unit_price * quantity
+        from decimal import Decimal
+        expected_total = Decimal(str(self.unit_price)) * self.quantity
+        if abs(Decimal(str(self.total_price)) - expected_total) > Decimal('0.01'):  # Allow for small rounding differences
+            raise ValidationError("Total price must equal unit price multiplied by quantity.")
+
+    def save(self, *args, **kwargs):
+        """Save the model with additional validations."""
+        # Set unit price from product if not provided
+        if not self.unit_price:
+            # Use discounted price if available, otherwise listed price
+            self.unit_price = self.product.discounted_price or self.product.listed_price
+
+        # Calculate total price
+        self.total_price = self.unit_price * self.quantity
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    # Price formatting
+    @property
+    def formatted_unit_price(self):
+        """Returns formatted unit price."""
+        return self.order.format_price(self.unit_price)
+
+    @property
+    def formatted_total_price(self):
+        """Returns formatted total price."""
+        return self.order.format_price(self.total_price)
+
+
 class OrderTrackingEvent(models.Model):
     """
-    Discrete tracking event for a marketplace order (`MarketplaceSale`).
-
+    Discrete tracking event for marketplace orders.
+    Updated to work with both MarketplaceSale (legacy) and MarketplaceOrder (new).
+    
     Stores the timeline of an order for buyers/sellers to track progress.
     """
 
-    order = models.ForeignKey(
-        "MarketplaceSale", on_delete=models.CASCADE, related_name="tracking_events", verbose_name=_("Order")
+    # Support both old and new order models
+    marketplace_sale = models.ForeignKey(
+        "MarketplaceSale", 
+        on_delete=models.CASCADE, 
+        related_name="tracking_events", 
+        verbose_name=_("Marketplace Sale"),
+        null=True,
+        blank=True
     )
-    status = models.CharField(max_length=20, choices=SaleStatus.choices, verbose_name=_("Status"))
+    marketplace_order = models.ForeignKey(
+        "MarketplaceOrder", 
+        on_delete=models.CASCADE, 
+        related_name="tracking_events", 
+        verbose_name=_("Marketplace Order"),
+        null=True,
+        blank=True
+    )
+    
+    # Status can be from either SaleStatus or OrderStatus
+    status = models.CharField(max_length=20, verbose_name=_("Status"))
     message = models.CharField(max_length=255, blank=True, verbose_name=_("Message"))
     location = models.CharField(max_length=255, blank=True, verbose_name=_("Location"))
     latitude = models.FloatField(null=True, blank=True, verbose_name=_("Latitude"))
@@ -846,9 +1373,42 @@ class OrderTrackingEvent(models.Model):
         verbose_name_plural = _("Order Tracking Events")
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["order", "created_at"]),
+            models.Index(fields=["marketplace_sale", "created_at"]),
+            models.Index(fields=["marketplace_order", "created_at"]),
             models.Index(fields=["status", "created_at"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(marketplace_sale__isnull=False, marketplace_order__isnull=True) |
+                    models.Q(marketplace_sale__isnull=True, marketplace_order__isnull=False)
+                ),
+                name="tracking_event_single_order_reference",
+                violation_error_message="Tracking event must reference either a marketplace sale or marketplace order, but not both.",
+            ),
+        ]
+
+    def clean(self):
+        """Validate that exactly one order reference is provided."""
+        super().clean()
+        
+        if not self.marketplace_sale and not self.marketplace_order:
+            raise ValidationError("Tracking event must reference either a marketplace sale or marketplace order.")
+        
+        if self.marketplace_sale and self.marketplace_order:
+            raise ValidationError("Tracking event cannot reference both marketplace sale and marketplace order.")
+
+    @property
+    def order(self):
+        """Get the associated order (either MarketplaceSale or MarketplaceOrder)."""
+        return self.marketplace_order or self.marketplace_sale
+
+    @property
+    def order_number(self):
+        """Get the order number from the associated order."""
+        order = self.order
+        return order.order_number if order else None
 
     def __str__(self):
-        return f"Order {self.order.order_number} → {self.status} at {self.created_at}"
+        order_number = self.order_number or "Unknown"
+        return f"Order {order_number} → {self.status} at {self.created_at}"
