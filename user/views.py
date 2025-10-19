@@ -18,6 +18,7 @@ from transport.serializers import (
 from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
     BusinessRegisterSerializer,
+    ChangePasswordSerializer,
     ContactSerializer,
     LoginResponseSerializer,
     LoginSerializer,
@@ -25,6 +26,9 @@ from .serializers import (
     PhoneNumberSerializer,
     RegisterSerializer,
     TransporterRegistrationRequestSerializer,
+    UpdateNotificationPreferencesSerializer,
+    UploadProfilePictureSerializer,
+    UserProfileDetailSerializer,
     VerifyOTPSerializer,
 )
 
@@ -273,3 +277,207 @@ class TransporterRegistrationAPIView(generics.CreateAPIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         transporter = serializer.save(user=user)
         return Response(TransporterSerializer(transporter).data, status=status.HTTP_201_CREATED)
+
+
+# User Profile Management APIs
+
+class ProfileView(APIView):
+    """
+    API view for user profile management
+    GET: Retrieve current user profile
+    PUT/PATCH: Update user profile
+    """
+    
+    def get(self, request):
+        """Get current user profile"""
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            # Create profile if it doesn't exist
+            profile = UserProfile.objects.create(user=request.user)
+            
+        serializer = UserProfileDetailSerializer(profile, context={'request': request})
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def put(self, request):
+        """Update user profile (full update)"""
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=request.user)
+            
+        serializer = UserProfileDetailSerializer(
+            profile, 
+            data=request.data, 
+            context={'request': request},
+            partial=False
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'data': serializer.data
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def patch(self, request):
+        """Update user profile (partial update)"""
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=request.user)
+            
+        serializer = UserProfileDetailSerializer(
+            profile, 
+            data=request.data, 
+            context={'request': request},
+            partial=True
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'data': serializer.data
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChangePasswordView(APIView):
+    """API view for changing password"""
+    
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data, 
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            user = request.user
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Password changed successfully'
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UploadProfilePictureView(APIView):
+    """API view for uploading profile picture"""
+    
+    def post(self, request):
+        serializer = UploadProfilePictureSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            try:
+                profile = request.user.userprofile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(user=request.user)
+            
+            # Delete old profile image if exists
+            if profile.profile_image:
+                profile.profile_image.delete()
+            
+            profile.profile_image = serializer.validated_data['profile_picture']
+            profile.save()
+            
+            # Return updated profile data
+            profile_serializer = UserProfileDetailSerializer(
+                profile, 
+                context={'request': request}
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Profile picture uploaded successfully',
+                'data': profile_serializer.data
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UpdateNotificationPreferencesView(APIView):
+    """API view for updating notification preferences"""
+    
+    def patch(self, request):
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=request.user)
+        
+        serializer = UpdateNotificationPreferencesSerializer(
+            profile, 
+            data=request.data, 
+            partial=True
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Return updated notification preferences
+            return Response({
+                'success': True,
+                'message': 'Notification preferences updated successfully',
+                'data': {
+                    'email_notifications': profile.email_notifications,
+                    'sms_notifications': profile.sms_notifications,
+                    'marketing_emails': profile.marketing_emails,
+                    'order_updates': profile.order_updates,
+                }
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeleteAccountView(APIView):
+    """API view for account deletion"""
+    
+    def delete(self, request):
+        password = request.data.get('password')
+        
+        if not password:
+            return Response({
+                'success': False,
+                'error': 'Password is required for account deletion'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify password
+        if not authenticate(username=request.user.username, password=password):
+            return Response({
+                'success': False,
+                'error': 'Invalid password'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Delete user account (this will cascade delete profile)
+        request.user.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Account deleted successfully'
+        })

@@ -19,7 +19,10 @@ from .models import (
     CartItem,
     ChatMessage,
     Delivery,
+    DeliveryInfo,
     Feedback,
+    MarketplaceOrder,
+    MarketplaceOrderItem,
     MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
@@ -575,15 +578,15 @@ class DeliverySerializer(serializers.ModelSerializer):
 
 
 class OrderTrackingEventSerializer(serializers.ModelSerializer):
-    """Serializer for order tracking events tied to `MarketplaceSale`."""
-
-    order_number = serializers.CharField(source="order.order_number", read_only=True)
+    """Updated serializer for order tracking events supporting both order types."""
+    order_number = serializers.ReadOnlyField()
 
     class Meta:
         model = OrderTrackingEvent
         fields = [
             "id",
-            "order",
+            "marketplace_sale",
+            "marketplace_order", 
             "order_number",
             "status",
             "message",
@@ -594,3 +597,181 @@ class OrderTrackingEventSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "order_number", "created_at"]
+
+
+# New serializers for marketplace orders
+class DeliveryInfoSerializer(serializers.ModelSerializer):
+    """Serializer for delivery information."""
+    full_address = serializers.ReadOnlyField()
+
+    class Meta:
+        model = DeliveryInfo
+        fields = [
+            "id",
+            "customer_name",
+            "phone_number",
+            "address",
+            "city",
+            "state",
+            "zip_code",
+            "latitude",
+            "longitude",
+            "delivery_instructions",
+            "full_address",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "full_address"]
+
+
+class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
+    """Serializer for marketplace order items."""
+    product = MarketplaceProductSerializer(read_only=True)
+    product_details = serializers.SerializerMethodField()
+    formatted_unit_price = serializers.ReadOnlyField()
+    formatted_total_price = serializers.ReadOnlyField()
+
+    class Meta:
+        model = MarketplaceOrderItem
+        fields = [
+            "id",
+            "product",
+            "product_details",
+            "quantity",
+            "unit_price",
+            "total_price",
+            "formatted_unit_price", 
+            "formatted_total_price",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "total_price", "created_at", "updated_at"]
+
+    def get_product_details(self, obj):
+        """Get detailed product information for the frontend."""
+        if obj.product and obj.product.product:
+            product = obj.product.product
+            return {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "sku": product.sku,
+                "category": product.category.name if hasattr(product, 'category') and product.category else None,
+                "category_details": product.category.name if hasattr(product, 'category') and product.category else None,
+                "images": [
+                    {
+                        "id": img.id,
+                        "image": img.image.url if img.image else None,
+                        "alt_text": img.alt_text,
+                    } for img in product.images.all()
+                ] if hasattr(product, 'images') else [],
+                "price": float(product.price) if hasattr(product, 'price') else 0,
+                "cost_price": float(product.cost_price) if hasattr(product, 'cost_price') else 0,
+                "stock": product.stock if hasattr(product, 'stock') else 0,
+                "is_active": product.is_active if hasattr(product, 'is_active') else True,
+                "user": product.user.id if product.user else None,
+                "location": product.location.id if hasattr(product, 'location') and product.location else None,
+            }
+        return None
+
+
+class MarketplaceOrderSerializer(serializers.ModelSerializer):
+    """Serializer for marketplace orders."""
+    items = MarketplaceOrderItemSerializer(many=True, read_only=True)
+    delivery = DeliveryInfoSerializer(read_only=True)
+    order_status_display = serializers.ReadOnlyField()
+    payment_status_display = serializers.ReadOnlyField()
+    formatted_total = serializers.ReadOnlyField()
+    can_cancel = serializers.ReadOnlyField()
+    can_refund = serializers.ReadOnlyField()
+    is_paid = serializers.ReadOnlyField()
+    is_delivered = serializers.ReadOnlyField()
+
+    class Meta:
+        model = MarketplaceOrder
+        fields = [
+            "id",
+            "order_number",
+            "customer",
+            "order_status",
+            "order_status_display",
+            "payment_status",
+            "payment_status_display",
+            "total_amount",
+            "formatted_total",
+            "currency",
+            "payment_method",
+            "transaction_id",
+            "delivery",
+            "items",
+            "created_at",
+            "updated_at",
+            "delivered_at",
+            "estimated_delivery_date",
+            "tracking_number",
+            "notes",
+            "can_cancel",
+            "can_refund",
+            "is_paid",
+            "is_delivered",
+        ]
+        read_only_fields = [
+            "id", 
+            "order_number", 
+            "created_at", 
+            "updated_at", 
+            "delivered_at",
+            "order_status_display",
+            "payment_status_display",
+            "formatted_total",
+            "can_cancel",
+            "can_refund",
+            "is_paid",
+            "is_delivered",
+        ]
+
+
+class CreateOrderSerializer(serializers.Serializer):
+    """Serializer for creating orders from cart."""
+    cart_id = serializers.IntegerField()
+    delivery_info = DeliveryInfoSerializer()
+    payment_method = serializers.CharField(max_length=50, required=False)
+
+    def validate_cart_id(self, value):
+        """Validate that the cart exists and belongs to the user."""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Authentication required")
+        
+        try:
+            cart = Cart.objects.get(id=value, user=request.user)
+            if not cart.items.exists():
+                raise serializers.ValidationError("Cart is empty")
+            return value
+        except Cart.DoesNotExist:
+            raise serializers.ValidationError("Cart not found")
+
+    def create(self, validated_data):
+        """Create order from cart."""
+        request = self.context.get('request')
+        cart_id = validated_data['cart_id']
+        delivery_data = validated_data['delivery_info']
+        payment_method = validated_data.get('payment_method')
+
+        # Get the cart
+        cart = Cart.objects.get(id=cart_id, user=request.user)
+
+        # Create delivery info
+        delivery_info = DeliveryInfo.objects.create(**delivery_data)
+
+        # Create order using the manager method
+        order = MarketplaceOrder.objects.create_order_from_cart(
+            cart=cart,
+            delivery_info=delivery_info,
+            payment_method=payment_method
+        )
+
+        # Clear the cart after successful order creation
+        cart.items.all().delete()
+
+        return order
