@@ -19,6 +19,7 @@ from market.views import (
     DeliveryCreateView,
     FeedbackViewSet,
     GlobalEnumView,
+    MarketplaceOrderViewSet,
     MarketplaceSaleViewSet,
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
@@ -29,10 +30,15 @@ from market.views import (
     UserBidViewSet,
     UserCartView,
     UserFeedbackView,
+    cancel_marketplace_order,
+    create_order,
     create_purchase,
     log_interaction,
     log_product_view,
+    marketplace_order_detail,
+    my_marketplace_orders,
     payment_confirmation,
+    reorder_marketplace_order,
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
@@ -140,12 +146,6 @@ urlpatterns = [
     path("api/v1/feedback/user/", UserFeedbackView.as_view(), name="user-feedback"),
     path("api/v1/contact/", ContactCreateView.as_view(), name="contact-create"),
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
-    # User Profile APIs
-    path("api/v1/user/profile/", ProfileView.as_view(), name="user-profile"),
-    path("api/v1/user/change-password/", ChangePasswordView.as_view(), name="change-password"),
-    path("api/v1/user/upload-profile-picture/", UploadProfilePictureView.as_view(), name="upload-profile-picture"),
-    path("api/v1/user/notification-preferences/", UpdateNotificationPreferencesView.as_view(), name="notification-preferences"),
-    path("api/v1/user/delete-account/", DeleteAccountView.as_view(), name="delete-account"),
     path("api/log-interaction/", log_interaction, name="log_interaction"),
     path("api/v1/procurement/", procurement_view, name="procurement"),
     path("api/v1/sales/", sales_view, name="sales"),
@@ -243,6 +243,12 @@ urlpatterns = [
     path("api/v1/payments/", include("payment.urls")),
     # Notification URLs
     path("api/v1/notifications/", include("notification.urls")),
+    # Marketplace Orders URLs - matching frontend API calls exactly
+    path("api/v1/marketplace/orders/my-orders/", my_marketplace_orders, name="my-marketplace-orders"),
+    path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),
+    path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
+    path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
+    path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

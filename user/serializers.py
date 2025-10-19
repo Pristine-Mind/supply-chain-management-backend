@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 
 from producer.models import City
@@ -196,3 +197,121 @@ class TransporterRegistrationRequestSerializer(serializers.Serializer):
     current_longitude = TransporterCreateSerializer().fields["current_longitude"]
     vehicle_image = TransporterCreateSerializer().fields["vehicle_image"]
     vehicle_documents = TransporterCreateSerializer().fields["vehicle_documents"]
+
+
+class UserProfileDetailSerializer(serializers.ModelSerializer):
+    """Serializer for UserProfile with additional user fields"""
+    
+    # User fields
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
+    
+    # Profile picture URL
+    profile_picture = serializers.SerializerMethodField()
+    
+    # Notification preferences as nested object
+    notification_preferences = serializers.SerializerMethodField()
+    
+    # Phone field compatibility
+    phone = serializers.CharField(source='phone_number', required=False, allow_blank=True)
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            'username', 'email', 'first_name', 'last_name', 'date_joined',
+            'phone', 'phone_number', 'profile_picture', 'bio', 'date_of_birth', 'gender',
+            'address', 'city', 'state', 'zip_code', 'country',
+            'business_type', 'registered_business_name',
+            'notification_preferences'
+        ]
+        
+    def get_profile_picture(self, obj):
+        if obj.profile_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.profile_image.url)
+        return None
+        
+    def get_notification_preferences(self, obj):
+        return {
+            'email_notifications': obj.email_notifications,
+            'sms_notifications': obj.sms_notifications,
+            'marketing_emails': obj.marketing_emails,
+            'order_updates': obj.order_updates,
+        }
+        
+    def update(self, instance, validated_data):
+        # Handle user fields
+        user_data = validated_data.pop('user', {})
+        user = instance.user
+        
+        for attr, value in user_data.items():
+            setattr(user, attr, value)
+        user.save()
+        
+        # Handle notification preferences if provided
+        notification_data = validated_data.pop('notification_preferences', {})
+        for key, value in notification_data.items():
+            if hasattr(instance, key):
+                setattr(instance, key, value)
+        
+        # Handle profile fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        return instance
+
+
+class UpdateNotificationPreferencesSerializer(serializers.ModelSerializer):
+    """Serializer for updating notification preferences"""
+    
+    class Meta:
+        model = UserProfile
+        fields = ['email_notifications', 'sms_notifications', 'marketing_emails', 'order_updates']
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for changing password"""
+    current_password = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
+    confirm_password = serializers.CharField()
+    
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("New passwords don't match")
+        return data
+        
+    def validate_current_password(self, value):
+        user = self.context['request'].user
+        if not authenticate(username=user.username, password=value):
+            raise serializers.ValidationError("Current password is incorrect")
+        return value
+
+
+class UploadProfilePictureSerializer(serializers.Serializer):
+    """Serializer for uploading profile picture"""
+    profile_picture = serializers.ImageField()
+    
+    def validate_profile_picture(self, value):
+        # Validate file size (5MB max)
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image size should be less than 5MB")
+        return value
+
+
+class ShippingAddressSerializer(serializers.Serializer):
+    """Serializer for shipping addresses (for future use)"""
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(max_length=100)
+    address_line_1 = serializers.CharField(max_length=255)
+    address_line_2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100)
+    state = serializers.CharField(max_length=100)
+    zip_code = serializers.CharField(max_length=20)
+    country = serializers.CharField(max_length=100)
+    phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
+    is_default = serializers.BooleanField(default=False)
