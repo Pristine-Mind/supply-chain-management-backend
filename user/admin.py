@@ -167,8 +167,8 @@ class ContactAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
         return False
 
 
-admin.site.site_header = "Muluya Bazzar Admin"
-admin.site.site_title = "Muluya Bazzar"
+admin.site.site_header = "Mulya Bazzar Admin"
+admin.site.site_title = "Mulya Bazzar"
 admin.site.index_title = "Dashboard"
 
 admin.site.unregister(Group)

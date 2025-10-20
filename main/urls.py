@@ -78,7 +78,6 @@ from producer.views import (
     stats_dashboard,
 )
 
-# Import transport views for direct URL patterns
 from transport import views as transport_views
 from user.views import (
     BusinessRegisterView,
