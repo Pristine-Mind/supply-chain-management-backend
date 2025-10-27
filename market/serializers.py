@@ -651,27 +651,39 @@ class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
         """Get detailed product information for the frontend."""
         if obj.product and obj.product.product:
             product = obj.product.product
-            return {
-                "id": product.id,
-                "name": product.name,
-                "description": product.description,
-                "sku": product.sku,
-                "category": product.category.name if hasattr(product, 'category') and product.category else None,
-                "category_details": product.category.name if hasattr(product, 'category') and product.category else None,
-                "images": [
-                    {
-                        "id": img.id,
-                        "image": img.image.url if img.image else None,
-                        "alt_text": img.alt_text,
-                    } for img in product.images.all()
-                ] if hasattr(product, 'images') else [],
-                "price": float(product.price) if hasattr(product, 'price') else 0,
-                "cost_price": float(product.cost_price) if hasattr(product, 'cost_price') else 0,
-                "stock": product.stock if hasattr(product, 'stock') else 0,
-                "is_active": product.is_active if hasattr(product, 'is_active') else True,
-                "user": product.user.id if product.user else None,
-                "location": product.location.id if hasattr(product, 'location') and product.location else None,
-            }
+            try:
+                return {
+                    "id": product.id,
+                    "name": getattr(product, 'name', 'Unknown Product'),
+                    "description": getattr(product, 'description', ''),
+                    "sku": getattr(product, 'sku', ''),
+                    "category": product.category.name if hasattr(product, 'category') and product.category else None,
+                    "category_details": product.category.name if hasattr(product, 'category') and product.category else None,
+                    "images": [
+                        {
+                            "id": img.id,
+                            "image": img.image.url if img.image else None,
+                            "alt_text": img.alt_text,
+                        } for img in product.images.all()
+                    ] if hasattr(product, 'images') else [],
+                    "price": float(product.price) if hasattr(product, 'price') else 0,
+                    "cost_price": float(product.cost_price) if hasattr(product, 'cost_price') else 0,
+                    "stock": product.stock if hasattr(product, 'stock') else 0,
+                }
+            except AttributeError as e:
+                # Fallback if product data is corrupted
+                return {
+                    "id": getattr(product, 'id', None),
+                    "name": str(product),
+                    "description": f"Error accessing product data: {e}",
+                    "sku": "",
+                    "category": None,
+                    "category_details": None,
+                    "images": [],
+                    "price": 0,
+                    "cost_price": 0,
+                    "stock": 0,
+                }
         return None
 
 
