@@ -126,24 +126,22 @@ def initiate_payment(request: HttpRequest) -> Response:
             )
 
             if isinstance(result, HttpResponseRedirect):
-                # from market.utils import notify_event
-                # notify_event(
-                #     user=payment_transaction.user,
-                #     notif_type="payment_success",
-                #     message=f"Your payment for order {payment_transaction.order_number} was successful.",
-                #     via_email=True,
-                #     email_addr=payment_transaction.customer_email if hasattr(payment_transaction, 'customer_email') else payment_transaction.user.email,
-                #     email_tpl="order_confirmation.html",
-                #     email_ctx={
-                #         "order_number": payment_transaction.order_number,
-                #         "amount": float(khalti.requested_amount(inquiry_result)),
-                #         "transaction_id": khalti_transaction_id,
-                #     },
-                # )
+                # Legacy handling for HttpResponseRedirect (shouldn't happen with new Khalti code)
                 return Response(
                     {
                         "status": "success",
                         "payment_url": result.url,
+                        "transaction_id": str(payment_transaction.transaction_id),
+                        "order_number": payment_transaction.order_number,
+                    }
+                )
+            elif isinstance(result, dict) and "payment_url" in result:
+                # New handling for dictionary response with pidx
+                return Response(
+                    {
+                        "status": "success",
+                        "payment_url": result["payment_url"],
+                        "pidx": result.get("pidx"),  # Include pidx in response
                         "transaction_id": str(payment_transaction.transaction_id),
                         "order_number": payment_transaction.order_number,
                     }
