@@ -1289,7 +1289,12 @@ class MarketplaceOrderItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.quantity} x {self.product.product.name} in Order #{self.order.order_number}"
+        try:
+            product_name = self.product.product.name if self.product and hasattr(self.product, 'product') else str(self.product)
+            order_number = self.order.order_number if self.order and hasattr(self.order, 'order_number') else str(self.order)
+            return f"{self.quantity} x {product_name} in Order #{order_number}"
+        except AttributeError:
+            return f"OrderItem {self.pk or 'New'}"
 
     def clean(self):
         """Validate model fields before saving."""
@@ -1313,7 +1318,10 @@ class MarketplaceOrderItem(models.Model):
         # Set unit price from product if not provided
         if not self.unit_price:
             # Use discounted price if available, otherwise listed price
-            self.unit_price = self.product.discounted_price or self.product.listed_price
+            try:
+                self.unit_price = self.product.discounted_price or self.product.listed_price
+            except AttributeError as e:
+                raise ValueError(f"Cannot access product pricing: {e}. Product: {self.product}")
 
         # Calculate total price
         self.total_price = self.unit_price * self.quantity
