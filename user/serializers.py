@@ -6,7 +6,7 @@ from producer.models import City
 from transport.serializers import TransporterCreateSerializer
 from user.models import Contact
 
-from .models import UserProfile
+from .models import Role, UserProfile
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -146,6 +146,9 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data["password"])
         user.save()
 
+        # Create UserProfile instance
+        business_owner_role = Role.objects.get(code="business_owner")
+
         UserProfile.objects.create(
             user=user,
             phone_number=phone_number,
@@ -158,7 +161,8 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
             latitude=latitude,
             longitude=longitude,
             has_access_to_marketplace=True,
-        )
+            role=business_owner_role,
+        ) # type: ignore
         return user
 
 
