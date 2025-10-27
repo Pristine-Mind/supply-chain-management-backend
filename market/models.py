@@ -623,8 +623,8 @@ class MarketplaceSale(models.Model):
         if self.pk:
             old_instance = MarketplaceSale.objects.get(pk=self.pk)
             if old_instance.quantity != self.quantity:
-                self.product.stock += old_instance.quantity - self.quantity
-                self.product.save()
+                self.product.product.stock += old_instance.quantity - self.quantity
+                self.product.product.save()
 
         super().save(*args, **kwargs)
 
@@ -638,8 +638,8 @@ class MarketplaceSale(models.Model):
 
             # Return stock if not already delivered
             if self.status != SaleStatus.DELIVERED:
-                self.product.stock += self.quantity
-                self.product.save()
+                self.product.product.stock += self.quantity
+                self.product.product.save()
 
     def hard_delete(self, *args, **kwargs):
         """Permanently delete the sale."""
@@ -940,9 +940,9 @@ class MarketplaceOrderManager(models.Manager):
                 unit_price=cart_item.product.discounted_price or cart_item.product.listed_price,
             )
             
-            # Update product stock
-            cart_item.product.stock -= cart_item.quantity
-            cart_item.product.save()
+            # Update product stock (access the underlying Product model)
+            cart_item.product.product.stock -= cart_item.quantity
+            cart_item.product.product.save()
         
         # Create initial tracking event
         _ = OrderTrackingEvent.objects.create(
@@ -1212,8 +1212,8 @@ class MarketplaceOrder(models.Model):
 
         # Return stock for all items
         for item in self.items.all():
-            item.product.stock += item.quantity
-            item.product.save()
+            item.product.product.stock += item.quantity
+            item.product.product.save()
 
         # Create tracking event
         _ = OrderTrackingEvent.objects.create(
@@ -1233,8 +1233,8 @@ class MarketplaceOrder(models.Model):
             # Return stock if not already delivered
             if not self.is_delivered:
                 for item in self.items.all():
-                    item.product.stock += item.quantity
-                    item.product.save()
+                    item.product.product.stock += item.quantity
+                    item.product.product.save()
 
     def hard_delete(self, *args, **kwargs):
         """Permanently delete the order."""
