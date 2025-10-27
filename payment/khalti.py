@@ -203,9 +203,16 @@ class Khalti(PaymentGatewayInterface):
             if response.status_code == 200:
                 response_data = response.json()
                 payment_url = response_data.get("payment_url")
+                pidx = response_data.get("pidx")  # Extract pidx from response
                 if payment_url:
                     print(f"Khalti payment URL received: {payment_url}")
-                    return HttpResponseRedirect(payment_url)
+                    print(f"Khalti pidx received: {pidx}")
+                    # Return both payment_url and pidx
+                    return {
+                        "payment_url": payment_url,
+                        "pidx": pidx,
+                        "full_response": response_data  # Include full response for debugging
+                    }
                 else:
                     print(f"Payment URL not found in Khalti response: {response_data}")
                     raise Exception("Payment URL not found in response")
