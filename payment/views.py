@@ -407,6 +407,7 @@ def create_marketplace_order_from_payment(payment_transaction):
 
 def send_order_confirmation_email(marketplace_order, payment_transaction):
     """Send comprehensive order confirmation email to the buyer."""
+    logger.info(f"Starting customer order confirmation for order {marketplace_order.order_number}, customer: {marketplace_order.customer.username}")
     try:
         customer = marketplace_order.customer
         order_items = []
@@ -465,6 +466,29 @@ def send_order_confirmation_email(marketplace_order, payment_transaction):
         # Prepare notification message
         message = f"🎉 Order Confirmed! Your order #{marketplace_order.order_number} has been successfully placed and payment of Rs. {marketplace_order.total_amount} has been processed. We'll keep you updated on your order status."
         
+        # Get customer phone number for SMS
+        customer_phone = None
+        
+        # First, try to get phone from payment transaction
+        if payment_transaction.customer_phone:
+            customer_phone = payment_transaction.customer_phone
+            logger.info(f"Customer {customer.username} has phone number from payment: {customer_phone}")
+        # Then try user profile
+        elif hasattr(customer, 'user_profile') and customer.user_profile and customer.user_profile.phone_number:
+            customer_phone = customer.user_profile.phone_number
+            logger.info(f"Customer {customer.username} has phone number from profile: {customer_phone}")
+        # Finally try direct user field
+        elif hasattr(customer, 'phone_number') and customer.phone_number:
+            customer_phone = customer.phone_number
+            logger.info(f"Customer {customer.username} has direct phone number: {customer_phone}")
+        else:
+            logger.warning(f"Customer {customer.username} does not have any phone number available")
+        
+        # Prepare SMS message (shorter version for SMS)
+        sms_message = f"Order #{marketplace_order.order_number} confirmed! Payment Rs.{marketplace_order.total_amount} processed. Track your order online. Thank you!"
+        
+        logger.info(f"SMS notification enabled: {bool(customer_phone)} for customer {customer.username}")
+        
         # Send comprehensive notification
         notify_event(
             user=customer,
@@ -475,7 +499,9 @@ def send_order_confirmation_email(marketplace_order, payment_transaction):
             email_addr=customer.email,
             email_tpl="order_confirmation_detailed.html",  # Enhanced template for order confirmation
             email_ctx=email_context,
-            via_sms=False,  # Can be enabled if SMS service is configured
+            via_sms=bool(customer_phone),  # Enable SMS if phone number is available
+            sms_number=customer_phone,
+            sms_body=sms_message,
         )
         
         logger.info(f"Order confirmation email sent successfully for order {marketplace_order.order_number}")
@@ -486,6 +512,7 @@ def send_order_confirmation_email(marketplace_order, payment_transaction):
 
 def send_seller_order_notifications(marketplace_order, payment_transaction):
     """Send notifications to sellers about new orders."""
+    logger.info(f"Starting seller order notifications for order {marketplace_order.order_number}")
     try:
         # Collect unique sellers from order items
         sellers = set()
@@ -539,6 +566,23 @@ def send_seller_order_notifications(marketplace_order, payment_transaction):
             # Prepare notification message
             message = f"🛒 New Order! You have received an order #{marketplace_order.order_number} for {item_count} item(s) worth Rs. {total_seller_amount}. Please prepare the items for shipment."
             
+            # Get seller phone number for SMS
+            seller_phone = None
+            if hasattr(seller, 'user_profile') and seller.user_profile and seller.user_profile.phone_number:
+                seller_phone = seller.user_profile.phone_number
+                logger.info(f"Seller {seller.username} has phone number: {seller_phone}")
+            else:
+                logger.warning(f"Seller {seller.username} does not have a phone number in profile")
+                # Also check if user has phone_number directly
+                if hasattr(seller, 'phone_number') and seller.phone_number:
+                    seller_phone = seller.phone_number
+                    logger.info(f"Seller {seller.username} has direct phone number: {seller_phone}")
+            
+            # Prepare SMS message (shorter version for SMS)
+            sms_message = f"New Order #{marketplace_order.order_number}! {item_count} item(s) worth Rs.{total_seller_amount}. Please prepare for shipment."
+            
+            logger.info(f"SMS notification enabled: {bool(seller_phone)} for seller {seller.username}")
+            
             # Send notification to seller
             notify_event(
                 user=seller,
@@ -549,7 +593,9 @@ def send_seller_order_notifications(marketplace_order, payment_transaction):
                 email_addr=seller.email,
                 email_tpl="seller_new_order.html",
                 email_ctx=seller_email_context,
-                via_sms=False,
+                via_sms=bool(seller_phone),  # Enable SMS if phone number is available
+                sms_number=seller_phone,
+                sms_body=sms_message,
             )
             
             logger.info(f"Seller notification sent successfully to {seller.username} for order {marketplace_order.order_number}")
@@ -617,8 +663,12 @@ def verify_payment(request: HttpRequest) -> Response:
                     
                     # Send order confirmation email to buyer
                     if marketplace_order:
+                        logger.info(f"Sending customer order confirmation for order {marketplace_order.order_number}")
                         send_order_confirmation_email(marketplace_order, payment_transaction)
+                        logger.info(f"Sending seller order notifications for order {marketplace_order.order_number}")
                         send_seller_order_notifications(marketplace_order, payment_transaction)
+                    else:
+                        logger.error("Failed to create marketplace order - notifications not sent")
                     
                     # Collect marketplace sales data like in callback (legacy system)
                     marketplace_sales = []
