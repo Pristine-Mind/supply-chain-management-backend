@@ -12,17 +12,17 @@ def create_user_profile(sender, instance, created, **kwargs):
     if created:
         # Get the general_user role
         general_user_role = Role.objects.get(code="general_user")
-        
+
         # Create UserProfile for all new users with general_user role
         profile_data = {
-            'user': instance,
-            'role': general_user_role,
+            "user": instance,
+            "role": general_user_role,
         }
-        
+
         # Add shop_id only for superusers
         if instance.is_superuser:
-            profile_data['shop_id'] = str(uuid.uuid4())
-            
+            profile_data["shop_id"] = str(uuid.uuid4())
+
         _ = UserProfile.objects.create(**profile_data)
 
 

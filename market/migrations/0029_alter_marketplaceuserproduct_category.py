@@ -6,13 +6,27 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0028_update_marketplace_product_categories'),
+        ("market", "0028_update_marketplace_product_categories"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='marketplaceuserproduct',
-            name='category',
-            field=models.CharField(choices=[('FA', 'Fashion & Apparel'), ('EG', 'Electronics & Gadgets'), ('GE', 'Groceries & Essentials'), ('HB', 'Health & Beauty'), ('HL', 'Home & Living'), ('TT', 'Travel & Tourism'), ('IS', 'Industrial Supplies'), ('OT', 'Other')], default='OT', max_length=2, verbose_name='Category'),
+            model_name="marketplaceuserproduct",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("FA", "Fashion & Apparel"),
+                    ("EG", "Electronics & Gadgets"),
+                    ("GE", "Groceries & Essentials"),
+                    ("HB", "Health & Beauty"),
+                    ("HL", "Home & Living"),
+                    ("TT", "Travel & Tourism"),
+                    ("IS", "Industrial Supplies"),
+                    ("OT", "Other"),
+                ],
+                default="OT",
+                max_length=2,
+                verbose_name="Category",
+            ),
         ),
     ]

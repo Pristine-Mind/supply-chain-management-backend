@@ -211,7 +211,7 @@ class Khalti(PaymentGatewayInterface):
                     return {
                         "payment_url": payment_url,
                         "pidx": pidx,
-                        "full_response": response_data  # Include full response for debugging
+                        "full_response": response_data,  # Include full response for debugging
                     }
                 else:
                     print(f"Payment URL not found in Khalti response: {response_data}")

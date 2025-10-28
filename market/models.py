@@ -472,8 +472,10 @@ class MarketplaceSale(models.Model):
     # Pricing
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Subtotal"))
-    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name=_("Tax Amount"))
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name=_("Shipping Cost"))
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Tax Amount"))
+    shipping_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
+    )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
 
     # Status
@@ -859,9 +861,7 @@ class MarketplaceOrderQuerySet(models.QuerySet):
     def with_related(self):
         """Optimize related object fetching."""
         return self.select_related("customer", "delivery").prefetch_related(
-            "items__product__product_details", 
-            "items__product__product_details__images",
-            "tracking_events"
+            "items__product__product_details", "items__product__product_details__images", "tracking_events"
         )
 
     def active(self):
@@ -905,24 +905,23 @@ class MarketplaceOrderManager(models.Manager):
     def create_order_from_cart(self, cart, delivery_info, payment_method=None):
         """
         Create a new order from cart items.
-        
+
         Args:
             cart: Cart instance with items
             delivery_info: DeliveryInfo instance
             payment_method: Optional payment method
-            
+
         Returns:
             MarketplaceOrder instance
         """
         if not cart.items.exists():
             raise ValidationError("Cannot create order from empty cart.")
-        
+
         # Calculate total amount
         total_amount = sum(
-            (item.product.discounted_price or item.product.listed_price) * item.quantity 
-            for item in cart.items.all()
+            (item.product.discounted_price or item.product.listed_price) * item.quantity for item in cart.items.all()
         )
-        
+
         # Create the order
         order = self.create(
             customer=cart.user,
@@ -930,7 +929,7 @@ class MarketplaceOrderManager(models.Manager):
             total_amount=total_amount,
             payment_method=payment_method,
         )
-        
+
         # Create order items from cart items
         for cart_item in cart.items.all():
             _ = MarketplaceOrderItem.objects.create(
@@ -939,18 +938,16 @@ class MarketplaceOrderManager(models.Manager):
                 quantity=cart_item.quantity,
                 unit_price=cart_item.product.discounted_price or cart_item.product.listed_price,
             )
-            
+
             # Update product stock (access the underlying Product model)
             cart_item.product.product.stock -= cart_item.quantity
             cart_item.product.product.save()
-        
+
         # Create initial tracking event
         _ = OrderTrackingEvent.objects.create(
-            marketplace_order=order,
-            status=OrderStatus.PENDING,
-            message="Order created successfully"
+            marketplace_order=order, status=OrderStatus.PENDING, message="Order created successfully"
         )
-        
+
         return order
 
 
@@ -959,6 +956,7 @@ class DeliveryInfo(models.Model):
     Delivery information for marketplace orders.
     Separated from the order to allow for multiple delivery addresses in the future.
     """
+
     customer_name = models.CharField(max_length=255, verbose_name=_("Customer Name"))
     phone_number = models.CharField(max_length=20, verbose_name=_("Phone Number"))
     address = models.TextField(verbose_name=_("Address"))
@@ -1005,47 +1003,38 @@ class MarketplaceOrder(models.Model):
         related_name="marketplace_orders",
         verbose_name=_("Customer"),
     )
-    
+
     # Order Status and Payment
     order_status = models.CharField(
-        max_length=20, 
-        choices=OrderStatus.choices, 
-        default=OrderStatus.PENDING, 
-        verbose_name=_("Order Status")
+        max_length=20, choices=OrderStatus.choices, default=OrderStatus.PENDING, verbose_name=_("Order Status")
     )
     payment_status = models.CharField(
-        max_length=20, 
-        choices=PaymentStatus.choices, 
-        default=PaymentStatus.PENDING, 
-        verbose_name=_("Payment Status")
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING, verbose_name=_("Payment Status")
     )
-    
+
     # Financial Information
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
     currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.NPR, verbose_name=_("Currency"))
-    
+
     # Payment Information
     payment_method = models.CharField(max_length=50, verbose_name=_("Payment Method"), blank=True, null=True)
     transaction_id = models.CharField(max_length=100, verbose_name=_("Transaction ID"), blank=True, null=True)
-    
+
     # Delivery Information
     delivery = models.ForeignKey(
-        DeliveryInfo, 
-        on_delete=models.PROTECT, 
-        related_name="orders", 
-        verbose_name=_("Delivery Information")
+        DeliveryInfo, on_delete=models.PROTECT, related_name="orders", verbose_name=_("Delivery Information")
     )
-    
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
     delivered_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivered At"))
     estimated_delivery_date = models.DateTimeField(null=True, blank=True, verbose_name=_("Estimated Delivery Date"))
-    
+
     # Additional Information
     tracking_number = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Tracking Number"))
     notes = models.TextField(blank=True, null=True, verbose_name=_("Order Notes"))
-    
+
     # Soft delete functionality
     is_deleted = models.BooleanField(default=False, verbose_name=_("Is Deleted"))
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Deleted At"))
@@ -1176,7 +1165,7 @@ class MarketplaceOrder(models.Model):
             marketplace_order=self,
             status=self.order_status,
             message="Payment confirmed",
-            metadata={"payment_method": payment_method, "transaction_id": payment_id}
+            metadata={"payment_method": payment_method, "transaction_id": payment_id},
         )
 
     @transaction.atomic
@@ -1194,9 +1183,7 @@ class MarketplaceOrder(models.Model):
 
         # Create tracking event
         _ = OrderTrackingEvent.objects.create(
-            marketplace_order=self,
-            status=OrderStatus.DELIVERED,
-            message="Order delivered successfully"
+            marketplace_order=self, status=OrderStatus.DELIVERED, message="Order delivered successfully"
         )
 
     @transaction.atomic
@@ -1217,9 +1204,7 @@ class MarketplaceOrder(models.Model):
 
         # Create tracking event
         _ = OrderTrackingEvent.objects.create(
-            marketplace_order=self,
-            status=OrderStatus.CANCELLED,
-            message=f"Order cancelled{': ' + reason if reason else ''}"
+            marketplace_order=self, status=OrderStatus.CANCELLED, message=f"Order cancelled{': ' + reason if reason else ''}"
         )
 
     # Soft delete implementation
@@ -1250,17 +1235,10 @@ class MarketplaceOrderItem(models.Model):
     Individual items within a marketplace order.
     Each item represents a product and quantity purchased.
     """
-    order = models.ForeignKey(
-        MarketplaceOrder, 
-        on_delete=models.CASCADE, 
-        related_name="items", 
-        verbose_name=_("Order")
-    )
+
+    order = models.ForeignKey(MarketplaceOrder, on_delete=models.CASCADE, related_name="items", verbose_name=_("Order"))
     product = models.ForeignKey(
-        MarketplaceProduct, 
-        on_delete=models.PROTECT, 
-        related_name="order_items", 
-        verbose_name=_("Product")
+        MarketplaceProduct, on_delete=models.PROTECT, related_name="order_items", verbose_name=_("Product")
     )
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)], verbose_name=_("Quantity"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
@@ -1290,8 +1268,10 @@ class MarketplaceOrderItem(models.Model):
 
     def __str__(self):
         try:
-            product_name = self.product.product.name if self.product and hasattr(self.product, 'product') else str(self.product)
-            order_number = self.order.order_number if self.order and hasattr(self.order, 'order_number') else str(self.order)
+            product_name = (
+                self.product.product.name if self.product and hasattr(self.product, "product") else str(self.product)
+            )
+            order_number = self.order.order_number if self.order and hasattr(self.order, "order_number") else str(self.order)
             return f"{self.quantity} x {product_name} in Order #{order_number}"
         except AttributeError:
             return f"OrderItem {self.pk or 'New'}"
@@ -1309,8 +1289,9 @@ class MarketplaceOrderItem(models.Model):
 
         # Validate that total_price = unit_price * quantity
         from decimal import Decimal
+
         expected_total = Decimal(str(self.unit_price)) * self.quantity
-        if abs(Decimal(str(self.total_price)) - expected_total) > Decimal('0.01'):  # Allow for small rounding differences
+        if abs(Decimal(str(self.total_price)) - expected_total) > Decimal("0.01"):  # Allow for small rounding differences
             raise ValidationError("Total price must equal unit price multiplied by quantity.")
 
     def save(self, *args, **kwargs):
@@ -1345,28 +1326,28 @@ class OrderTrackingEvent(models.Model):
     """
     Discrete tracking event for marketplace orders.
     Updated to work with both MarketplaceSale (legacy) and MarketplaceOrder (new).
-    
+
     Stores the timeline of an order for buyers/sellers to track progress.
     """
 
     # Support both old and new order models
     marketplace_sale = models.ForeignKey(
-        "MarketplaceSale", 
-        on_delete=models.CASCADE, 
-        related_name="tracking_events", 
+        "MarketplaceSale",
+        on_delete=models.CASCADE,
+        related_name="tracking_events",
         verbose_name=_("Marketplace Sale"),
         null=True,
-        blank=True
+        blank=True,
     )
     marketplace_order = models.ForeignKey(
-        "MarketplaceOrder", 
-        on_delete=models.CASCADE, 
-        related_name="tracking_events", 
+        "MarketplaceOrder",
+        on_delete=models.CASCADE,
+        related_name="tracking_events",
         verbose_name=_("Marketplace Order"),
         null=True,
-        blank=True
+        blank=True,
     )
-    
+
     # Status can be from either SaleStatus or OrderStatus
     status = models.CharField(max_length=20, verbose_name=_("Status"))
     message = models.CharField(max_length=255, blank=True, verbose_name=_("Message"))
@@ -1388,8 +1369,8 @@ class OrderTrackingEvent(models.Model):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(marketplace_sale__isnull=False, marketplace_order__isnull=True) |
-                    models.Q(marketplace_sale__isnull=True, marketplace_order__isnull=False)
+                    models.Q(marketplace_sale__isnull=False, marketplace_order__isnull=True)
+                    | models.Q(marketplace_sale__isnull=True, marketplace_order__isnull=False)
                 ),
                 name="tracking_event_single_order_reference",
                 violation_error_message="Tracking event must reference either a marketplace sale or marketplace order, but not both.",
@@ -1399,10 +1380,10 @@ class OrderTrackingEvent(models.Model):
     def clean(self):
         """Validate that exactly one order reference is provided."""
         super().clean()
-        
+
         if not self.marketplace_sale and not self.marketplace_order:
             raise ValidationError("Tracking event must reference either a marketplace sale or marketplace order.")
-        
+
         if self.marketplace_sale and self.marketplace_order:
             raise ValidationError("Tracking event cannot reference both marketplace sale and marketplace order.")
 

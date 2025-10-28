@@ -149,7 +149,9 @@ urlpatterns = [
     path("api/v1/user-profile/", ProfileView.as_view(), name="user-profile"),
     path("api/v1/user/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("api/v1/user/upload-profile-picture/", UploadProfilePictureView.as_view(), name="upload-profile-picture"),
-    path("api/v1/user/notification-preferences/", UpdateNotificationPreferencesView.as_view(), name="notification-preferences"),
+    path(
+        "api/v1/user/notification-preferences/", UpdateNotificationPreferencesView.as_view(), name="notification-preferences"
+    ),
     path("api/v1/user/delete-account/", DeleteAccountView.as_view(), name="delete-account"),
     path("api/log-interaction/", log_interaction, name="log_interaction"),
     path("api/v1/procurement/", procurement_view, name="procurement"),
