@@ -181,28 +181,28 @@ class UserProfile(models.Model):
     )
     payment_qr_payload = models.TextField(blank=True)
     payment_qr_image = models.ImageField(upload_to="user_qr_codes/", blank=True, null=True)
-    
+
     # Additional profile fields
     bio = models.TextField(null=True, blank=True, verbose_name=_("Bio"))
     date_of_birth = models.DateField(null=True, blank=True, verbose_name=_("Date of Birth"))
     gender = models.CharField(
         max_length=20,
         choices=[
-            ('male', _('Male')),
-            ('female', _('Female')),
-            ('other', _('Other')),
-            ('prefer_not_to_say', _('Prefer not to say')),
+            ("male", _("Male")),
+            ("female", _("Female")),
+            ("other", _("Other")),
+            ("prefer_not_to_say", _("Prefer not to say")),
         ],
         null=True,
         blank=True,
-        verbose_name=_("Gender")
+        verbose_name=_("Gender"),
     )
     address = models.TextField(null=True, blank=True, verbose_name=_("Address"))
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name=_("City"))
     state = models.CharField(max_length=100, null=True, blank=True, verbose_name=_("State"))
     zip_code = models.CharField(max_length=20, null=True, blank=True, verbose_name=_("ZIP Code"))
     country = models.CharField(max_length=100, default="Nepal", verbose_name=_("Country"))
-    
+
     # Notification preferences
     email_notifications = models.BooleanField(default=True, verbose_name=_("Email Notifications"))
     sms_notifications = models.BooleanField(default=True, verbose_name=_("SMS Notifications"))

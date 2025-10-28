@@ -6,7 +6,7 @@ from django.db import migrations
 def update_product_categories(apps, schema_editor):
     """Update existing product categories to new values"""
     Product = apps.get_model("producer", "Product")
-    
+
     # Mapping from old categories to new categories
     category_mapping = {
         "FR": "GE",  # Fruits -> Groceries & Essentials
@@ -21,7 +21,7 @@ def update_product_categories(apps, schema_editor):
         "HR": "HB",  # Herbs & Medicinal Plants -> Health & Beauty
         "OT": "OT",  # Other -> Other (no change)
     }
-    
+
     for old_category, new_category in category_mapping.items():
         Product.objects.filter(category=old_category).update(category=new_category)
 
@@ -29,7 +29,7 @@ def update_product_categories(apps, schema_editor):
 def reverse_product_categories(apps, schema_editor):
     """Reverse migration - map new categories back to old ones"""
     Product = apps.get_model("producer", "Product")
-    
+
     # Reverse mapping (note: this is lossy since multiple old categories map to same new ones)
     reverse_mapping = {
         "GE": "FR",  # Groceries & Essentials -> Fruits (default choice)
@@ -41,7 +41,7 @@ def reverse_product_categories(apps, schema_editor):
         "EG": "OT",  # Electronics & Gadgets -> Other (new category)
         "TT": "OT",  # Travel & Tourism -> Other (new category)
     }
-    
+
     for new_category, old_category in reverse_mapping.items():
         Product.objects.filter(category=new_category).update(category=old_category)
 
@@ -49,7 +49,7 @@ def reverse_product_categories(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0039_directsale_payment_alter_payment_order_and_more'),
+        ("producer", "0039_directsale_payment_alter_payment_order_and_more"),
     ]
 
     operations = [
