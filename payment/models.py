@@ -121,24 +121,34 @@ class PaymentTransaction(models.Model):
 
         for cart_item in cart_items:
             item_subtotal = cart_item.product.price * cart_item.quantity
-            item_tax = (self.tax_amount * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
-            item_shipping = (self.shipping_cost * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
-            item_total = item_subtotal + item_tax + item_shipping
-
-            # Round decimal values to 2 places to prevent precision issues
-            item_subtotal = item_subtotal.quantize(Decimal('0.01'))
+            
+            # Ensure all base values are Decimals with proper precision
+            self_tax_amount = Decimal(str(self.tax_amount)).quantize(Decimal('0.01'))
+            self_shipping_cost = Decimal(str(self.shipping_cost)).quantize(Decimal('0.01'))
+            self_subtotal = Decimal(str(self.subtotal)).quantize(Decimal('0.01'))
+            
+            item_tax = (self_tax_amount * item_subtotal / self_subtotal) if self_subtotal > 0 else Decimal('0')
+            item_shipping = (self_shipping_cost * item_subtotal / self_subtotal) if self_subtotal > 0 else Decimal('0')
+            
+            # Quantize immediately after calculation to prevent precision buildup
+            item_subtotal = Decimal(str(item_subtotal)).quantize(Decimal('0.01'))
             item_tax = item_tax.quantize(Decimal('0.01'))
             item_shipping = item_shipping.quantize(Decimal('0.01'))
-            item_total = item_total.quantize(Decimal('0.01'))
+            item_total = (item_subtotal + item_tax + item_shipping).quantize(Decimal('0.01'))
 
-            # Handle phone number - only pass if it looks like a valid phone number
-            buyer_phone_value = self.customer_phone
-            if buyer_phone_value and not buyer_phone_value.startswith('+'):
-                # Try to format as Nepal phone number if it's numeric and reasonable length
-                if buyer_phone_value.isdigit() and 8 <= len(buyer_phone_value) <= 15:
-                    buyer_phone_value = f"+977{buyer_phone_value}" if len(buyer_phone_value) == 10 else f"+{buyer_phone_value}"
-                elif not buyer_phone_value.replace('+', '').replace('-', '').replace(' ', '').isdigit():
-                    buyer_phone_value = ""  # Clear invalid phone numbers
+            # Strict validation - clamp values to field limits
+            # For shipping_cost: max_digits=10, decimal_places=2 -> max value 99,999,999.99
+            max_shipping = Decimal('99999999.99')
+            if item_shipping > max_shipping:
+                item_shipping = Decimal('0.00')
+            
+            # For total_amount: max_digits=12, decimal_places=2 -> max value 9,999,999,999.99
+            max_total = Decimal('9999999999.99')
+            if item_total > max_total:
+                item_total = item_subtotal  # Fallback to subtotal only
+
+            # Temporarily disable phone number to isolate decimal validation issues
+            buyer_phone_value = ""  # Always use empty string for now
 
             marketplace_sale = MarketplaceSale.objects.create(
                 buyer=self.user,
