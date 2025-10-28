@@ -71,10 +71,17 @@ class PaymentGatewayListView(View):
 def initiate_payment(request: HttpRequest) -> Response:
     """Initiate payment with Khalti for cart items"""
     data = request.data
-
+    
     cart_id = data.get("cart_id")
     return_url = settings.KHALTI_RETURN_URL
     gateway = data.get("gateway")
+    
+    # Add comprehensive logging for debugging
+    logger.info(f"🎯 Payment initiation request:")
+    logger.info(f"   User: {request.user.username} (ID: {request.user.id})")
+    logger.info(f"   Gateway: {gateway}")
+    logger.info(f"   Cart ID: {cart_id}")
+    logger.info(f"   Request data: {data}")
 
     bank = data.get("bank", None)
     customer_name = data.get("customer_name")
@@ -84,23 +91,42 @@ def initiate_payment(request: HttpRequest) -> Response:
     shipping_cost = Decimal(str(data.get("shipping_cost", 0)))
 
     if not all([cart_id, return_url, gateway]):
+        logger.error(f"❌ Missing required fields: cart_id={cart_id}, return_url={return_url}, gateway={gateway}")
         return Response({"status": "error", "message": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
     if gateway not in [choice[0] for choice in PaymentGateway.choices]:
+        logger.error(f"❌ Invalid payment gateway: {gateway}")
         return Response({"status": "error", "message": "Invalid payment gateway"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         cart = Cart.objects.prefetch_related("items__product__product").get(id=cart_id, user=request.user)
+        logger.info(f"✅ Cart found: ID={cart.id}, Items count={cart.items.count()}")
     except Cart.DoesNotExist:
+        logger.error(f"❌ Cart not found: ID={cart_id}, User={request.user.username}")
+        # List all carts for this user for debugging
+        user_carts = Cart.objects.filter(user=request.user)
+        logger.error(f"   Available carts for user: {[f'Cart {c.id}' for c in user_carts]}")
         return Response({"status": "error", "message": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if not cart.items.exists():
+        logger.error(f"❌ Cart is empty: ID={cart_id}, User={request.user.username}")
+        # Check if cart had items recently
+        logger.error(f"   Cart created: {cart.created_at if hasattr(cart, 'created_at') else 'Unknown'}")
         return Response({"status": "error", "message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Log cart items for debugging
+    cart_items = []
+    for item in cart.items.all():
+        cart_items.append(f"{item.product.product.name} (Qty: {item.quantity})")
+    logger.info(f"📦 Cart items: {cart_items}")
 
     subtotal = sum(Decimal(str(item.product.listed_price)) * Decimal(str(item.quantity)) for item in cart.items.all())
     total_amount = subtotal + tax_amount + shipping_cost
+    
+    logger.info(f"💰 Payment calculation: subtotal={subtotal}, tax={tax_amount}, shipping={shipping_cost}, total={total_amount}")
 
     if total_amount <= 0:
+        logger.error(f"❌ Invalid total amount: {total_amount}")
         return Response({"status": "error", "message": "Invalid total amount"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
@@ -124,6 +150,7 @@ def initiate_payment(request: HttpRequest) -> Response:
                 status=PaymentTransactionStatus.PROCESSING,
             )
             khalti = Khalti()
+            logger.info(f"Calling Khalti.pay() with gateway={gateway}, amount={total_amount}")
             result = khalti.pay(
                 amount=float(total_amount),
                 return_url=return_url,
@@ -131,9 +158,11 @@ def initiate_payment(request: HttpRequest) -> Response:
                 purchase_order_name=payment_transaction.order_number,
                 gateway=gateway,
             )
+            logger.info(f"Khalti.pay() returned: type={type(result)}, result={result}")
 
             if isinstance(result, HttpResponseRedirect):
                 # Legacy handling for HttpResponseRedirect (shouldn't happen with new Khalti code)
+                logger.info(f"Received HttpResponseRedirect: {result.url}")
                 return Response(
                     {
                         "status": "success",
@@ -144,6 +173,7 @@ def initiate_payment(request: HttpRequest) -> Response:
                 )
             elif isinstance(result, dict) and "payment_url" in result:
                 # New handling for dictionary response with pidx
+                logger.info(f"Received dict with payment_url: {result.get('payment_url')}")
                 return Response(
                     {
                         "status": "success",
@@ -151,15 +181,18 @@ def initiate_payment(request: HttpRequest) -> Response:
                         "pidx": result.get("pidx"),  # Include pidx in response
                         "transaction_id": str(payment_transaction.transaction_id),
                         "order_number": payment_transaction.order_number,
+                        "gateway": gateway,  # Include gateway for debugging
                     }
                 )
             else:
+                logger.warning(f"Unexpected result format from Khalti.pay(): {result}")
                 return Response(
                     {
                         "status": "success",
                         "data": result,
                         "transaction_id": str(payment_transaction.transaction_id),
                         "order_number": payment_transaction.order_number,
+                        "gateway": gateway,  # Include gateway for debugging
                     }
                 )
     except Exception as e:
