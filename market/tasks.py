@@ -63,9 +63,15 @@ def send_sms(self, to_number: str, body: str) -> dict:
             try:
                 data = exc.response.json()
             except ValueError:
-                raise Exception(exc)
+                # If we can't parse JSON, retry for network issues
+                if self.request.retries < self.max_retries:
+                    raise self.retry(exc=exc, countdown=60)
+                raise Exception(f"SparrowSMS network error: {exc}")
         else:
-            raise Exception(exc)
+            # Network issues - retry
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=exc, countdown=60)
+            raise Exception(f"SparrowSMS connection error: {exc}")
 
     code = str(data.get("response_code", ""))
     mapping = {
@@ -74,6 +80,7 @@ def send_sms(self, to_number: str, body: str) -> dict:
         "1607": {"code": 401, "status": "error", "message": "Authentication Failure", "sms_code": "1607"},
         "1002": {"code": 401, "status": "error", "message": "Invalid Token", "sms_code": "1002"},
         "1011": {"code": 401, "status": "error", "message": "Unknown Receiver", "sms_code": "1011"},
+        "1001": {"code": 400, "status": "error", "message": "General API Error", "sms_code": "1001"},
     }
 
     result = mapping.get(
@@ -86,8 +93,17 @@ def send_sms(self, to_number: str, body: str) -> dict:
         },
     )
 
-    if result["code"] != 200 and code not in mapping:
-        raise Exception(f"SparrowSMS temporary error: {result}")
+    # For known temporary errors (like 1001), retry
+    if code in ["1001"] and self.request.retries < self.max_retries:
+        raise self.retry(exc=Exception(f"SparrowSMS temporary error: {result}"), countdown=60)
+    
+    # For unknown errors that might be temporary, also retry
+    if result["code"] != 200 and code not in mapping and self.request.retries < self.max_retries:
+        raise self.retry(exc=Exception(f"SparrowSMS unknown error: {result}"), countdown=60)
+    
+    # If we've exhausted retries or it's a permanent error, raise
+    if result["code"] != 200:
+        raise Exception(f"SparrowSMS error: {result}")
 
     return result
 
