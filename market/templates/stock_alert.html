@@ -1,0 +1,79 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "Stock Alert - Low Inventory Warning" %}</title>
+</head>
+<body>
+  <h1>{% trans "Stock Alert - Low Inventory Warning" %}</h1>
+  <p>{% blocktrans %}Hello {{ user_name }},{% endblocktrans %}</p>
+  
+  <p>{% trans "This is an automated alert to inform you that one or more of your products are running low on stock." %}</p>
+
+  {% if product %}
+  <h2>{% trans "Product Details" %}</h2>
+  <ul>
+    <li><strong>{% trans "Product Name" %}:</strong> {{ product.name }}</li>
+    <li><strong>{% trans "Current Stock" %}:</strong> {{ product.stock }}</li>
+    {% if product.reorder_point %}
+    <li><strong>{% trans "Reorder Point" %}:</strong> {{ product.reorder_point }}</li>
+    {% endif %}
+    {% if product.safety_stock %}
+    <li><strong>{% trans "Safety Stock" %}:</strong> {{ product.safety_stock }}</li>
+    {% endif %}
+    {% if product.projected_stockout_date_field %}
+    <li><strong>{% trans "Projected Stock-out Date" %}:</strong> {{ product.projected_stockout_date_field|date:"F j, Y" }}</li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  {% if products %}
+  <h2>{% trans "Products Requiring Attention" %}</h2>
+  <table style="border-collapse: collapse; width: 100%;">
+    <thead>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <th style="padding: 8px; text-align: left;">{% trans "Product Name" %}</th>
+        <th style="padding: 8px; text-align: left;">{% trans "Current Stock" %}</th>
+        <th style="padding: 8px; text-align: left;">{% trans "Reorder Point" %}</th>
+        <th style="padding: 8px; text-align: left;">{% trans "Status" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for product in products %}
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 8px;">{{ product.name }}</td>
+        <td style="padding: 8px;">{{ product.stock }}</td>
+        <td style="padding: 8px;">{{ product.reorder_point|default:"-" }}</td>
+        <td style="padding: 8px;">
+          {% if product.stock <= 0 %}
+            <span style="color: red; font-weight: bold;">{% trans "Out of Stock" %}</span>
+          {% elif product.reorder_point and product.stock <= product.reorder_point %}
+            <span style="color: orange; font-weight: bold;">{% trans "Below Reorder Point" %}</span>
+          {% else %}
+            <span style="color: red;">{% trans "Low Stock" %}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h2>{% trans "Recommended Actions" %}</h2>
+  <ul>
+    <li>{% trans "Review your inventory levels and consider reordering" %}</li>
+    <li>{% trans "Check with your suppliers for availability and lead times" %}</li>
+    <li>{% trans "Update your product listings if items are temporarily unavailable" %}</li>
+    <li>{% trans "Consider adjusting your reorder points if needed" %}</li>
+  </ul>
+
+  <p>{% trans "Please log into your account to manage your inventory and place new orders as needed." %}</p>
+  
+  <hr>
+  <p style="color: #666; font-size: 12px;">
+    {% trans "This is an automated message from Mulya Bazzar inventory management system." %}<br>
+    {% trans "If you have any questions, please contact our support team." %}
+  </p>
+</body>
+</html>
