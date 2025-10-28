@@ -276,6 +276,19 @@ CELERY_BEAT_SCHEDULE = {
         "task": "notification.tasks.process_notification_queue_task",
         "schedule": crontab(minute="*/2"),  # Every 2 minutes
     },
+    # Transport tasks
+    "periodic-delivery-reminders": {
+        "task": "transport.celery_tasks.periodic_delivery_reminders",
+        "schedule": crontab(minute="*/15"),  # Every 15 minutes
+    },
+    "periodic-cleanup-deliveries": {
+        "task": "transport.celery_tasks.periodic_cleanup",
+        "schedule": crontab(minute=0, hour=1),  # Daily at 1 AM
+    },
+    "periodic-delivery-estimate-updates": {
+        "task": "transport.celery_tasks.periodic_estimate_updates",
+        "schedule": crontab(minute=0, hour="*/6"),  # Every 6 hours
+    },
 }
 
 SITE_URL = "https://appmulyabazzar.com"
