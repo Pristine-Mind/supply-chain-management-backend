@@ -1,9 +1,11 @@
 import requests
+import logging
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status, views, viewsets
@@ -13,6 +15,8 @@ from rest_framework.permissions import (
     IsAuthenticated,
 )
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from main.enums import GlobalEnumSerializer, get_enum_values
 from market.models import (
@@ -40,6 +44,7 @@ from .models import (
     MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
+    OrderStatus,
     Payment,
     ProductView,
 )
@@ -1045,6 +1050,178 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(serializer.data)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"])
+    @extend_schema(
+        summary="Search order by order number",
+        description="Find an order by its order number for tracking purposes.",
+        parameters=[
+            {
+                "name": "order_number",
+                "description": "The order number to search for",
+                "required": True,
+                "type": "string",
+                "in": "query",
+            }
+        ],
+        responses={
+            200: MarketplaceOrderSerializer,
+            404: {"description": "Order not found"},
+        },
+    )
+    def search_by_order_number(self, request):
+        """Search for an order by order number."""
+        order_number = request.query_params.get("order_number")
+        
+        if not order_number:
+            return Response(
+                {"error": "order_number parameter is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            order = (
+                MarketplaceOrder.objects
+                .filter(customer=request.user, order_number=order_number, is_deleted=False)
+                .select_related("delivery", "customer")
+                .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
+                .get()
+            )
+            
+            serializer = self.get_serializer(order)
+            return Response(serializer.data)
+            
+        except MarketplaceOrder.DoesNotExist:
+            return Response(
+                {"error": "Order not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(
+        summary="Update order status",
+        description="Update order status (for sellers/admin only).",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "order_status": {
+                        "type": "string", 
+                        "description": "New order status",
+                        "enum": ["confirmed", "processing", "shipped", "in_transit", "delivered", "completed"]
+                    },
+                    "message": {"type": "string", "description": "Status update message"}
+                },
+                "required": ["order_status"]
+            }
+        },
+    )
+    def update_status(self, request, pk=None):
+        """Update order status (for sellers/admin)."""
+        order = self.get_object()
+        new_status = request.data.get("order_status")
+        message = request.data.get("message", "")
+        
+        # Check permissions - only sellers of items in the order or admin can update
+        user = request.user
+        is_seller = order.items.filter(product__product__user=user).exists()
+        is_admin = user.is_staff or user.is_superuser
+        
+        if not (is_seller or is_admin):
+            return Response(
+                {"error": "Permission denied. Only sellers or admin can update order status."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Validate status transition
+        if new_status not in [choice[0] for choice in OrderStatus.choices]:
+            return Response(
+                {"error": "Invalid order status"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Update order status
+            old_status = order.order_status
+            order.order_status = new_status
+            
+            # Special handling for delivered status
+            if new_status == OrderStatus.DELIVERED:
+                order.delivered_at = timezone.now()
+            
+            order.save()
+            
+            # Create tracking event
+            OrderTrackingEvent.objects.create(
+                marketplace_order=order,
+                status=new_status,
+                message=message or f"Order status updated to {order.get_order_status_display()}",
+                metadata={
+                    "updated_by": user.username,
+                    "previous_status": old_status,
+                    "is_seller_update": is_seller,
+                    "is_admin_update": is_admin,
+                }
+            )
+            
+            # Send notifications to customer and sellers
+            from .utils import notify_event
+            from .models import Notification
+            
+            try:
+                # Notify customer
+                status_display = order.get_order_status_display()
+                customer_msg = f"📦 Your order #{order.order_number} status updated to: {status_display}"
+                
+                notify_event(
+                    user=order.customer,
+                    notif_type=Notification.Type.ORDER,
+                    message=customer_msg,
+                    via_in_app=True,
+                    via_email=True,
+                    email_addr=order.customer.email,
+                    email_tpl="order_status_update.html",
+                    email_ctx={"order": order, "old_status": old_status, "new_status": new_status},
+                    via_sms=False,
+                )
+                
+                # Notify sellers (except the one who updated)
+                sellers = set()
+                for item in order.items.all():
+                    if hasattr(item.product, 'product') and hasattr(item.product.product, 'user'):
+                        seller_user = item.product.product.user
+                        if seller_user != user:  # Don't notify the seller who made the update
+                            sellers.add(seller_user)
+                
+                for seller in sellers:
+                    seller_msg = f"📦 Order #{order.order_number} status updated to: {status_display}"
+                    notify_event(
+                        user=seller,
+                        notif_type=Notification.Type.ORDER,
+                        message=seller_msg,
+                        via_in_app=True,
+                        via_email=True,
+                        email_addr=seller.email,
+                        email_tpl="seller_order_status_update.html",
+                        email_ctx={"order": order, "old_status": old_status, "new_status": new_status},
+                        via_sms=False,
+                    )
+                        
+            except Exception as e:
+                logger.error(f"Error sending status update notifications: {str(e)}")
+            
+            serializer = self.get_serializer(order)
+            return Response({
+                "success": True,
+                "message": f"Order status updated to {order.get_order_status_display()}",
+                "order": serializer.data
+            })
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update order status: {str(e)}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=True, methods=["post"])
     @extend_schema(
