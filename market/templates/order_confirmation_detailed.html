@@ -1,0 +1,126 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "Order Confirmation" %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f8f9fa; padding: 20px; border: 1px solid #ddd; }
+    .order-info { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #28a745; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    .items-table th, .items-table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+    .items-table th { background-color: #f1f3f4; }
+    .total-row { font-weight: bold; background-color: #f8f9fa; }
+    .delivery-info { background: #e7f3ff; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+    .footer { text-align: center; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎉 {% trans "Order Confirmation" %}</h1>
+    <p>{% trans "Thank you for your order!" %}</p>
+  </div>
+
+  <div class="content">
+    <p><strong>{% trans "Hi" %} {{ customer_name }},</strong></p>
+    <p>{% blocktrans with order_number=order.order_number created_at=order.created_at %}We have successfully received and confirmed your order <strong>#{{ order_number }}</strong> placed on {{ created_at }}.{% endblocktrans %}</p>
+
+    <div class="order-info">
+      <h2>📋 {% trans "Order Summary" %}</h2>
+      <p><strong>{% trans "Order Number" %}:</strong> {{ order.order_number }}</p>
+      <p><strong>{% trans "Order Status" %}:</strong> {{ order.order_status }}</p>
+      <p><strong>{% trans "Payment Status" %}:</strong> {{ order.payment_status }}</p>
+      <p><strong>{% trans "Estimated Delivery" %}:</strong> {{ order.estimated_delivery }}</p>
+    </div>
+
+    <h3>🛒 {% trans "Items Ordered" %}</h3>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>{% trans "Product" %}</th>
+          <th>{% trans "Seller" %}</th>
+          <th>{% trans "Quantity" %}</th>
+          <th>{% trans "Unit Price" %}</th>
+          <th>{% trans "Total" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.product_name }}</td>
+          <td>{{ item.seller }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>Rs. {{ item.unit_price }}</td>
+          <td>Rs. {{ item.total_price }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="order-info">
+      <h3>💳 {% trans "Payment Summary" %}</h3>
+      <table class="items-table">
+        <tr>
+          <td>{% trans "Subtotal" %}</td>
+          <td>Rs. {{ payment.subtotal }}</td>
+        </tr>
+        {% if payment.tax_amount > 0 %}
+        <tr>
+          <td>{% trans "Tax" %}</td>
+          <td>Rs. {{ payment.tax_amount }}</td>
+        </tr>
+        {% endif %}
+        {% if payment.shipping_cost > 0 %}
+        <tr>
+          <td>{% trans "Shipping" %}</td>
+          <td>Rs. {{ payment.shipping_cost }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+          <td><strong>{% trans "Total Amount Paid" %}</strong></td>
+          <td><strong>Rs. {{ payment.total_amount }}</strong></td>
+        </tr>
+        <tr>
+          <td>{% trans "Payment Method" %}</td>
+          <td>{{ payment.gateway }}</td>
+        </tr>
+        <tr>
+          <td>{% trans "Transaction ID" %}</td>
+          <td>{{ payment.transaction_id }}</td>
+        </tr>
+      </table>
+    </div>
+
+    {% if delivery_info %}
+    <div class="delivery-info">
+      <h3>🚚 {% trans "Delivery Information" %}</h3>
+      <p><strong>{% trans "Recipient" %}:</strong> {{ delivery_info.recipient_name }}</p>
+      <p><strong>{% trans "Phone" %}:</strong> {{ delivery_info.phone_number }}</p>
+      <p><strong>{% trans "Address" %}:</strong><br>
+        {{ delivery_info.address }}<br>
+        {{ delivery_info.city }}, {{ delivery_info.state }} {{ delivery_info.postal_code }}
+      </p>
+    </div>
+    {% endif %}
+
+    <div class="order-info">
+      <h3>📱 {% trans "What's Next?" %}</h3>
+      <ul>
+        <li>{% trans "We'll send you updates as your order progresses" %}</li>
+        <li>{% trans "You can track your order status anytime using your order number" %}</li>
+        <li>{% trans "Our sellers will prepare your items for shipment" %}</li>
+        <li>{% trans "You'll receive shipping notifications once items are dispatched" %}</li>
+      </ul>
+    </div>
+
+    <p><strong>{% trans "Need help?" %}</strong> {% trans "Contact our customer support team if you have any questions about your order." %}</p>
+  </div>
+
+  <div class="footer">
+    <p>{% trans "Thank you for choosing us!" %}</p>
+    <p><small>{% trans "This is an automated email. Please do not reply to this email." %}</small></p>
+  </div>
+</body>
+</html>

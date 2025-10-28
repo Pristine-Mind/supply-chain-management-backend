@@ -1,0 +1,104 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% trans "New Order Received" %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #007bff; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f8f9fa; padding: 20px; border: 1px solid #ddd; }
+    .order-info { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    .items-table th, .items-table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+    .items-table th { background-color: #f1f3f4; }
+    .total-row { font-weight: bold; background-color: #f8f9fa; }
+    .action-section { background: #fff3cd; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #ffc107; }
+    .footer { text-align: center; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛒 {% trans "New Order Received!" %}</h1>
+    <p>{% trans "You have a new order to fulfill" %}</p>
+  </div>
+
+  <div class="content">
+    <p><strong>{% trans "Hi" %} {{ seller_name }},</strong></p>
+    <p>{% blocktrans with order_number=order.order_number customer_name=customer_name created_at=order.created_at %}Great news! You have received a new order <strong>#{{ order_number }}</strong> from {{ customer_name }} placed on {{ created_at }}.{% endblocktrans %}</p>
+
+    <div class="order-info">
+      <h2>📋 {% trans "Order Details" %}</h2>
+      <p><strong>{% trans "Order Number" %}:</strong> {{ order.order_number }}</p>
+      <p><strong>{% trans "Customer" %}:</strong> {{ customer_name }}</p>
+      <p><strong>{% trans "Order Status" %}:</strong> {{ order.order_status }}</p>
+      <p><strong>{% trans "Payment Status" %}:</strong> {{ order.payment_status }}</p>
+      <p><strong>{% trans "Total Items" %}:</strong> {{ item_count }}</p>
+      <p><strong>{% trans "Your Total Amount" %}:</strong> Rs. {{ seller_total }}</p>
+    </div>
+
+    <h3>📦 {% trans "Items to Prepare" %}</h3>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>{% trans "Product" %}</th>
+          <th>{% trans "Quantity" %}</th>
+          <th>{% trans "Unit Price" %}</th>
+          <th>{% trans "Total" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.product_name }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>Rs. {{ item.unit_price }}</td>
+          <td>Rs. {{ item.total_price }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="3"><strong>{% trans "Your Total" %}</strong></td>
+          <td><strong>Rs. {{ seller_total }}</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="order-info">
+      <h3>💳 {% trans "Payment Information" %}</h3>
+      <p><strong>{% trans "Transaction ID" %}:</strong> {{ payment.transaction_id }}</p>
+      <p><strong>{% trans "Payment Method" %}:</strong> {{ payment.gateway }}</p>
+      <p><strong>{% trans "Payment Status" %}:</strong> {{ order.payment_status }}</p>
+    </div>
+
+    <div class="action-section">
+      <h3>⚡ {% trans "Next Steps" %}</h3>
+      <ol>
+        <li>{% trans "Verify stock availability for all items" %}</li>
+        <li>{% trans "Prepare the items for shipment" %}</li>
+        <li>{% trans "Update the order status when ready to ship" %}</li>
+        <li>{% trans "Provide tracking information to the customer" %}</li>
+      </ol>
+      <p><strong>{% trans "Important:" %}</strong> {% trans "Please process this order within 1-2 business days to ensure customer satisfaction." %}</p>
+    </div>
+
+    <div class="order-info">
+      <h3>📱 {% trans "How to Manage This Order" %}</h3>
+      <ul>
+        <li>{% trans "Log in to your seller dashboard to update order status" %}</li>
+        <li>{% trans "Mark items as 'processing' when you start preparing them" %}</li>
+        <li>{% trans "Update to 'shipped' when items are ready for delivery" %}</li>
+        <li>{% trans "Communicate with customer if there are any delays" %}</li>
+      </ul>
+    </div>
+
+    <p><strong>{% trans "Need help?" %}</strong> {% trans "Contact our seller support team if you have any questions about fulfilling this order." %}</p>
+  </div>
+
+  <div class="footer">
+    <p>{% trans "Thank you for being a valued seller!" %}</p>
+    <p><small>{% trans "This is an automated email. Please do not reply to this email." %}</small></p>
+  </div>
+</body>
+</html>

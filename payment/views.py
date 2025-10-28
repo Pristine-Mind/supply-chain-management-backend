@@ -44,7 +44,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from market.models import Cart
+from market.models import Cart, MarketplaceOrder, DeliveryInfo, OrderStatus, PaymentStatus, OrderTrackingEvent
+from market.utils import notify_event
 
 from .khalti import Khalti
 from .models import PaymentGateway, PaymentTransaction, PaymentTransactionStatus
@@ -351,10 +352,216 @@ class PaymentWebhookView(View):
             return JsonResponse({"status": "error", "message": "Webhook processing failed"}, status=500)
 
 
+def create_marketplace_order_from_payment(payment_transaction):
+    """
+    Create MarketplaceOrder from completed payment transaction.
+    This handles the new order system integration.
+    """
+    if not payment_transaction.cart:
+        return None
+        
+    try:
+        # Create delivery info from payment transaction
+        delivery_info = DeliveryInfo.objects.create(
+            customer_name=payment_transaction.customer_name or payment_transaction.user.get_full_name(),
+            phone_number=payment_transaction.customer_phone or "",
+            address="", # Will be updated when delivery address is provided
+            city="Kathmandu", # Default, will be updated
+            state="Bagmati", # Default, will be updated  
+            zip_code="44600", # Default, will be updated
+            latitude=27.7172, # Default Kathmandu coordinates
+            longitude=85.3240, # Default Kathmandu coordinates
+        )
+        
+        # Create marketplace order
+        order = MarketplaceOrder.objects.create_order_from_cart(
+            cart=payment_transaction.cart,
+            delivery_info=delivery_info,
+            payment_method=payment_transaction.gateway
+        )
+        
+        # Update order with payment information
+        order.payment_status = PaymentStatus.PAID
+        order.order_status = OrderStatus.CONFIRMED
+        order.transaction_id = str(payment_transaction.transaction_id)
+        order.save()
+        
+        # Create tracking event for payment confirmation
+        OrderTrackingEvent.objects.create(
+            marketplace_order=order,
+            status=OrderStatus.CONFIRMED,
+            message="Payment confirmed successfully",
+            metadata={
+                "payment_gateway": payment_transaction.gateway,
+                "transaction_id": str(payment_transaction.transaction_id),
+                "gateway_transaction_id": payment_transaction.gateway_transaction_id,
+            }
+        )
+        
+        return order
+        
+    except Exception as e:
+        logger.error(f"Error creating marketplace order from payment: {e}")
+        return None
+
+
+def send_order_confirmation_email(marketplace_order, payment_transaction):
+    """Send comprehensive order confirmation email to the buyer."""
+    try:
+        customer = marketplace_order.customer
+        order_items = []
+        
+        # Collect order items information
+        for item in marketplace_order.items.all():
+            try:
+                order_items.append({
+                    "product_name": item.product.product.name,
+                    "quantity": item.quantity,
+                    "unit_price": float(item.unit_price),
+                    "total_price": float(item.total_price),
+                    "seller": item.product.product.user.get_full_name() or item.product.product.user.username,
+                })
+            except Exception as e:
+                logger.warning(f"Error collecting item info for email: {e}")
+                continue
+        
+        # Prepare email context with comprehensive order information
+        email_context = {
+            "customer_name": customer.get_full_name() or customer.username,
+            "order": {
+                "order_number": marketplace_order.order_number,
+                "total_amount": float(marketplace_order.total_amount),
+                "payment_status": marketplace_order.get_payment_status_display(),
+                "order_status": marketplace_order.get_order_status_display(),
+                "created_at": marketplace_order.created_at.strftime("%B %d, %Y at %I:%M %p"),
+                "estimated_delivery": marketplace_order.estimated_delivery_date.strftime("%B %d, %Y") if marketplace_order.estimated_delivery_date else "To be determined",
+            },
+            "payment": {
+                "transaction_id": payment_transaction.transaction_id,
+                "gateway": payment_transaction.get_gateway_display(),
+                "subtotal": float(payment_transaction.subtotal),
+                "tax_amount": float(payment_transaction.tax_amount),
+                "shipping_cost": float(payment_transaction.shipping_cost),
+                "total_amount": float(payment_transaction.total_amount),
+            },
+            "items": order_items,
+            "delivery_info": None,
+        }
+        
+        # Add delivery information if available
+        try:
+            if hasattr(marketplace_order, 'delivery_info') and marketplace_order.delivery_info:
+                email_context["delivery_info"] = {
+                    "recipient_name": marketplace_order.delivery_info.recipient_name,
+                    "phone_number": marketplace_order.delivery_info.phone_number,
+                    "address": marketplace_order.delivery_info.address,
+                    "city": marketplace_order.delivery_info.city,
+                    "state": marketplace_order.delivery_info.state,
+                    "postal_code": marketplace_order.delivery_info.postal_code,
+                }
+        except Exception as e:
+            logger.warning(f"Error collecting delivery info for email: {e}")
+        
+        # Prepare notification message
+        message = f"🎉 Order Confirmed! Your order #{marketplace_order.order_number} has been successfully placed and payment of Rs. {marketplace_order.total_amount} has been processed. We'll keep you updated on your order status."
+        
+        # Send comprehensive notification
+        notify_event(
+            user=customer,
+            notif_type="ORDER",  # Using string since we need to check the Notification model
+            message=message,
+            via_in_app=True,
+            via_email=True,
+            email_addr=customer.email,
+            email_tpl="order_confirmation_detailed.html",  # Enhanced template for order confirmation
+            email_ctx=email_context,
+            via_sms=False,  # Can be enabled if SMS service is configured
+        )
+        
+        logger.info(f"Order confirmation email sent successfully for order {marketplace_order.order_number}")
+        
+    except Exception as e:
+        logger.error(f"Error sending order confirmation email: {e}")
+
+
+def send_seller_order_notifications(marketplace_order, payment_transaction):
+    """Send notifications to sellers about new orders."""
+    try:
+        # Collect unique sellers from order items
+        sellers = set()
+        seller_items = {}  # seller -> list of items
+        
+        for item in marketplace_order.items.all():
+            try:
+                if hasattr(item.product, 'product') and hasattr(item.product.product, 'user'):
+                    seller = item.product.product.user
+                    sellers.add(seller)
+                    
+                    # Group items by seller
+                    if seller not in seller_items:
+                        seller_items[seller] = []
+                    
+                    seller_items[seller].append({
+                        "product_name": item.product.product.name,
+                        "quantity": item.quantity,
+                        "unit_price": float(item.unit_price),
+                        "total_price": float(item.total_price),
+                    })
+            except Exception as e:
+                logger.warning(f"Error collecting seller info: {e}")
+                continue
+        
+        # Send notification to each seller
+        for seller in sellers:
+            items = seller_items.get(seller, [])
+            total_seller_amount = sum(item['total_price'] for item in items)
+            item_count = sum(item['quantity'] for item in items)
+            
+            # Prepare email context for seller
+            seller_email_context = {
+                "seller_name": seller.get_full_name() or seller.username,
+                "customer_name": marketplace_order.customer.get_full_name() or marketplace_order.customer.username,
+                "order": {
+                    "order_number": marketplace_order.order_number,
+                    "created_at": marketplace_order.created_at.strftime("%B %d, %Y at %I:%M %p"),
+                    "payment_status": marketplace_order.get_payment_status_display(),
+                    "order_status": marketplace_order.get_order_status_display(),
+                },
+                "items": items,
+                "seller_total": total_seller_amount,
+                "item_count": item_count,
+                "payment": {
+                    "transaction_id": payment_transaction.transaction_id,
+                    "gateway": payment_transaction.get_gateway_display(),
+                }
+            }
+            
+            # Prepare notification message
+            message = f"🛒 New Order! You have received an order #{marketplace_order.order_number} for {item_count} item(s) worth Rs. {total_seller_amount}. Please prepare the items for shipment."
+            
+            # Send notification to seller
+            notify_event(
+                user=seller,
+                notif_type="ORDER",
+                message=message,
+                via_in_app=True,
+                via_email=True,
+                email_addr=seller.email,
+                email_tpl="seller_new_order.html",
+                email_ctx=seller_email_context,
+                via_sms=False,
+            )
+            
+            logger.info(f"Seller notification sent successfully to {seller.username} for order {marketplace_order.order_number}")
+            
+    except Exception as e:
+        logger.error(f"Error sending seller order notifications: {e}")
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def verify_payment(request: HttpRequest) -> Response:
-    """Verify payment status with Khalti using pidx"""
+    """Verify payment status with Khalti using pidx and handle payment completion"""
     data = request.data
 
     pidx = data.get("pidx")
@@ -369,25 +576,141 @@ def verify_payment(request: HttpRequest) -> Response:
         inquiry_result = khalti.inquiry(pidx)
 
         if khalti.is_success(inquiry_result):
-            # Payment is successful
-            # Optionally update our PaymentTransaction record
-            if reference:
+            # Payment is successful - handle like payment_callback
+            purchase_order_id = inquiry_result.get("purchase_order_id")
+            
+            # Try to find payment transaction by purchase_order_id first, then by reference
+            payment_transaction = None
+            if purchase_order_id:
                 try:
-                    payment_transaction = PaymentTransaction.objects.get(transaction_id=reference, user=request.user)
-                    payment_transaction.status = PaymentTransactionStatus.COMPLETED
-                    payment_transaction.save()
+                    payment_transaction = PaymentTransaction.objects.get(
+                        transaction_id=purchase_order_id,
+                        status__in=[PaymentTransactionStatus.PENDING, PaymentTransactionStatus.PROCESSING],
+                    )
                 except PaymentTransaction.DoesNotExist:
-                    logger.warning(f"PaymentTransaction not found for reference: {reference}")
+                    pass
+            
+            # If not found by purchase_order_id, try by reference
+            if not payment_transaction and reference:
+                try:
+                    payment_transaction = PaymentTransaction.objects.get(
+                        transaction_id=reference, 
+                        user=request.user,
+                        status__in=[PaymentTransactionStatus.PENDING, PaymentTransactionStatus.PROCESSING],
+                    )
+                except PaymentTransaction.DoesNotExist:
+                    pass
+            
+            if not payment_transaction:
+                return Response(
+                    {"status": "error", "message": "Payment transaction not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Payment verified successfully",
-                    "payment_status": "completed",
-                    "data": inquiry_result,
-                }
-            )
+            # Complete the payment transaction
+            with transaction.atomic():
+                success = payment_transaction.mark_as_completed(pidx)
+
+                if success:
+                    # Create MarketplaceOrder from payment (new system)
+                    marketplace_order = create_marketplace_order_from_payment(payment_transaction)
+                    
+                    # Send order confirmation email to buyer
+                    if marketplace_order:
+                        send_order_confirmation_email(marketplace_order, payment_transaction)
+                        send_seller_order_notifications(marketplace_order, payment_transaction)
+                    
+                    # Collect marketplace sales data like in callback (legacy system)
+                    marketplace_sales = []
+                    try:
+                        # Try to get legacy sales data if available
+                        for item in payment_transaction.transaction_items.select_related("marketplace_sale"):
+                            if item.marketplace_sale:
+                                marketplace_sales.append(
+                                    {
+                                        "order_number": item.marketplace_sale.order_number,
+                                        "product_name": item.product.product.name,
+                                        "quantity": item.quantity,
+                                        "total_amount": float(item.total_amount),
+                                        "seller": item.marketplace_sale.seller.username,
+                                    }
+                                )
+                    except Exception as e:
+                        logger.warning(f"Error collecting marketplace sales data: {e}")
+                        marketplace_sales = []
+
+                    # Prepare response data
+                    response_data = {
+                        "transaction_id": pidx,
+                        "payment_transaction_id": str(payment_transaction.transaction_id),
+                        "order_number": payment_transaction.order_number,
+                        "amount": float(khalti.requested_amount(inquiry_result)),
+                        "gateway": payment_transaction.gateway,
+                        "inquiry": inquiry_result,
+                        "created_at": payment_transaction.created_at.isoformat(),
+                        "completed_at": (
+                            payment_transaction.completed_at.isoformat() 
+                            if payment_transaction.completed_at else None
+                        ),
+                    }
+                    
+                    # Add marketplace order info if created
+                    if marketplace_order:
+                        response_data.update({
+                            "marketplace_order": {
+                                "id": marketplace_order.id,
+                                "order_number": marketplace_order.order_number,
+                                "order_status": marketplace_order.order_status,
+                                "payment_status": marketplace_order.payment_status,
+                                "total_amount": str(marketplace_order.total_amount),
+                            }
+                        })
+                    
+                    # Add legacy sales data if available
+                    if marketplace_sales:
+                        response_data.update({
+                            "marketplace_sales": marketplace_sales,
+                            "total_items": len(marketplace_sales),
+                        })
+
+                    return Response(
+                        {
+                            "status": "success",
+                            "message": "Payment verified and completed successfully",
+                            "payment_status": "completed",
+                            "data": response_data,
+                        }
+                    )
+                else:
+                    return Response(
+                        {"status": "error", "message": "Failed to complete payment transaction"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
         else:
+            # Payment failed - update status like in callback
+            purchase_order_id = inquiry_result.get("purchase_order_id")
+            payment_transaction = None
+            
+            if purchase_order_id:
+                try:
+                    payment_transaction = PaymentTransaction.objects.get(transaction_id=purchase_order_id)
+                except PaymentTransaction.DoesNotExist:
+                    pass
+            elif reference:
+                try:
+                    payment_transaction = PaymentTransaction.objects.get(
+                        transaction_id=reference, 
+                        user=request.user
+                    )
+                except PaymentTransaction.DoesNotExist:
+                    pass
+            
+            if payment_transaction:
+                payment_transaction.status = PaymentTransactionStatus.FAILED
+                payment_transaction.gateway_transaction_id = pidx
+                payment_transaction.metadata = inquiry_result
+                payment_transaction.save()
+
             return Response(
                 {
                     "status": "error",
