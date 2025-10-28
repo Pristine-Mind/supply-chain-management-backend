@@ -515,9 +515,14 @@ class MarketplaceProduct(models.Model):
         return 0
 
     @property
+    def price(self):
+        """Return the effective price (discounted price if available, otherwise listed price)"""
+        return self.discounted_price if self.discounted_price else self.listed_price
+
+    @property
     def savings_amount(self):
         if self.discounted_price and self.listed_price:
-            return round(self.original_price - self.discounted_price, 2)
+            return round(self.listed_price - self.discounted_price, 2)
         return 0
 
     @property
