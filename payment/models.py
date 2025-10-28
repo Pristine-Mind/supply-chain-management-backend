@@ -45,8 +45,8 @@ class PaymentTransaction(models.Model):
     bank = models.CharField(max_length=100, blank=True, null=True)
 
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
-    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
 
     status = models.CharField(
@@ -121,15 +121,30 @@ class PaymentTransaction(models.Model):
 
         for cart_item in cart_items:
             item_subtotal = cart_item.product.price * cart_item.quantity
-            item_tax = (self.tax_amount * item_subtotal / self.subtotal) if self.subtotal > 0 else 0
-            item_shipping = (self.shipping_cost * item_subtotal / self.subtotal) if self.subtotal > 0 else 0
+            item_tax = (self.tax_amount * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
+            item_shipping = (self.shipping_cost * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
             item_total = item_subtotal + item_tax + item_shipping
+
+            # Round decimal values to 2 places to prevent precision issues
+            item_subtotal = item_subtotal.quantize(Decimal('0.01'))
+            item_tax = item_tax.quantize(Decimal('0.01'))
+            item_shipping = item_shipping.quantize(Decimal('0.01'))
+            item_total = item_total.quantize(Decimal('0.01'))
+
+            # Handle phone number - only pass if it looks like a valid phone number
+            buyer_phone_value = self.customer_phone
+            if buyer_phone_value and not buyer_phone_value.startswith('+'):
+                # Try to format as Nepal phone number if it's numeric and reasonable length
+                if buyer_phone_value.isdigit() and 8 <= len(buyer_phone_value) <= 15:
+                    buyer_phone_value = f"+977{buyer_phone_value}" if len(buyer_phone_value) == 10 else f"+{buyer_phone_value}"
+                elif not buyer_phone_value.replace('+', '').replace('-', '').replace(' ', '').isdigit():
+                    buyer_phone_value = ""  # Clear invalid phone numbers
 
             marketplace_sale = MarketplaceSale.objects.create(
                 buyer=self.user,
                 buyer_name=self.customer_name or (self.user.get_full_name() if self.user else ""),
                 buyer_email=self.customer_email or (self.user.email if self.user else ""),
-                buyer_phone=self.customer_phone,
+                buyer_phone=buyer_phone_value,
                 seller=cart_item.product.product.user,
                 product=cart_item.product,
                 quantity=cart_item.quantity,
@@ -190,8 +205,8 @@ class PaymentTransactionItem(models.Model):
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
-    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
