@@ -167,38 +167,51 @@ def notify_event(
 ):
     # In-app
     if via_in_app:
-        Notification.objects.create(
-            user=user,
-            notification_type=notif_type,
-            channel=Notification.Channel.IN_APP,
-            message=message,
-        )
+        try:
+            Notification.objects.create(
+                user=user,
+                notification_type=notif_type,
+                channel=Notification.Channel.IN_APP,
+                message=message,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create in-app notification: {e}")
 
-    # Email
+    # Email - with error isolation
     if via_email and email_addr and email_tpl and email_ctx is not None:
-        Notification.objects.create(
-            user=user,
-            notification_type=notif_type,
-            channel=Notification.Channel.EMAIL,
-            message=message,
-        )
-        from .tasks import send_email
+        try:
+            Notification.objects.create(
+                user=user,
+                notification_type=notif_type,
+                channel=Notification.Channel.EMAIL,
+                message=message,
+            )
+            from .tasks import send_email
 
-        send_email.delay(
-            to_email=email_addr,
-            subject=message[:50],
-            template_name=email_tpl,
-            context=email_ctx,
-        )
+            send_email.delay(
+                to_email=email_addr,
+                subject=message[:50],
+                template_name=email_tpl,
+                context=email_ctx,
+            )
+            logger.info(f"Email task queued for {email_addr}")
+        except Exception as e:
+            logger.error(f"Failed to queue email task for {email_addr}: {e}")
+            # Continue processing - don't let email failure stop SMS
 
-    # SMS
+    # SMS - with error isolation
     if via_sms and sms_number and sms_body:
-        Notification.objects.create(
-            user=user,
-            notification_type=notif_type,
-            channel=Notification.Channel.SMS,
-            message=message,
-        )
-        from .tasks import send_sms
+        try:
+            Notification.objects.create(
+                user=user,
+                notification_type=notif_type,
+                channel=Notification.Channel.SMS,
+                message=message,
+            )
+            from .tasks import send_sms
 
-        send_sms.delay(to_number=sms_number, body=sms_body)
+            send_sms.delay(to_number=sms_number, body=sms_body)
+            logger.info(f"SMS task queued for {sms_number}")
+        except Exception as e:
+            logger.error(f"Failed to queue SMS task for {sms_number}: {e}")
+            # Continue processing - don't let SMS failure stop other tasks

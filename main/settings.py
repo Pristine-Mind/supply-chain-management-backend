@@ -318,15 +318,21 @@ SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
 SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
 SPARROWSMS_ENDPOINT = os.environ.get("SPARROWSMS_ENDPOINT")
 
-EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
-ANYMAIL = {
-    "SENDGRID_API_KEY": os.environ.get("SENDGRID_API_KEY"),
-    "SENDGRID_GENERATE_MESSAGE_ID": True,
-    "SENDGRID_MERGE_DATA": {},
-    "SENDGRID_MERGE_GLOBAL_DATA": {},
-}
-
-DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
+# Email configuration with fallback for development
+if DEBUG or not os.environ.get("SENDGRID_API_KEY"):
+    # Use console backend for development or when SendGrid is not configured
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = "mulyabazzar@localhost"
+else:
+    # Use SendGrid for production
+    EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+    ANYMAIL = {
+        "SENDGRID_API_KEY": os.environ.get("SENDGRID_API_KEY"),
+        "SENDGRID_GENERATE_MESSAGE_ID": True,
+        "SENDGRID_MERGE_DATA": {},
+        "SENDGRID_MERGE_GLOBAL_DATA": {},
+    }
+    DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
 
 CKEDITOR_CONFIGS = {
     "default": {
