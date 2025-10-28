@@ -6,13 +6,26 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0040_update_product_categories'),
+        ("producer", "0040_update_product_categories"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='product',
-            name='category',
-            field=models.CharField(choices=[('FA', 'Fashion & Apparel'), ('EG', 'Electronics & Gadgets'), ('GE', 'Groceries & Essentials'), ('HB', 'Health & Beauty'), ('HL', 'Home & Living'), ('TT', 'Travel & Tourism'), ('IS', 'Industrial Supplies'), ('OT', 'Other')], default='OT', max_length=2),
+            model_name="product",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("FA", "Fashion & Apparel"),
+                    ("EG", "Electronics & Gadgets"),
+                    ("GE", "Groceries & Essentials"),
+                    ("HB", "Health & Beauty"),
+                    ("HL", "Home & Living"),
+                    ("TT", "Travel & Tourism"),
+                    ("IS", "Industrial Supplies"),
+                    ("OT", "Other"),
+                ],
+                default="OT",
+                max_length=2,
+            ),
         ),
     ]

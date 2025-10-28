@@ -6,7 +6,7 @@ from django.db import migrations
 def update_marketplace_product_categories(apps, schema_editor):
     """Update existing marketplace product categories to new values"""
     MarketplaceUserProduct = apps.get_model("market", "MarketplaceUserProduct")
-    
+
     # Mapping from old categories to new categories
     category_mapping = {
         "FR": "GE",  # Fruits -> Groceries & Essentials
@@ -21,7 +21,7 @@ def update_marketplace_product_categories(apps, schema_editor):
         "HR": "HB",  # Herbs & Medicinal Plants -> Health & Beauty
         "OT": "OT",  # Other -> Other (no change)
     }
-    
+
     for old_category, new_category in category_mapping.items():
         MarketplaceUserProduct.objects.filter(category=old_category).update(category=new_category)
 
@@ -29,7 +29,7 @@ def update_marketplace_product_categories(apps, schema_editor):
 def reverse_marketplace_product_categories(apps, schema_editor):
     """Reverse migration - map new categories back to old ones"""
     MarketplaceUserProduct = apps.get_model("market", "MarketplaceUserProduct")
-    
+
     # Reverse mapping (note: this is lossy since multiple old categories map to same new ones)
     reverse_mapping = {
         "GE": "FR",  # Groceries & Essentials -> Fruits (default choice)
@@ -41,7 +41,7 @@ def reverse_marketplace_product_categories(apps, schema_editor):
         "EG": "OT",  # Electronics & Gadgets -> Other (new category)
         "TT": "OT",  # Travel & Tourism -> Other (new category)
     }
-    
+
     for new_category, old_category in reverse_mapping.items():
         MarketplaceUserProduct.objects.filter(category=new_category).update(category=old_category)
 
@@ -49,7 +49,7 @@ def reverse_marketplace_product_categories(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0027_delivery_email'),
+        ("market", "0027_delivery_email"),
     ]
 
     operations = [

@@ -2,28 +2,34 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import PaymentTransaction
+
 # ...existing code...
+
 
 class MyOrdersView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        transactions = PaymentTransaction.objects.filter(user=request.user).order_by('-created_at')
+        transactions = PaymentTransaction.objects.filter(user=request.user).order_by("-created_at")
         data = []
         for tx in transactions:
-            data.append({
-                "transaction_id": str(tx.transaction_id),
-                "order_number": tx.order_number,
-                "amount": float(tx.total_amount),
-                "status": tx.status,
-                "gateway": tx.gateway,
-                "created_at": tx.created_at.isoformat(),
-                "customer_name": tx.customer_name if hasattr(tx, 'customer_name') else request.user.get_full_name(),
-                "customer_email": tx.customer_email if hasattr(tx, 'customer_email') else request.user.email,
-                # Add marketplace_sales if available
-                "marketplace_sales": getattr(tx, 'marketplace_sales', None),
-            })
+            data.append(
+                {
+                    "transaction_id": str(tx.transaction_id),
+                    "order_number": tx.order_number,
+                    "amount": float(tx.total_amount),
+                    "status": tx.status,
+                    "gateway": tx.gateway,
+                    "created_at": tx.created_at.isoformat(),
+                    "customer_name": tx.customer_name if hasattr(tx, "customer_name") else request.user.get_full_name(),
+                    "customer_email": tx.customer_email if hasattr(tx, "customer_email") else request.user.email,
+                    # Add marketplace_sales if available
+                    "marketplace_sales": getattr(tx, "marketplace_sales", None),
+                }
+            )
         return Response({"data": data})
+
+
 import logging
 from decimal import Decimal
 
@@ -343,3 +349,58 @@ class PaymentWebhookView(View):
         except Exception as e:
             logger.error(f"Error processing webhook: {e}")
             return JsonResponse({"status": "error", "message": "Webhook processing failed"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verify_payment(request: HttpRequest) -> Response:
+    """Verify payment status with Khalti using pidx"""
+    data = request.data
+
+    pidx = data.get("pidx")
+    reference = data.get("reference")  # This might be our internal transaction ID
+
+    if not pidx:
+        return Response({"status": "error", "message": "PIDX is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Use Khalti to verify payment
+        khalti = Khalti()
+        inquiry_result = khalti.inquiry(pidx)
+
+        if khalti.is_success(inquiry_result):
+            # Payment is successful
+            # Optionally update our PaymentTransaction record
+            if reference:
+                try:
+                    payment_transaction = PaymentTransaction.objects.get(transaction_id=reference, user=request.user)
+                    payment_transaction.status = PaymentTransactionStatus.COMPLETED
+                    payment_transaction.save()
+                except PaymentTransaction.DoesNotExist:
+                    logger.warning(f"PaymentTransaction not found for reference: {reference}")
+
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Payment verified successfully",
+                    "payment_status": "completed",
+                    "data": inquiry_result,
+                }
+            )
+        else:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Payment verification failed",
+                    "payment_status": inquiry_result.get("status", "unknown"),
+                    "data": inquiry_result,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    except Exception as e:
+        logger.error(f"Payment verification error: {e}")
+        return Response(
+            {"status": "error", "message": f"Payment verification failed: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

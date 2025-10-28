@@ -641,37 +641,40 @@ class OrderTrackingEventViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Updated ViewSet for order tracking events supporting both order types.
     """
+
     serializer_class = OrderTrackingEventSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Get tracking events for orders belonging to the authenticated user."""
         user = self.request.user
-        
+
         # For staff users, show all events
         if user.is_staff:
             qs = OrderTrackingEvent.objects.all()
         else:
             # For regular users, show events for their orders only
-            user_marketplace_sales = MarketplaceSale.objects.filter(
-                models.Q(buyer=user) | models.Q(seller=user)
-            )
+            user_marketplace_sales = MarketplaceSale.objects.filter(models.Q(buyer=user) | models.Q(seller=user))
             user_marketplace_orders = MarketplaceOrder.objects.filter(customer=user)
-            
+
             qs = OrderTrackingEvent.objects.filter(
-                models.Q(marketplace_sale__in=user_marketplace_sales) |
-                models.Q(marketplace_order__in=user_marketplace_orders)
+                models.Q(marketplace_sale__in=user_marketplace_sales)
+                | models.Q(marketplace_order__in=user_marketplace_orders)
             )
-        
+
         # Filter by order if specified
-        marketplace_order_id = self.request.query_params.get("marketplace_order") or self.request.query_params.get("marketplace_order_id")
+        marketplace_order_id = self.request.query_params.get("marketplace_order") or self.request.query_params.get(
+            "marketplace_order_id"
+        )
         if marketplace_order_id:
             qs = qs.filter(marketplace_order_id=marketplace_order_id)
-            
-        marketplace_sale_id = self.request.query_params.get("marketplace_sale") or self.request.query_params.get("marketplace_sale_id")
+
+        marketplace_sale_id = self.request.query_params.get("marketplace_sale") or self.request.query_params.get(
+            "marketplace_sale_id"
+        )
         if marketplace_sale_id:
             qs = qs.filter(marketplace_sale_id=marketplace_sale_id)
-        
+
         return qs.order_by("-created_at").distinct()
 
 
@@ -705,107 +708,106 @@ class OrderTrackingEventViewSet(viewsets.ReadOnlyModelViewSet):
 #         return Response({"reply": "I'm having trouble understanding. Could you rephrase that?"})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @extend_schema(
     summary="List customer's marketplace orders",
     description="Get a paginated list of orders for the authenticated customer with filtering options.",
     parameters=[
         {
-            'name': 'status',
-            'description': 'Filter by order status',
-            'required': False,
-            'type': 'string',
-            'enum': ['pending', 'confirmed', 'processing', 'shipped', 'in_transit', 'delivered', 'completed', 'cancelled', 'failed']
+            "name": "status",
+            "description": "Filter by order status",
+            "required": False,
+            "type": "string",
+            "enum": [
+                "pending",
+                "confirmed",
+                "processing",
+                "shipped",
+                "in_transit",
+                "delivered",
+                "completed",
+                "cancelled",
+                "failed",
+            ],
         },
         {
-            'name': 'payment_status', 
-            'description': 'Filter by payment status',
-            'required': False,
-            'type': 'string',
-            'enum': ['pending', 'paid', 'failed', 'refunded', 'partially_refunded']
+            "name": "payment_status",
+            "description": "Filter by payment status",
+            "required": False,
+            "type": "string",
+            "enum": ["pending", "paid", "failed", "refunded", "partially_refunded"],
         },
         {
-            'name': 'search',
-            'description': 'Search in order number, product names, or notes',
-            'required': False,
-            'type': 'string'
+            "name": "search",
+            "description": "Search in order number, product names, or notes",
+            "required": False,
+            "type": "string",
         },
         {
-            'name': 'date_from',
-            'description': 'Filter orders created from this date (YYYY-MM-DD)',
-            'required': False,
-            'type': 'string',
-            'format': 'date'
+            "name": "date_from",
+            "description": "Filter orders created from this date (YYYY-MM-DD)",
+            "required": False,
+            "type": "string",
+            "format": "date",
         },
         {
-            'name': 'date_to', 
-            'description': 'Filter orders created until this date (YYYY-MM-DD)',
-            'required': False,
-            'type': 'string',
-            'format': 'date'
+            "name": "date_to",
+            "description": "Filter orders created until this date (YYYY-MM-DD)",
+            "required": False,
+            "type": "string",
+            "format": "date",
         },
-        {
-            'name': 'page',
-            'description': 'Page number for pagination',
-            'required': False,
-            'type': 'integer'
-        },
-        {
-            'name': 'limit',
-            'description': 'Number of items per page',
-            'required': False,
-            'type': 'integer'
-        }
+        {"name": "page", "description": "Page number for pagination", "required": False, "type": "integer"},
+        {"name": "limit", "description": "Number of items per page", "required": False, "type": "integer"},
     ],
-    responses={200: MarketplaceOrderSerializer(many=True)}
+    responses={200: MarketplaceOrderSerializer(many=True)},
 )
 def my_marketplace_orders(request):
     """Get customer's marketplace orders with filtering."""
     from rest_framework.pagination import PageNumberPagination
-    
+
     # Get base queryset for the authenticated user
-    queryset = MarketplaceOrder.objects.filter(
-        customer=request.user
-    ).select_related('delivery', 'customer').prefetch_related(
-        'items__product__product', 
-        'items__product__product__images',
-        'tracking_events'
-    ).filter(is_deleted=False)
-    
+    queryset = (
+        MarketplaceOrder.objects.filter(customer=request.user)
+        .select_related("delivery", "customer")
+        .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
+        .filter(is_deleted=False)
+    )
+
     # Apply filters
-    status = request.query_params.get('status')
-    if status and status != 'all':
+    status = request.query_params.get("status")
+    if status and status != "all":
         queryset = queryset.filter(order_status=status)
-        
-    payment_status = request.query_params.get('payment_status')
-    if payment_status and payment_status != 'all':
+
+    payment_status = request.query_params.get("payment_status")
+    if payment_status and payment_status != "all":
         queryset = queryset.filter(payment_status=payment_status)
-        
-    search = request.query_params.get('search')
+
+    search = request.query_params.get("search")
     if search:
         queryset = queryset.filter(
-            models.Q(order_number__icontains=search) |
-            models.Q(items__product__product__name__icontains=search) |
-            models.Q(notes__icontains=search)
+            models.Q(order_number__icontains=search)
+            | models.Q(items__product__product__name__icontains=search)
+            | models.Q(notes__icontains=search)
         ).distinct()
-        
-    date_from = request.query_params.get('date_from')
+
+    date_from = request.query_params.get("date_from")
     if date_from:
         queryset = queryset.filter(created_at__date__gte=date_from)
-        
-    date_to = request.query_params.get('date_to')
+
+    date_to = request.query_params.get("date_to")
     if date_to:
         queryset = queryset.filter(created_at__date__lte=date_to)
 
     # Order by creation date (newest first)
-    queryset = queryset.order_by('-created_at')
-    
+    queryset = queryset.order_by("-created_at")
+
     # Pagination
     paginator = PageNumberPagination()
-    paginator.page_size = int(request.query_params.get('limit', 10))
+    paginator.page_size = int(request.query_params.get("limit", 10))
     page = paginator.paginate_queryset(queryset, request)
-    
+
     if page is not None:
         serializer = MarketplaceOrderSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -814,114 +816,97 @@ def my_marketplace_orders(request):
     return Response(serializer.data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @extend_schema(
     summary="Get marketplace order details",
     description="Retrieve detailed information about a specific marketplace order.",
-    responses={200: MarketplaceOrderSerializer}
+    responses={200: MarketplaceOrderSerializer},
 )
 def marketplace_order_detail(request, pk):
     """Get marketplace order details."""
     try:
-        order = MarketplaceOrder.objects.select_related('delivery', 'customer').prefetch_related(
-            'items__product__product', 
-            'items__product__product__images',
-            'tracking_events'
-        ).get(pk=pk, customer=request.user, is_deleted=False)
-        
+        order = (
+            MarketplaceOrder.objects.select_related("delivery", "customer")
+            .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
+            .get(pk=pk, customer=request.user, is_deleted=False)
+        )
+
         serializer = MarketplaceOrderSerializer(order)
         return Response(serializer.data)
     except MarketplaceOrder.DoesNotExist:
         return Response(
-            {"error": "Order not found or you don't have permission to view it."},
-            status=status.HTTP_404_NOT_FOUND
+            {"error": "Order not found or you don't have permission to view it."}, status=status.HTTP_404_NOT_FOUND
         )
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @extend_schema(
     summary="Cancel marketplace order",
     description="Cancel a pending or confirmed marketplace order.",
     request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'cancellation_reason': {
-                    'type': 'string',
-                    'description': 'Reason for cancellation'
-                }
-            }
+        "application/json": {
+            "type": "object",
+            "properties": {"cancellation_reason": {"type": "string", "description": "Reason for cancellation"}},
         }
     },
-    responses={200: MarketplaceOrderSerializer}
+    responses={200: MarketplaceOrderSerializer},
 )
 def cancel_marketplace_order(request, pk):
     """Cancel a marketplace order."""
     try:
         order = MarketplaceOrder.objects.get(pk=pk, customer=request.user, is_deleted=False)
-        
+
         if not order.can_cancel:
-            return Response(
-                {"error": "This order cannot be cancelled."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        reason = request.data.get('cancellation_reason', '')
+            return Response({"error": "This order cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = request.data.get("cancellation_reason", "")
         order.cancel_order(reason)
-        
+
         serializer = MarketplaceOrderSerializer(order)
         return Response(serializer.data)
     except MarketplaceOrder.DoesNotExist:
         return Response(
-            {"error": "Order not found or you don't have permission to cancel it."},
-            status=status.HTTP_404_NOT_FOUND
+            {"error": "Order not found or you don't have permission to cancel it."}, status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @extend_schema(
     summary="Reorder marketplace order items",
     description="Create a reorder request for items from this marketplace order.",
     responses={
         200: {
-            'description': 'Success message with instructions',
-            'content': {
-                'application/json': {
-                    'type': 'object',
-                    'properties': {
-                        'success': {'type': 'boolean'},
-                        'message': {'type': 'string'}
-                    }
+            "description": "Success message with instructions",
+            "content": {
+                "application/json": {
+                    "type": "object",
+                    "properties": {"success": {"type": "boolean"}, "message": {"type": "string"}},
                 }
-            }
+            },
         }
-    }
+    },
 )
 def reorder_marketplace_order(request, pk):
     """Reorder items from a marketplace order."""
     try:
-        order = MarketplaceOrder.objects.prefetch_related('items').get(
-            pk=pk, customer=request.user, is_deleted=False
-        )
-        
+        order = MarketplaceOrder.objects.prefetch_related("items").get(pk=pk, customer=request.user, is_deleted=False)
+
         # For now, return a success message instructing user to add items manually
         # In the future, this could automatically add items to cart
-        return Response({
-            "success": True,
-            "message": f"Please add the {order.items.count()} items from this order to your cart manually from the marketplace."
-        })
+        return Response(
+            {
+                "success": True,
+                "message": f"Please add the {order.items.count()} items from this order to your cart manually from the marketplace.",
+            }
+        )
     except MarketplaceOrder.DoesNotExist:
         return Response(
-            {"error": "Order not found or you don't have permission to reorder it."},
-            status=status.HTTP_404_NOT_FOUND
+            {"error": "Order not found or you don't have permission to reorder it."}, status=status.HTTP_404_NOT_FOUND
         )
 
 
@@ -930,85 +915,95 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for marketplace orders - supports listing and retrieving orders.
     """
+
     serializer_class = MarketplaceOrderSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Get orders for the authenticated user."""
-        return MarketplaceOrder.objects.filter(
-            customer=self.request.user
-        ).select_related('delivery', 'customer').prefetch_related(
-            'items__product__product', 
-            'items__product__product__images',
-            'tracking_events'
-        ).filter(is_deleted=False)
+        return (
+            MarketplaceOrder.objects.filter(customer=self.request.user)
+            .select_related("delivery", "customer")
+            .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
+            .filter(is_deleted=False)
+        )
 
     @extend_schema(
         summary="List customer's orders",
         description="Get a paginated list of orders for the authenticated customer with filtering options.",
         parameters=[
             {
-                'name': 'status',
-                'description': 'Filter by order status',
-                'required': False,
-                'type': 'string',
-                'enum': ['pending', 'confirmed', 'processing', 'shipped', 'in_transit', 'delivered', 'completed', 'cancelled', 'failed']
+                "name": "status",
+                "description": "Filter by order status",
+                "required": False,
+                "type": "string",
+                "enum": [
+                    "pending",
+                    "confirmed",
+                    "processing",
+                    "shipped",
+                    "in_transit",
+                    "delivered",
+                    "completed",
+                    "cancelled",
+                    "failed",
+                ],
             },
             {
-                'name': 'payment_status', 
-                'description': 'Filter by payment status',
-                'required': False,
-                'type': 'string',
-                'enum': ['pending', 'paid', 'failed', 'refunded', 'partially_refunded']
+                "name": "payment_status",
+                "description": "Filter by payment status",
+                "required": False,
+                "type": "string",
+                "enum": ["pending", "paid", "failed", "refunded", "partially_refunded"],
             },
             {
-                'name': 'search',
-                'description': 'Search in order number, product names, or notes',
-                'required': False,
-                'type': 'string'
+                "name": "search",
+                "description": "Search in order number, product names, or notes",
+                "required": False,
+                "type": "string",
             },
             {
-                'name': 'date_from',
-                'description': 'Filter orders created from this date (YYYY-MM-DD)',
-                'required': False,
-                'type': 'string',
-                'format': 'date'
+                "name": "date_from",
+                "description": "Filter orders created from this date (YYYY-MM-DD)",
+                "required": False,
+                "type": "string",
+                "format": "date",
             },
             {
-                'name': 'date_to', 
-                'description': 'Filter orders created until this date (YYYY-MM-DD)',
-                'required': False,
-                'type': 'string',
-                'format': 'date'
-            }
-        ]
+                "name": "date_to",
+                "description": "Filter orders created until this date (YYYY-MM-DD)",
+                "required": False,
+                "type": "string",
+                "format": "date",
+            },
+        ],
     )
     def list(self, request, *args, **kwargs):
         """List orders with filtering."""
         queryset = self.get_queryset()
-        
+
         # Apply filters
-        status = request.query_params.get('status')
-        if status and status != 'all':
+        status = request.query_params.get("status")
+        if status and status != "all":
             queryset = queryset.filter(order_status=status)
-            
-        payment_status = request.query_params.get('payment_status')
-        if payment_status and payment_status != 'all':
+
+        payment_status = request.query_params.get("payment_status")
+        if payment_status and payment_status != "all":
             queryset = queryset.filter(payment_status=payment_status)
-            
-        search = request.query_params.get('search')
+
+        search = request.query_params.get("search")
         if search:
             queryset = queryset.filter(
-                models.Q(order_number__icontains=search) |
-                models.Q(items__product__product__name__icontains=search) |
-                models.Q(notes__icontains=search)
+                models.Q(order_number__icontains=search)
+                | models.Q(items__product__product__name__icontains=search)
+                | models.Q(notes__icontains=search)
             ).distinct()
-            
-        date_from = request.query_params.get('date_from')
+
+        date_from = request.query_params.get("date_from")
         if date_from:
             queryset = queryset.filter(created_at__date__gte=date_from)
-            
-        date_to = request.query_params.get('date_to')
+
+        date_to = request.query_params.get("date_to")
         if date_to:
             queryset = queryset.filter(created_at__date__lte=date_to)
 
@@ -1020,103 +1015,85 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    @extend_schema(
-        summary="Get order details",
-        description="Retrieve detailed information about a specific order."
-    )
+    @extend_schema(summary="Get order details", description="Retrieve detailed information about a specific order.")
     def retrieve(self, request, *args, **kwargs):
         """Get order details."""
         return super().retrieve(request, *args, **kwargs)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     @extend_schema(
         summary="Cancel order",
         description="Cancel a pending or confirmed order.",
         request={
-            'application/json': {
-                'type': 'object',
-                'properties': {
-                    'cancellation_reason': {
-                        'type': 'string',
-                        'description': 'Reason for cancellation'
-                    }
-                }
+            "application/json": {
+                "type": "object",
+                "properties": {"cancellation_reason": {"type": "string", "description": "Reason for cancellation"}},
             }
-        }
+        },
     )
     def cancel(self, request, pk=None):
         """Cancel an order."""
         order = self.get_object()
-        
+
         if not order.can_cancel:
-            return Response(
-                {"error": "This order cannot be cancelled."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        reason = request.data.get('cancellation_reason', '')
+            return Response({"error": "This order cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = request.data.get("cancellation_reason", "")
         try:
             order.cancel_order(reason)
             serializer = self.get_serializer(order)
             return Response(serializer.data)
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     @extend_schema(
         summary="Reorder items",
         description="Create a new order with the same items as this order.",
         responses={
             200: {
-                'description': 'Success message with instructions',
-                'content': {
-                    'application/json': {
-                        'type': 'object',
-                        'properties': {
-                            'success': {'type': 'boolean'},
-                            'message': {'type': 'string'}
-                        }
+                "description": "Success message with instructions",
+                "content": {
+                    "application/json": {
+                        "type": "object",
+                        "properties": {"success": {"type": "boolean"}, "message": {"type": "string"}},
                     }
-                }
+                },
             }
-        }
+        },
     )
     def reorder(self, request, pk=None):
         """Reorder items from this order."""
         order = self.get_object()
-        
+
         # For now, return a success message instructing user to add items manually
         # In the future, this could automatically add items to cart
-        return Response({
-            "success": True,
-            "message": f"Please add the {order.items.count()} items from this order to your cart manually from the marketplace."
-        })
+        return Response(
+            {
+                "success": True,
+                "message": f"Please add the {order.items.count()} items from this order to your cart manually from the marketplace.",
+            }
+        )
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @extend_schema(
     summary="Create order from cart",
     description="Create a new marketplace order from cart items.",
     request=CreateOrderSerializer,
-    responses={201: MarketplaceOrderSerializer}
+    responses={201: MarketplaceOrderSerializer},
 )
 def create_order(request):
     """Create a new order from cart items."""
-    serializer = CreateOrderSerializer(data=request.data, context={'request': request})
-    
+    serializer = CreateOrderSerializer(data=request.data, context={"request": request})
+
     if serializer.is_valid():
         try:
             order = serializer.save()
             response_serializer = MarketplaceOrderSerializer(order)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
-            return Response(
-                {"error": f"Failed to create order: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-    
+            return Response({"error": f"Failed to create order: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

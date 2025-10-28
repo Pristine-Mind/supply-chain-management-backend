@@ -579,6 +579,7 @@ class DeliverySerializer(serializers.ModelSerializer):
 
 class OrderTrackingEventSerializer(serializers.ModelSerializer):
     """Updated serializer for order tracking events supporting both order types."""
+
     order_number = serializers.ReadOnlyField()
 
     class Meta:
@@ -586,7 +587,7 @@ class OrderTrackingEventSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "marketplace_sale",
-            "marketplace_order", 
+            "marketplace_order",
             "order_number",
             "status",
             "message",
@@ -602,6 +603,7 @@ class OrderTrackingEventSerializer(serializers.ModelSerializer):
 # New serializers for marketplace orders
 class DeliveryInfoSerializer(serializers.ModelSerializer):
     """Serializer for delivery information."""
+
     full_address = serializers.ReadOnlyField()
 
     class Meta:
@@ -626,6 +628,7 @@ class DeliveryInfoSerializer(serializers.ModelSerializer):
 
 class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
     """Serializer for marketplace order items."""
+
     product = MarketplaceProductSerializer(read_only=True)
     product_details = serializers.SerializerMethodField()
     formatted_unit_price = serializers.ReadOnlyField()
@@ -640,7 +643,7 @@ class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
             "quantity",
             "unit_price",
             "total_price",
-            "formatted_unit_price", 
+            "formatted_unit_price",
             "formatted_total_price",
             "created_at",
             "updated_at",
@@ -654,26 +657,31 @@ class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
             try:
                 return {
                     "id": product.id,
-                    "name": getattr(product, 'name', 'Unknown Product'),
-                    "description": getattr(product, 'description', ''),
-                    "sku": getattr(product, 'sku', ''),
-                    "category": product.category.name if hasattr(product, 'category') and product.category else None,
-                    "category_details": product.category.name if hasattr(product, 'category') and product.category else None,
-                    "images": [
-                        {
-                            "id": img.id,
-                            "image": img.image.url if img.image else None,
-                            "alt_text": img.alt_text,
-                        } for img in product.images.all()
-                    ] if hasattr(product, 'images') else [],
-                    "price": float(product.price) if hasattr(product, 'price') else 0,
-                    "cost_price": float(product.cost_price) if hasattr(product, 'cost_price') else 0,
-                    "stock": product.stock if hasattr(product, 'stock') else 0,
+                    "name": getattr(product, "name", "Unknown Product"),
+                    "description": getattr(product, "description", ""),
+                    "sku": getattr(product, "sku", ""),
+                    "category": product.category.name if hasattr(product, "category") and product.category else None,
+                    "category_details": product.category.name if hasattr(product, "category") and product.category else None,
+                    "images": (
+                        [
+                            {
+                                "id": img.id,
+                                "image": img.image.url if img.image else None,
+                                "alt_text": img.alt_text,
+                            }
+                            for img in product.images.all()
+                        ]
+                        if hasattr(product, "images")
+                        else []
+                    ),
+                    "price": float(product.price) if hasattr(product, "price") else 0,
+                    "cost_price": float(product.cost_price) if hasattr(product, "cost_price") else 0,
+                    "stock": product.stock if hasattr(product, "stock") else 0,
                 }
             except AttributeError as e:
                 # Fallback if product data is corrupted
                 return {
-                    "id": getattr(product, 'id', None),
+                    "id": getattr(product, "id", None),
                     "name": str(product),
                     "description": f"Error accessing product data: {e}",
                     "sku": "",
@@ -689,6 +697,7 @@ class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
 
 class MarketplaceOrderSerializer(serializers.ModelSerializer):
     """Serializer for marketplace orders."""
+
     items = MarketplaceOrderItemSerializer(many=True, read_only=True)
     delivery = DeliveryInfoSerializer(read_only=True)
     order_status_display = serializers.ReadOnlyField()
@@ -728,10 +737,10 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
             "is_delivered",
         ]
         read_only_fields = [
-            "id", 
-            "order_number", 
-            "created_at", 
-            "updated_at", 
+            "id",
+            "order_number",
+            "created_at",
+            "updated_at",
             "delivered_at",
             "order_status_display",
             "payment_status_display",
@@ -745,16 +754,17 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
 
 class CreateOrderSerializer(serializers.Serializer):
     """Serializer for creating orders from cart."""
+
     cart_id = serializers.IntegerField()
     delivery_info = DeliveryInfoSerializer()
     payment_method = serializers.CharField(max_length=50, required=False)
 
     def validate_cart_id(self, value):
         """Validate that the cart exists and belongs to the user."""
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             raise serializers.ValidationError("Authentication required")
-        
+
         try:
             cart = Cart.objects.get(id=value, user=request.user)
             if not cart.items.exists():
@@ -765,10 +775,10 @@ class CreateOrderSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         """Create order from cart."""
-        request = self.context.get('request')
-        cart_id = validated_data['cart_id']
-        delivery_data = validated_data['delivery_info']
-        payment_method = validated_data.get('payment_method')
+        request = self.context.get("request")
+        cart_id = validated_data["cart_id"]
+        delivery_data = validated_data["delivery_info"]
+        payment_method = validated_data.get("payment_method")
 
         # Get the cart
         cart = Cart.objects.get(id=cart_id, user=request.user)
@@ -778,9 +788,7 @@ class CreateOrderSerializer(serializers.Serializer):
 
         # Create order using the manager method
         order = MarketplaceOrder.objects.create_order_from_cart(
-            cart=cart,
-            delivery_info=delivery_info,
-            payment_method=payment_method
+            cart=cart, delivery_info=delivery_info, payment_method=payment_method
         )
 
         # Clear the cart after successful order creation
