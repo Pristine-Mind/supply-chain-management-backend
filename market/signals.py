@@ -3,7 +3,7 @@ import os
 
 from django.core.files import File
 from django.db import transaction
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ from producer.models import (
 )
 
 from .models import (
+    MarketplaceOrder,
     MarketplaceSale,
     MarketplaceUserProduct,
     Notification,
@@ -237,3 +238,24 @@ def low_stock_alert(sender, instance, **kwargs):
                 sms_number=instance.user.user_profile.phone_number,
                 sms_body=msg,
             )
+
+
+@receiver(post_save, sender=MarketplaceOrder, dispatch_uid="marketplace_order_created_notification")
+def marketplace_order_created_notification(sender, instance: "MarketplaceOrder", created: bool, **kwargs):
+    """Send notifications when a new marketplace order is created."""
+    if created:
+        try:
+            msg = f"🛒 Your order #{instance.order_number} has been placed successfully!"
+            notify_event(
+                user=instance.customer,
+                notif_type=Notification.Type.ORDER,
+                message=msg,
+                via_in_app=True,
+                via_email=True,
+                email_addr=instance.customer.email,
+                email_tpl="order_created.html",
+                email_ctx={"order": instance},
+                via_sms=False,
+            )
+        except Exception as e:
+            logger.error(f"Error sending order creation notification: {str(e)}")
