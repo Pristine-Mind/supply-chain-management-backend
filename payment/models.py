@@ -172,8 +172,8 @@ class PaymentTransaction(models.Model):
                 notes=f"Payment Transaction: {self.order_number}",
             )
 
-            cart_item.product.stock = max(0, cart_item.product.stock - cart_item.quantity)
-            cart_item.product.save(update_fields=["stock"])
+            cart_item.product.product.stock = max(0, cart_item.product.product.stock - cart_item.quantity)
+            cart_item.product.product.save(update_fields=["stock"])
 
             PaymentTransactionItem.objects.create(
                 payment_transaction=self,
