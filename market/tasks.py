@@ -2,35 +2,69 @@ import requests
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
-from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from requests.exceptions import RequestException
+import logging
 
 from producer.models import Order, Sale
 
+logger = logging.getLogger(__name__)
 
-@shared_task
-def send_email(to_email, subject, template_name, context):
-    if context and isinstance(context, dict) and "sale_id" in context:
-        try:
-            context["sale_obj"] = Sale.objects.get(id=context["sale_id"])
-        except Sale.DoesNotExist:
-            context["sale_obj"] = None
-    # Add Order object if needed
-    if context and isinstance(context, dict) and "order_id" in context:
-        try:
-            context["order_obj"] = Order.objects.get(id=context["order_id"])
-        except Order.DoesNotExist:
-            context["order_obj"] = None
-    html_message = render_to_string(template_name, context)
-    send_mail(
-        subject=subject,
-        message=strip_tags(html_message),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[to_email],
-        html_message=html_message,
-    )
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)  # 5 minute delay between retries
+def send_email(self, to_email, subject, template_name, context):
+    """
+    Send an email with improved error handling for SendGrid issues.
+    Retries on temporary failures, logs permanent failures.
+    """
+    try:
+        if context and isinstance(context, dict) and "sale_id" in context:
+            try:
+                context["sale_obj"] = Sale.objects.get(id=context["sale_id"])
+            except Sale.DoesNotExist:
+                context["sale_obj"] = None
+        # Add Order object if needed
+        if context and isinstance(context, dict) and "order_id" in context:
+            try:
+                context["order_obj"] = Order.objects.get(id=context["order_id"])
+            except Order.DoesNotExist:
+                context["order_obj"] = None
+        
+        html_message = render_to_string(template_name, context)
+        
+        # Try sending email
+        _ = send_mail(
+            subject=subject,
+            message=strip_tags(html_message),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[to_email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        
+        logger.info(f"Email sent successfully to {to_email} with subject: {subject}")
+        return f"Email sent successfully to {to_email}"
+        
+    except Exception as e:
+        error_msg = str(e).lower()
+        
+        # Check for SendGrid-specific errors that might be temporary
+        if any(keyword in error_msg for keyword in ['maximum credits exceeded', 'rate limit', 'temporary', 'timeout']):
+            logger.warning(f"Temporary email error for {to_email}: {e}")
+            if self.request.retries < self.max_retries:
+                # Exponential backoff: 5min, 10min, 20min
+                countdown = 300 * (2 ** self.request.retries)
+                raise self.retry(exc=e, countdown=countdown)
+            else:
+                logger.error(f"Email failed permanently after {self.max_retries} retries to {to_email}: {e}")
+        else:
+            # Log permanent errors (like invalid email, template not found, etc.)
+            logger.error(f"Email error (non-retryable) to {to_email}: {e}")
+        
+        # Don't raise the exception - just log it and continue
+        # This prevents the entire payment process from failing due to email issues
+        return f"Email failed to {to_email}: {str(e)}"
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -101,10 +135,12 @@ def send_sms(self, to_number: str, body: str) -> dict:
     if result["code"] != 200 and code not in mapping and self.request.retries < self.max_retries:
         raise self.retry(exc=Exception(f"SparrowSMS unknown error: {result}"), countdown=60)
     
-    # If we've exhausted retries or it's a permanent error, raise
+    # Log errors but don't raise exceptions to avoid breaking task chains
     if result["code"] != 200:
-        raise Exception(f"SparrowSMS error: {result}")
+        logger.error(f"SMS failed to {to_number} after {self.max_retries} retries: {result}")
+        return {"code": result["code"], "status": "failed", "message": f"SMS failed: {result['message']}", "sms_code": result["sms_code"]}
 
+    logger.info(f"SMS sent successfully to {to_number}")
     return result
 
 
@@ -114,7 +150,11 @@ def update_recent_purchases():
     Celery task to update recent_purchases_count for all marketplace products.
     This should be scheduled to run periodically (e.g., every hour).
     """
-    from django.core.management import call_command
-
-    call_command("update_recent_purchases")
-    return "Successfully updated recent purchases count"
+    try:
+        from django.core.management import call_command
+        _ = call_command("update_recent_purchases")
+        logger.info("Recent purchases updated successfully")
+        return "Successfully updated recent purchases count"
+    except Exception as e:
+        logger.error(f"Failed to update recent purchases: {e}")
+        return f"Error updating recent purchases: {e}"
