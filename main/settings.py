@@ -40,6 +40,7 @@ env = environ.Env(
     # Redis
     CELERY_REDIS_URL=str,
     CACHE_REDIS_URL=str,
+    BREVO_API_KEY=str,
 )
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
@@ -318,26 +319,16 @@ SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
 SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
 SPARROWSMS_ENDPOINT = os.environ.get("SPARROWSMS_ENDPOINT")
 
-# Email configuration - using SendGrid
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
+EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+ANYMAIL = {
+    "BREVO_API_KEY": os.environ.get("BREVO_API_KEY"),
+    "TRACKING_OPENS": True,
+    "TRACKING_CLICKS": True,
+}
 
-if SENDGRID_API_KEY:
-    # Use SendGrid when API key is available
-    EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
-    ANYMAIL = {
-        "SENDGRID_API_KEY": SENDGRID_API_KEY,
-        "SENDGRID_GENERATE_MESSAGE_ID": True,
-        "SENDGRID_MERGE_DATA": {},
-        "SENDGRID_MERGE_GLOBAL_DATA": {},
-    }
-    DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
-    print(f"✅ Email backend: SendGrid configured")
-else:
-    # Fallback to file backend for development when SendGrid is not configured
-    EMAIL_BACKEND = "django.core.mail.backends.filebased.EmailBackend"
-    EMAIL_FILE_PATH = os.path.join(BASE_DIR, "sent_emails")
-    DEFAULT_FROM_EMAIL = "mulyabazzar@localhost"
-    print(f"⚠️  Email backend: File backend (SendGrid API key not found)")
+DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
+
 
 CKEDITOR_CONFIGS = {
     "default": {
