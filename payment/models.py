@@ -121,34 +121,37 @@ class PaymentTransaction(models.Model):
 
         for cart_item in cart_items:
             item_subtotal = cart_item.product.price * cart_item.quantity
-            
-            # Ensure all base values are Decimals with proper precision
-            self_tax_amount = Decimal(str(self.tax_amount)).quantize(Decimal('0.01'))
-            self_shipping_cost = Decimal(str(self.shipping_cost)).quantize(Decimal('0.01'))
-            self_subtotal = Decimal(str(self.subtotal)).quantize(Decimal('0.01'))
-            
-            item_tax = (self_tax_amount * item_subtotal / self_subtotal) if self_subtotal > 0 else Decimal('0')
-            item_shipping = (self_shipping_cost * item_subtotal / self_subtotal) if self_subtotal > 0 else Decimal('0')
-            
-            # Quantize immediately after calculation to prevent precision buildup
-            item_subtotal = Decimal(str(item_subtotal)).quantize(Decimal('0.01'))
+            item_tax = (self.tax_amount * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
+            item_shipping = (self.shipping_cost * item_subtotal / self.subtotal) if self.subtotal > 0 else Decimal('0')
+            item_total = item_subtotal + item_tax + item_shipping
+
+            # Round decimal values to 2 places to prevent precision issues
+            item_subtotal = item_subtotal.quantize(Decimal('0.01'))
             item_tax = item_tax.quantize(Decimal('0.01'))
             item_shipping = item_shipping.quantize(Decimal('0.01'))
-            item_total = (item_subtotal + item_tax + item_shipping).quantize(Decimal('0.01'))
+            item_total = item_total.quantize(Decimal('0.01'))
 
-            # Strict validation - clamp values to field limits
-            # For shipping_cost: max_digits=10, decimal_places=2 -> max value 99,999,999.99
-            max_shipping = Decimal('99999999.99')
-            if item_shipping > max_shipping:
+            # Additional validation - ensure values fit in field constraints
+            if abs(item_shipping) >= Decimal('100000000'):  # 10^8, max for 10-digit field with 2 decimals
                 item_shipping = Decimal('0.00')
-            
-            # For total_amount: max_digits=12, decimal_places=2 -> max value 9,999,999,999.99
-            max_total = Decimal('9999999999.99')
-            if item_total > max_total:
+            if abs(item_total) >= Decimal('10000000000'):  # 10^10, max for 12-digit field with 2 decimals
                 item_total = item_subtotal  # Fallback to subtotal only
 
-            # Temporarily disable phone number to isolate decimal validation issues
-            buyer_phone_value = ""  # Always use empty string for now
+            # Handle phone number - be more permissive and clear invalid ones
+            buyer_phone_value = ""
+            if self.customer_phone:
+                phone_clean = str(self.customer_phone).strip()
+                # Only process if it looks like a reasonable phone number
+                if phone_clean and phone_clean.replace('+', '').replace('-', '').replace(' ', '').replace('(', '').replace(')', '').isdigit():
+                    digits_only = ''.join(filter(str.isdigit, phone_clean))
+                    if 7 <= len(digits_only) <= 15:  # Reasonable phone number length
+                        if len(digits_only) == 10 and not phone_clean.startswith('+'):
+                            buyer_phone_value = f"+977{digits_only}"  # Nepal format
+                        elif phone_clean.startswith('+'):
+                            buyer_phone_value = phone_clean
+                        elif len(digits_only) >= 10:
+                            buyer_phone_value = f"+{digits_only}"
+                # If processing fails or results in invalid format, leave empty
 
             marketplace_sale = MarketplaceSale.objects.create(
                 buyer=self.user,
