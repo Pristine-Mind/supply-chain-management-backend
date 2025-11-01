@@ -1,4 +1,4 @@
-from django.db.models import Count, F, Q, Avg, Case, When, Window, FloatField, Min, Max, Value, CharField
+from django.db.models import Count, F, Q, Avg, Case, When, Window, FloatField, Min, Max, Value, CharField, Sum
 from django.db.models.functions import Rank, Coalesce
 from django.utils import timezone
 from datetime import timedelta
@@ -300,3 +300,348 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         
         serializer = TrendingStatsSerializer(stats_data)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def deals(self, request):
+        """
+        Get all current deals and discounted products
+        """
+        now = timezone.now()
+        queryset = self.get_queryset().filter(
+            Q(discounted_price__isnull=False) |
+            (
+                Q(offer_start__isnull=False) & 
+                Q(offer_end__isnull=False) &
+                Q(offer_start__lte=now) &
+                Q(offer_end__gte=now)
+            )
+        ).order_by('-trending_score')
+        
+        # Apply category filter if provided
+        category = request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(product__category__icontains=category)
+        
+        # Apply discount percentage filter
+        min_discount = request.query_params.get('min_discount')
+        if min_discount:
+            try:
+                min_discount = float(min_discount)
+                # Calculate discount percentage: ((listed - discounted) / listed) * 100
+                queryset = queryset.extra(
+                    where=[
+                        "((listed_price - COALESCE(discounted_price, listed_price)) / listed_price * 100) >= %s"
+                    ],
+                    params=[min_discount]
+                )
+            except (ValueError, TypeError):
+                pass
+        
+        # Limit results
+        limit = request.query_params.get('limit', 20)
+        try:
+            limit = int(limit)
+            queryset = queryset[:limit]
+        except (ValueError, TypeError):
+            queryset = queryset[:20]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'count': len(serializer.data),
+            'timestamp': timezone.now().isoformat(),
+            'type': 'deals'
+        })
+
+    @action(detail=False, methods=['get'])
+    def flash_sales(self, request):
+        """
+        Get products with active time-limited offers (flash sales)
+        """
+        now = timezone.now()
+        # Products with active offers ending within 24 hours
+        tomorrow = now + timedelta(days=1)
+        
+        queryset = self.get_queryset().filter(
+            offer_start__isnull=False,
+            offer_end__isnull=False,
+            offer_start__lte=now,
+            offer_end__gte=now,
+            offer_end__lte=tomorrow  # Ending within 24 hours
+        ).order_by('offer_end', '-trending_score')[:15]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add countdown information to each product
+        results = []
+        for product_data in serializer.data:
+            # Get the actual product to calculate countdown
+            try:
+                product = MarketplaceProduct.objects.get(id=product_data['id'])
+                countdown_seconds = (product.offer_end - now).total_seconds()
+                product_data['countdown_seconds'] = max(0, countdown_seconds)
+                product_data['countdown_hours'] = max(0, countdown_seconds / 3600)
+            except MarketplaceProduct.DoesNotExist:
+                product_data['countdown_seconds'] = 0
+                product_data['countdown_hours'] = 0
+            
+            results.append(product_data)
+        
+        return Response({
+            'results': results,
+            'count': len(results),
+            'timestamp': timezone.now().isoformat(),
+            'type': 'flash_sales'
+        })
+
+    @action(detail=False, methods=['get'])
+    def best_discounts(self, request):
+        """
+        Get products with the highest discount percentages
+        """
+        queryset = self.get_queryset().filter(
+            discounted_price__isnull=False,
+            listed_price__gt=0
+        ).extra(
+            select={
+                'discount_percentage': '((listed_price - discounted_price) / listed_price * 100)'
+            }
+        ).order_by('-discount_percentage', '-trending_score')
+        
+        # Filter by minimum discount if specified
+        min_discount = request.query_params.get('min_discount', 10)
+        try:
+            min_discount = float(min_discount)
+            queryset = queryset.extra(
+                where=["((listed_price - discounted_price) / listed_price * 100) >= %s"],
+                params=[min_discount]
+            )
+        except (ValueError, TypeError):
+            pass
+        
+        # Limit results
+        limit = request.query_params.get('limit', 15)
+        try:
+            limit = int(limit)
+            queryset = queryset[:limit]
+        except (ValueError, TypeError):
+            queryset = queryset[:15]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add discount percentage to each result
+        results = []
+        for product_data in serializer.data:
+            try:
+                product = MarketplaceProduct.objects.get(id=product_data['id'])
+                if product.discounted_price and product.listed_price > 0:
+                    discount_pct = ((product.listed_price - product.discounted_price) / product.listed_price) * 100
+                    product_data['discount_percentage'] = round(discount_pct, 1)
+                    product_data['savings_amount'] = round(product.listed_price - product.discounted_price, 2)
+                else:
+                    product_data['discount_percentage'] = 0
+                    product_data['savings_amount'] = 0
+            except MarketplaceProduct.DoesNotExist:
+                product_data['discount_percentage'] = 0
+                product_data['savings_amount'] = 0
+            
+            results.append(product_data)
+        
+        return Response({
+            'results': results,
+            'count': len(results),
+            'timestamp': timezone.now().isoformat(),
+            'type': 'best_discounts'
+        })
+
+    @action(detail=False, methods=['get'])
+    def seasonal_deals(self, request):
+        """
+        Get seasonal deals and special promotional products
+        """
+        now = timezone.now()
+        
+        # Products with active offers or discounts
+        queryset = self.get_queryset().filter(
+            Q(discounted_price__isnull=False) |
+            (
+                Q(offer_start__isnull=False) & 
+                Q(offer_end__isnull=False) &
+                Q(offer_start__lte=now) &
+                Q(offer_end__gte=now)
+            )
+        )
+        
+        # Filter by season/duration if specified
+        duration = request.query_params.get('duration', 'week')
+        if duration == 'today':
+            end_time = now + timedelta(days=1)
+        elif duration == 'week':
+            end_time = now + timedelta(days=7)
+        elif duration == 'month':
+            end_time = now + timedelta(days=30)
+        else:
+            end_time = now + timedelta(days=7)
+        
+        # Filter offers ending within the specified duration
+        queryset = queryset.filter(
+            Q(offer_end__isnull=True) |  # No end date (permanent discount)
+            Q(offer_end__lte=end_time)   # Ending within specified duration
+        ).order_by('-trending_score')
+        
+        # Apply category filter
+        category = request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(product__category__icontains=category)
+        
+        # Limit results
+        limit = request.query_params.get('limit', 20)
+        try:
+            limit = int(limit)
+            queryset = queryset[:limit]
+        except (ValueError, TypeError):
+            queryset = queryset[:20]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'count': len(serializer.data),
+            'timestamp': timezone.now().isoformat(),
+            'type': 'seasonal_deals',
+            'duration': duration
+        })
+
+    @action(detail=False, methods=['get'])
+    def deal_categories(self, request):
+        """
+        Get categories with the most deals and their statistics
+        """
+        now = timezone.now()
+        
+        # Get categories with active deals
+        categories_with_deals = MarketplaceProduct.objects.filter(
+            is_available=True
+        ).filter(
+            Q(discounted_price__isnull=False) |
+            (
+                Q(offer_start__isnull=False) & 
+                Q(offer_end__isnull=False) &
+                Q(offer_start__lte=now) &
+                Q(offer_end__gte=now)
+            )
+        ).values(
+            category_name=F('product__category')
+        ).annotate(
+            deal_count=Count('id'),
+            avg_discount=Avg(
+                Case(
+                    When(
+                        discounted_price__isnull=False,
+                        then=((F('listed_price') - F('discounted_price')) / F('listed_price')) * 100
+                    ),
+                    default=0,
+                    output_field=FloatField()
+                )
+            ),
+            max_discount=Max(
+                Case(
+                    When(
+                        discounted_price__isnull=False,
+                        then=((F('listed_price') - F('discounted_price')) / F('listed_price')) * 100
+                    ),
+                    default=0,
+                    output_field=FloatField()
+                )
+            ),
+            total_savings=Sum(
+                Case(
+                    When(
+                        discounted_price__isnull=False,
+                        then=F('listed_price') - F('discounted_price')
+                    ),
+                    default=0,
+                    output_field=FloatField()
+                )
+            )
+        ).order_by('-deal_count', '-avg_discount')[:10]
+        
+        return Response({
+            'results': list(categories_with_deals),
+            'count': len(categories_with_deals),
+            'timestamp': timezone.now().isoformat(),
+            'type': 'deal_categories'
+        })
+
+    @action(detail=False, methods=['get'])
+    def deal_stats(self, request):
+        """
+        Get comprehensive statistics about current deals
+        """
+        now = timezone.now()
+        queryset = self.get_queryset()
+        
+        # Count different types of deals
+        total_deals = queryset.filter(
+            Q(discounted_price__isnull=False) |
+            (
+                Q(offer_start__isnull=False) & 
+                Q(offer_end__isnull=False) &
+                Q(offer_start__lte=now) &
+                Q(offer_end__gte=now)
+            )
+        ).count()
+        
+        discount_deals = queryset.filter(discounted_price__isnull=False).count()
+        
+        active_offers = queryset.filter(
+            offer_start__isnull=False,
+            offer_end__isnull=False,
+            offer_start__lte=now,
+            offer_end__gte=now
+        ).count()
+        
+        # Calculate average discount
+        avg_discount_info = queryset.filter(
+            discounted_price__isnull=False,
+            listed_price__gt=0
+        ).aggregate(
+            avg_discount=Avg(
+                ((F('listed_price') - F('discounted_price')) / F('listed_price')) * 100,
+                output_field=FloatField()
+            ),
+            max_discount=Max(
+                ((F('listed_price') - F('discounted_price')) / F('listed_price')) * 100,
+                output_field=FloatField()
+            ),
+            total_savings=Sum(
+                F('listed_price') - F('discounted_price'),
+                output_field=FloatField()
+            )
+        )
+        
+        # Flash sales ending soon (within 24 hours)
+        tomorrow = now + timedelta(days=1)
+        flash_sales_count = queryset.filter(
+            offer_start__isnull=False,
+            offer_end__isnull=False,
+            offer_start__lte=now,
+            offer_end__gte=now,
+            offer_end__lte=tomorrow
+        ).count()
+        
+        stats_data = {
+            'total_deals': total_deals,
+            'discount_deals': discount_deals,
+            'active_offers': active_offers,
+            'flash_sales_ending_soon': flash_sales_count,
+            'average_discount_percentage': round(avg_discount_info['avg_discount'] or 0, 2),
+            'maximum_discount_percentage': round(avg_discount_info['max_discount'] or 0, 2),
+            'total_savings_amount': round(avg_discount_info['total_savings'] or 0, 2),
+            'deals_percentage': round((total_deals / queryset.count() * 100) if queryset.count() > 0 else 0, 2)
+        }
+        
+        return Response({
+            'stats': stats_data,
+            'timestamp': timezone.now().isoformat(),
+            'type': 'deal_statistics'
+        })
