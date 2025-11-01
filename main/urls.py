@@ -43,6 +43,8 @@ from market.views import (
     cancel_marketplace_order,
     create_order,
 )
+from market.trending_views import TrendingProductsViewSet
+from market.trending_api_views import track_product_view, trending_summary
 from producer.views import (
     AuditLogViewSet,
     CityListView,
@@ -103,6 +105,7 @@ router.register(r"orders", OrderViewSet)
 router.register(r"sales", SaleViewSet)
 router.register(r"stocklist", StockListView)
 router.register(r"marketplace", MarketplaceProductViewSet, basename="marketplace")
+router.register(r"marketplace-trending", TrendingProductsViewSet, basename="marketplace-trending")
 router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, basename="marketplace-user-products")
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
@@ -256,6 +259,10 @@ urlpatterns = [
     path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
     path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
     path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
+
+    # Trending Products API endpoints
+    path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),
+    path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
