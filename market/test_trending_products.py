@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from producer.models import Producer, Product, MarketplaceProduct
-from market.models import Purchase
+from market.models import MarketplaceSale
 from market.trending_utils import TrendingProductUtils
 
 

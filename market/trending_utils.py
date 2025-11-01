@@ -35,18 +35,18 @@ class TrendingProductUtils:
         _ = MarketplaceProduct.objects.all().update(recent_purchases_count=0)
         
         # Update with current counts
-        from market.models import Purchase
-        recent_purchases = Purchase.objects.filter(
-            purchase_date__gte=day_ago
+        from market.models import MarketplaceSale
+        recent_sales = MarketplaceSale.objects.filter(
+            sale_date__gte=day_ago
         ).values('product_id').annotate(
             count=Count('id')
         )
         
-        for purchase_data in recent_purchases:
+        for sale_data in recent_sales:
             _ = MarketplaceProduct.objects.filter(
-                id=purchase_data['product_id']
+                id=sale_data['product_id']
             ).update(
-                recent_purchases_count=purchase_data['count']
+                recent_purchases_count=sale_data['count']
             )
     
     @staticmethod
@@ -65,9 +65,9 @@ class TrendingProductUtils:
         
         weekly_sales = 0
         try:
-            from market.models import Purchase
-            weekly_sales = Purchase.objects.filter(
-                purchase_date__gte=week_ago
+            from market.models import MarketplaceSale
+            weekly_sales = MarketplaceSale.objects.filter(
+                sale_date__gte=week_ago
             ).count()
         except ImportError:
             weekly_sales = 0

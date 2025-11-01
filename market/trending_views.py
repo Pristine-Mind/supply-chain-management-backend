@@ -1,4 +1,4 @@
-from django.db.models import Count, F, Q, Avg, Case, When, Window, FloatField, Min, Max
+from django.db.models import Count, F, Q, Avg, Case, When, Window, FloatField, Min, Max, Value, CharField
 from django.db.models.functions import Rank, Coalesce
 from django.utils import timezone
 from datetime import timedelta
@@ -32,19 +32,19 @@ class TrendingProductsManager:
         return queryset.annotate(
             # Recent sales metrics
             recent_sales_count=Count(
-                'product__purchase', 
-                filter=Q(product__purchase__purchase_date__gte=day_ago)
+                'sales', 
+                filter=Q(sales__sale_date__gte=day_ago)
             ),
             weekly_sales_count=Count(
-                'product__purchase',
-                filter=Q(product__purchase__purchase_date__gte=week_ago)
+                'sales',
+                filter=Q(sales__sale_date__gte=week_ago)
             ),
-            total_sales=Count('product__purchase'),
+            total_sales=Count('sales'),
             
             # View metrics
             weekly_view_count=Count(
-                'product__productview',
-                filter=Q(product__productview__viewed_at__gte=week_ago)
+                'views',
+                filter=Q(views__timestamp__gte=week_ago)
             ),
             
             # Sales velocity (sales per day over last week)
@@ -64,28 +64,32 @@ class TrendingProductsManager:
                 output_field=FloatField()
             ),
             
-            # Calculate final trending score (without complex recency calculation)
+            # Calculate final trending score (with explicit type casting)
             trending_score=Case(
                 When(
                     is_available=True,
                     then=(
-                        # Recent purchases weight (50%)
-                        (F('recent_purchases_count') * 3 + F('weekly_sales_count')) * 0.5 +
-                        # View count weight (30%)
-                        (F('view_count') / 100.0) * 0.3 +
-                        # Rating weight (20%)
-                        (Coalesce(F('rank_score'), 0) / 5.0) * 0.2
+                        # Recent purchases weight (50%) - cast to float
+                        (F('recent_purchases_count') * 3.0 + F('weekly_sales_count') * 1.0) * 0.5 +
+                        # View count weight (30%) - cast to float
+                        (F('view_count') * 1.0 / 100.0) * 0.3 +
+                        # Rating weight (20%) - cast to float
+                        (Coalesce(F('rank_score'), 0.0) / 5.0) * 0.2
                     )
                 ),
                 default=0.0,
                 output_field=FloatField()
             ),
             
-            # Price trend indicator
+            # Price trend indicator (simplified)
             price_trend=Case(
-                When(discounted_price__isnull=False, then='decreasing'),
-                When(is_offer_active=True, then='promotional'),
-                default='stable'
+                When(discounted_price__isnull=False, then=Value('decreasing')),
+                When(
+                    Q(offer_start__isnull=False) & Q(offer_end__isnull=False), 
+                    then=Value('promotional')
+                ),
+                default=Value('stable'),
+                output_field=CharField()
             )
         ).annotate(
             # Add ranking based on trending score
@@ -105,16 +109,16 @@ class TrendingProductsManager:
         return MarketplaceProduct.objects.filter(
             is_available=True
         ).values(
-            category_name=F('product__category__name')
+            category_name=F('product__category')
         ).annotate(
             product_count=Count('id'),
-            total_sales=Count('product__purchase'),
+            total_sales=Count('sales'),
             weekly_sales=Count(
-                'product__purchase',
-                filter=Q(product__purchase__purchase_date__gte=week_ago)
+                'sales',
+                filter=Q(sales__sale_date__gte=week_ago)
             ),
             avg_rating=Avg('rank_score'),
-            trending_score=F('weekly_sales') * 2 + F('product_count') * 0.5
+            trending_score=F('weekly_sales') * 2.0 + F('product_count') * 0.5
         ).order_by('-trending_score')[:10]
 
 
@@ -134,8 +138,7 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         ).select_related(
             'product', 
             'product__user', 
-            'product__user__user_profile',
-            'product__category'
+            'product__user__user_profile'
         ).prefetch_related(
             'bulk_price_tiers', 
             'variants', 
