@@ -1,8 +1,8 @@
+import logging
 import math
 import statistics
 from collections import defaultdict
 from datetime import timedelta
-import logging
 
 from celery import shared_task
 from django.db.models import Sum, functions
@@ -40,7 +40,7 @@ def recalc_inventory_parameters():
     """
     try:
         logger.info("Starting inventory parameters recalculation...")
-        
+
         today = timezone.localdate()
         cutoff_90 = today - timedelta(days=90)
         cutoff_14 = today - timedelta(days=14)
@@ -58,7 +58,9 @@ def recalc_inventory_parameters():
 
         # Bulk 14-day burn aggregated by product
         burn_14 = (
-            Sale.objects.filter(sale_date__date__gte=cutoff_14).values("order__product_id").annotate(total_sold=Sum("quantity"))
+            Sale.objects.filter(sale_date__date__gte=cutoff_14)
+            .values("order__product_id")
+            .annotate(total_sold=Sum("quantity"))
         )
         burn_map = {row["order__product_id"]: row["total_sold"] for row in burn_14}
 
@@ -98,15 +100,17 @@ def recalc_inventory_parameters():
                     ]
                 )
                 products_updated += 1
-                
+
             except Exception as e:
                 logger.error(f"Error updating product {p.id}: {e}")
                 products_with_errors += 1
                 continue
 
-        logger.info(f"Inventory parameters recalculation completed. Updated: {products_updated}, Errors: {products_with_errors}")
+        logger.info(
+            f"Inventory parameters recalculation completed. Updated: {products_updated}, Errors: {products_with_errors}"
+        )
         return f"Updated {products_updated} products successfully, {products_with_errors} errors"
-        
+
     except Exception as e:
         logger.error(f"Critical error in recalc_inventory_parameters: {e}")
         raise

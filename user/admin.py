@@ -17,7 +17,7 @@ from .admin_permissions import (
     RoleBasedModelAdminMixin,
     UserAdminMixin,
 )
-from .models import Contact, Role, UserProfile
+from .models import Contact, LoginAttempt, Role, UserProfile
 
 User = get_user_model()
 
@@ -165,6 +165,58 @@ class ContactAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(LoginAttempt)
+class LoginAttemptAdmin(admin.ModelAdmin):
+    """
+    Admin interface for monitoring login attempts and security.
+    """
+
+    list_display = ["timestamp", "ip_address", "username", "user", "attempt_type", "user_agent_short"]
+    list_filter = [
+        "attempt_type",
+        "timestamp",
+        ("timestamp", admin.DateFieldListFilter),
+    ]
+    search_fields = ["ip_address", "username", "user__username", "user_agent"]
+    readonly_fields = ["timestamp", "ip_address", "username", "user", "attempt_type", "user_agent"]
+    ordering = ["-timestamp"]
+    list_per_page = 50
+
+    def user_agent_short(self, obj):
+        """Display shortened user agent string"""
+        if obj.user_agent:
+            return obj.user_agent[:100] + "..." if len(obj.user_agent) > 100 else obj.user_agent
+        return "N/A"
+
+    user_agent_short.short_description = "User Agent"
+
+    def has_add_permission(self, request):
+        """Prevent manual addition of login attempts"""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Prevent editing of login attempts"""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Allow deletion for cleanup purposes"""
+        return request.user.is_superuser
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related for user"""
+        return super().get_queryset(request).select_related("user")
+
+    actions = ["delete_selected"]
+
+    def delete_selected(self, request, queryset):
+        """Custom delete action with confirmation"""
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f"Successfully deleted {count} login attempts.")
+
+    delete_selected.short_description = "Delete selected login attempts"
 
 
 admin.site.site_header = "Mulya Bazzar Admin"

@@ -478,7 +478,9 @@ class MarketplaceProduct(models.Model):
     offer_start = models.DateTimeField(null=True, blank=True, verbose_name=_("Offer Start"))
     offer_end = models.DateTimeField(null=True, blank=True, verbose_name=_("Offer End"))
     estimated_delivery_days = models.PositiveIntegerField(null=True, blank=True, verbose_name=_("Estimated Delivery Days"))
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name=_("Shipping Cost"))
+    shipping_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
+    )
     recent_purchases_count = models.PositiveIntegerField(
         default=0,
         verbose_name=_("Recent Purchases (24h)"),
@@ -519,7 +521,7 @@ class MarketplaceProduct(models.Model):
     def price(self):
         """Return the effective price (discounted price if available, otherwise listed price)"""
         effective_price = self.discounted_price if self.discounted_price else self.listed_price
-        return Decimal(str(effective_price)) if effective_price is not None else Decimal('0')
+        return Decimal(str(effective_price)) if effective_price is not None else Decimal("0")
 
     @property
     def savings_amount(self):

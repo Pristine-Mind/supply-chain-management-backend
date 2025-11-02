@@ -1,5 +1,6 @@
-import requests
 import logging
+
+import requests
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import OuterRef, QuerySet, Subquery
@@ -1072,30 +1073,23 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
     def search_by_order_number(self, request):
         """Search for an order by order number."""
         order_number = request.query_params.get("order_number")
-        
+
         if not order_number:
-            return Response(
-                {"error": "order_number parameter is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"error": "order_number parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             order = (
-                MarketplaceOrder.objects
-                .filter(customer=request.user, order_number=order_number, is_deleted=False)
+                MarketplaceOrder.objects.filter(customer=request.user, order_number=order_number, is_deleted=False)
                 .select_related("delivery", "customer")
                 .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
                 .get()
             )
-            
+
             serializer = self.get_serializer(order)
             return Response(serializer.data)
-            
+
         except MarketplaceOrder.DoesNotExist:
-            return Response(
-                {"error": "Order not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=["post"])
     @extend_schema(
@@ -1106,13 +1100,13 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
                 "type": "object",
                 "properties": {
                     "order_status": {
-                        "type": "string", 
+                        "type": "string",
                         "description": "New order status",
-                        "enum": ["confirmed", "processing", "shipped", "in_transit", "delivered", "completed"]
+                        "enum": ["confirmed", "processing", "shipped", "in_transit", "delivered", "completed"],
                     },
-                    "message": {"type": "string", "description": "Status update message"}
+                    "message": {"type": "string", "description": "Status update message"},
                 },
-                "required": ["order_status"]
+                "required": ["order_status"],
             }
         },
     )
@@ -1121,36 +1115,33 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
         order = self.get_object()
         new_status = request.data.get("order_status")
         message = request.data.get("message", "")
-        
+
         # Check permissions - only sellers of items in the order or admin can update
         user = request.user
         is_seller = order.items.filter(product__product__user=user).exists()
         is_admin = user.is_staff or user.is_superuser
-        
+
         if not (is_seller or is_admin):
             return Response(
-                {"error": "Permission denied. Only sellers or admin can update order status."}, 
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "Permission denied. Only sellers or admin can update order status."},
+                status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         # Validate status transition
         if new_status not in [choice[0] for choice in OrderStatus.choices]:
-            return Response(
-                {"error": "Invalid order status"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"error": "Invalid order status"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             # Update order status
             old_status = order.order_status
             order.order_status = new_status
-            
+
             # Special handling for delivered status
             if new_status == OrderStatus.DELIVERED:
                 order.delivered_at = timezone.now()
-            
+
             order.save()
-            
+
             # Create tracking event
             OrderTrackingEvent.objects.create(
                 marketplace_order=order,
@@ -1161,18 +1152,18 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
                     "previous_status": old_status,
                     "is_seller_update": is_seller,
                     "is_admin_update": is_admin,
-                }
+                },
             )
-            
+
             # Send notifications to customer and sellers
-            from .utils import notify_event
             from .models import Notification
-            
+            from .utils import notify_event
+
             try:
                 # Notify customer
                 status_display = order.get_order_status_display()
                 customer_msg = f"📦 Your order #{order.order_number} status updated to: {status_display}"
-                
+
                 notify_event(
                     user=order.customer,
                     notif_type=Notification.Type.ORDER,
@@ -1184,15 +1175,15 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
                     email_ctx={"order": order, "old_status": old_status, "new_status": new_status},
                     via_sms=False,
                 )
-                
+
                 # Notify sellers (except the one who updated)
                 sellers = set()
                 for item in order.items.all():
-                    if hasattr(item.product, 'product') and hasattr(item.product.product, 'user'):
+                    if hasattr(item.product, "product") and hasattr(item.product.product, "user"):
                         seller_user = item.product.product.user
                         if seller_user != user:  # Don't notify the seller who made the update
                             sellers.add(seller_user)
-                
+
                 for seller in sellers:
                     seller_msg = f"📦 Order #{order.order_number} status updated to: {status_display}"
                     notify_event(
@@ -1206,22 +1197,21 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
                         email_ctx={"order": order, "old_status": old_status, "new_status": new_status},
                         via_sms=False,
                     )
-                        
+
             except Exception as e:
                 logger.error(f"Error sending status update notifications: {str(e)}")
-            
+
             serializer = self.get_serializer(order)
-            return Response({
-                "success": True,
-                "message": f"Order status updated to {order.get_order_status_display()}",
-                "order": serializer.data
-            })
-            
-        except Exception as e:
             return Response(
-                {"error": f"Failed to update order status: {str(e)}"}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "success": True,
+                    "message": f"Order status updated to {order.get_order_status_display()}",
+                    "order": serializer.data,
+                }
             )
+
+        except Exception as e:
+            return Response({"error": f"Failed to update order status: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
     @extend_schema(

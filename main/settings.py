@@ -18,7 +18,7 @@ from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
+# Read .env file
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
     DJANGO_SECRET_KEY=str,
@@ -41,11 +41,19 @@ env = environ.Env(
     CELERY_REDIS_URL=str,
     CACHE_REDIS_URL=str,
     BREVO_API_KEY=str,
+    KHALTI_SECRET_KEY=str,
 )
+
+# Read environment variables from .env file
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 
 DEBUG = env("DJANGO_DEBUG")
+
+# Print DEBUG status for verification (remove in production)
+print(f"🔧 DEBUG setting loaded: {DEBUG} (type: {type(DEBUG)})")
+
 ALLOWED_HOSTS = [
     "localhost",
     "0.0.0.0",
@@ -83,11 +91,17 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "main.security_middleware.SecurityHeadersMiddleware",  # Custom security headers
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "main.middleware.RateLimitMiddleware",  # Rate limiting for login protection
+    "main.middleware.LoginProtectionMiddleware",  # Login attempt tracking and cleanup
+    # "main.security_middleware.APIKeyValidationMiddleware",  # API key validation
+    "main.security_middleware.FileUploadSecurityMiddleware",  # File upload security
+    "main.security_middleware.DataSanitizationMiddleware",  # Input sanitization
     "main.middleware.EnsureSessionKeyMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -133,12 +147,30 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {
+            "min_length": 12,
+        },
     },
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+    {
+        "NAME": "main.validators.CustomPasswordValidator",
+        "OPTIONS": {
+            "min_length": 12,
+        },
+    },
+    {
+        "NAME": "main.validators.PasswordHistoryValidator",
+        "OPTIONS": {
+            "history_count": 5,
+        },
+    },
+    {
+        "NAME": "main.validators.PasswordStrengthValidator",
     },
 ]
 
@@ -151,16 +183,30 @@ USE_I18N = True
 
 USE_TZ = True
 
-STATIC_URL = env("DJANGO_STATIC_URL")
-MEDIA_URL = env("DJANGO_MEDIA_URL")
+# ============================================================================
+# STATIC FILES CONFIGURATION
+# Unified configuration for Django and Celery environments
+# ============================================================================
 
-# In development, we serve additional static files from the 'static' directory.
-# In production, leave STATICFILES_DIRS empty to avoid including STATIC_ROOT.
-if DEBUG:
-    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
-else:
-    STATICFILES_DIRS = []
+STATIC_URL = '/static/'
+MEDIA_URL = '/media/'
 
+# Static files directories - unified path for all environments
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, "assets", "static"),  # Primary static files location
+]
+
+# Static files finders - consistent order for all environments
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
+# Unified static and media roots - same path for production and Celery
+STATIC_ROOT = os.path.join(BASE_DIR, 'assets', 'staticfiles')  # Unified location
+MEDIA_ROOT = os.path.join(BASE_DIR, 'assets', 'media')         # Consistent with existing
+
+# Static files storage - consistent configuration
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -170,23 +216,61 @@ STORAGES = {
     },
 }
 
-STATIC_ROOT = env("DJANGO_STATIC_ROOT")
-MEDIA_ROOT = env("DJANGO_MEDIA_ROOT")
+# Environment-specific static file handling
+if not DEBUG:
+    # Production mode - ensure static files are collected
+    import os
+    if not os.path.exists(STATIC_ROOT):
+        os.makedirs(STATIC_ROOT, exist_ok=True)
+        print("� Created static files directory")
+    
+    # Check if static files need to be collected
+    if not os.listdir(STATIC_ROOT):
+        print("⚠️  Static files not found in production mode!")
+        print(f"   Run: python manage.py collectstatic --noinput")
+        print(f"   Static files will be collected to: {STATIC_ROOT}")
+else:
+    # Development mode - serve directly from source
+    print(f"🔧 Development mode: serving static files from {STATICFILES_DIRS[0]}")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ORIGIN_WHITELIST = ("http://localhost:3000", "http://localhost:5173")
+CORS_ALLOW_ALL_ORIGINS = False
+
+# Define specific allowed origins
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
+    "https://appmulyabazzar.com",
+    "https://www.appmulyabazzar.com",
+    "https://admin.appmulyabazzar.com",
 ]
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
+
+# For development only
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.extend(
+        [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+    )
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.appmulyabazzar\.com$",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-api-key",  # For API key authentication
 ]
 # CORS_URLS_REGEX = r"(^/media/.*$)|(^/graphql/$)"
 # CORS_ALLOW_METHODS = (
@@ -290,17 +374,24 @@ CELERY_BEAT_SCHEDULE = {
         "task": "transport.celery_tasks.periodic_estimate_updates",
         "schedule": crontab(minute=0, hour="*/6"),  # Every 6 hours
     },
+    # User security tasks
+    "cleanup-expired-login-attempts": {
+        "task": "user.tasks.cleanup_login_attempts_task",
+        "schedule": crontab(minute=0, hour=3),  # Daily at 3 AM
+    },
+    "security-stats-generation": {
+        "task": "user.tasks.get_login_security_stats_task",
+        "schedule": crontab(minute=0, hour=8),  # Daily at 8 AM
+    },
 }
 
 SITE_URL = "https://appmulyabazzar.com"
 
-KHALTI_SECRET_KEY = "dc7b150742684eb69eeeec8f30b32f5c"
-KHALTI_BASE_URL = "https://dev.khalti.com/api/v2/"
+KHALTI_SECRET_KEY = env("KHALTI_SECRET_KEY")
+KHALTI_BASE_URL = "https://khalti.com/api/v2/"
 KHALTI_WEBSITE_URL = ""
 KHALTI_RETURN_URL = "https://appmulyabazzar.com/payment/success/"
 
-KHALTI_TEST_MOBILE_NUMBER = "9800000001"
-KHALTI_TEST_PIN = "TEST:sT5q2KNH4IGrfCBWkV9L"
 
 SMS_TOKEN = os.environ.get("SMS_TOKEN")
 SMS_API_URL = os.environ.get("SMS_API_URL")
@@ -322,10 +413,51 @@ SPARROWSMS_ENDPOINT = os.environ.get("SPARROWSMS_ENDPOINT")
 EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 ANYMAIL = {
-    "BREVO_API_KEY": os.environ.get("BREVO_API_KEY"),
-    "TRACKING_OPENS": True,
-    "TRACKING_CLICKS": True,
+    "BREVO_API_KEY": env("BREVO_API_KEY"),
 }
+
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+
+# Session Security
+SESSION_COOKIE_SECURE = not DEBUG  # HTTPS only in production
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access
+SESSION_COOKIE_SAMESITE = "Lax"  # CSRF protection
+SESSION_COOKIE_AGE = 3600  # 1 hour session timeout
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# CSRF Security
+CSRF_COOKIE_SECURE = not DEBUG  # HTTPS only in production
+CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access
+CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_USE_SESSIONS = True  # Store CSRF token in session
+
+# Security Headers (Django built-in)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0  # 1 year HSTS in production
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# File Upload Security
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
+FILE_UPLOAD_PERMISSIONS = 0o644
+
+# Login Protection Settings
+LOGIN_ATTEMPT_LIMIT = 3  # Max failed attempts before account lockout
+LOGIN_ATTEMPT_TIMEOUT = 900  # 15 minutes lockout duration
+IP_RATE_LIMIT = 10  # Max requests per IP in time window
+IP_RATE_LIMIT_WINDOW = 300  # 5 minute window for IP rate limiting
+
+# API Security
+API_KEY_HEADER = "X-API-Key"
+SENSITIVE_ENDPOINTS = [
+    "/admin/",
+    "/api/v1/payments/",
+    "/api/v1/user-profile/",
+]
 
 DEFAULT_FROM_EMAIL = "mulyabazzar@gmail.com"
 
@@ -343,3 +475,160 @@ APNS_KEY_ID = os.environ.get("APNS_KEY_ID")
 APNS_KEY_PATH = os.environ.get("APNS_KEY_PATH")
 APNS_BUNDLE_ID = os.environ.get("APNS_BUNDLE_ID")
 APNS_USE_SANDBOX = os.environ.get("APNS_USE_SANDBOX", "True").lower() == "true"
+
+# if not DEBUG:
+#     SECURE_SSL_REDIRECT = True
+#     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Additional security configuration
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": True,  # Disable all existing loggers
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+        "security": {
+            "format": "[SECURITY] {asctime} {levelname} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "security_file": {
+            "level": "WARNING",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs", "security.log"),
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+            "formatter": "security",
+        },
+        "console": {
+            "level": "DEBUG" if DEBUG else "CRITICAL",  # Only show CRITICAL logs in production
+            "class": "logging.StreamHandler",
+            "formatter": "verbose" if DEBUG else "simple",
+        },
+        "null": {
+            "class": "logging.NullHandler",
+        },
+    },
+    "root": {
+        "level": "INFO" if DEBUG else "CRITICAL",
+        "handlers": ["console"] if DEBUG else ["null"],
+    },
+    "loggers": {
+        # Django core loggers
+        "django": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "INFO" if DEBUG else "CRITICAL",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "CRITICAL",
+            "propagate": False,
+        },
+        "django.db.backends": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "CRITICAL",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "INFO" if DEBUG else "CRITICAL",
+            "propagate": False,
+        },
+        # Third-party loggers
+        "rest_framework": {
+            "handlers": ["null"],
+            "level": "CRITICAL",
+            "propagate": False,
+        },
+        "celery": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "INFO" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "corsheaders": {
+            "handlers": ["null"],
+            "level": "CRITICAL",
+            "propagate": False,
+        },
+        # Application loggers
+        "user": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "market": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "producer": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "transport": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "payment": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        "notification": {
+            "handlers": ["console"] if DEBUG else ["null"],
+            "level": "DEBUG" if DEBUG else "ERROR",
+            "propagate": False,
+        },
+        # Security loggers (always active)
+        "security": {
+            "handlers": ["security_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "main.security_middleware": {
+            "handlers": ["security_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "main.middleware": {
+            "handlers": ["security_file"] if not DEBUG else ["security_file", "console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+
+# ============================================================================
+# UNIFIED PATH CONFIGURATION FOR DJANGO AND CELERY
+# ============================================================================
+
+# Ensure all file paths are consistent across Django and Celery workers
+FILE_PATHS = {
+    'STATIC_ROOT': STATIC_ROOT,
+    'MEDIA_ROOT': MEDIA_ROOT,
+    'STATIC_URL': STATIC_URL,
+    'MEDIA_URL': MEDIA_URL,
+    'STATICFILES_DIRS': STATICFILES_DIRS,
+}
+
+# Print configuration for verification
+print("📋 Unified File Path Configuration:")
+print(f"   STATIC_ROOT: {STATIC_ROOT}")
+print(f"   MEDIA_ROOT: {MEDIA_ROOT}")
+print(f"   STATIC_URL: {STATIC_URL}")
+print(f"   MEDIA_URL: {MEDIA_URL}")
+print(f"   STATICFILES_DIRS: {STATICFILES_DIRS}")
+
+# Celery-specific static file handling
+CELERY_STATIC_ROOT = STATIC_ROOT
+CELERY_MEDIA_ROOT = MEDIA_ROOT

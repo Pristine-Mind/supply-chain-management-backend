@@ -1,3 +1,5 @@
+import logging
+
 import requests
 from celery import shared_task
 from django.conf import settings
@@ -5,7 +7,6 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from requests.exceptions import RequestException
-import logging
 
 from producer.models import Order, Sale
 
@@ -30,9 +31,9 @@ def send_email(self, to_email, subject, template_name, context):
                 context["order_obj"] = Order.objects.get(id=context["order_id"])
             except Order.DoesNotExist:
                 context["order_obj"] = None
-        
+
         html_message = render_to_string(template_name, context)
-        
+
         # Try sending email
         _ = send_mail(
             subject=subject,
@@ -42,26 +43,26 @@ def send_email(self, to_email, subject, template_name, context):
             html_message=html_message,
             fail_silently=False,
         )
-        
+
         logger.info(f"Email sent successfully to {to_email} with subject: {subject}")
         return f"Email sent successfully to {to_email}"
-        
+
     except Exception as e:
         error_msg = str(e).lower()
-        
+
         # Check for SendGrid-specific errors that might be temporary
-        if any(keyword in error_msg for keyword in ['maximum credits exceeded', 'rate limit', 'temporary', 'timeout']):
+        if any(keyword in error_msg for keyword in ["maximum credits exceeded", "rate limit", "temporary", "timeout"]):
             logger.warning(f"Temporary email error for {to_email}: {e}")
             if self.request.retries < self.max_retries:
                 # Exponential backoff: 5min, 10min, 20min
-                countdown = 300 * (2 ** self.request.retries)
+                countdown = 300 * (2**self.request.retries)
                 raise self.retry(exc=e, countdown=countdown)
             else:
                 logger.error(f"Email failed permanently after {self.max_retries} retries to {to_email}: {e}")
         else:
             # Log permanent errors (like invalid email, template not found, etc.)
             logger.error(f"Email error (non-retryable) to {to_email}: {e}")
-        
+
         # Don't raise the exception - just log it and continue
         # This prevents the entire payment process from failing due to email issues
         return f"Email failed to {to_email}: {str(e)}"
@@ -130,15 +131,20 @@ def send_sms(self, to_number: str, body: str) -> dict:
     # For known temporary errors (like 1001), retry
     if code in ["1001"] and self.request.retries < self.max_retries:
         raise self.retry(exc=Exception(f"SparrowSMS temporary error: {result}"), countdown=60)
-    
+
     # For unknown errors that might be temporary, also retry
     if result["code"] != 200 and code not in mapping and self.request.retries < self.max_retries:
         raise self.retry(exc=Exception(f"SparrowSMS unknown error: {result}"), countdown=60)
-    
+
     # Log errors but don't raise exceptions to avoid breaking task chains
     if result["code"] != 200:
         logger.error(f"SMS failed to {to_number} after {self.max_retries} retries: {result}")
-        return {"code": result["code"], "status": "failed", "message": f"SMS failed: {result['message']}", "sms_code": result["sms_code"]}
+        return {
+            "code": result["code"],
+            "status": "failed",
+            "message": f"SMS failed: {result['message']}",
+            "sms_code": result["sms_code"],
+        }
 
     logger.info(f"SMS sent successfully to {to_number}")
     return result
@@ -152,6 +158,7 @@ def update_recent_purchases():
     """
     try:
         from django.core.management import call_command
+
         _ = call_command("update_recent_purchases")
         logger.info("Recent purchases updated successfully")
         return "Successfully updated recent purchases count"

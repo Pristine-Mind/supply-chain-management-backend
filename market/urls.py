@@ -9,6 +9,8 @@ from drf_spectacular.views import (
 )
 from rest_framework.routers import DefaultRouter
 
+from market.trending_api_views import track_product_view, trending_summary
+from market.trending_views import TrendingProductsViewSet
 from market.views import (
     BidViewSet,
     CartCreateView,
@@ -43,8 +45,6 @@ from market.views import (
     verify_khalti_payment,
     verify_payment,
 )
-from market.trending_views import TrendingProductsViewSet
-from market.trending_api_views import track_product_view, trending_summary
 from producer.views import (
     AuditLogViewSet,
     CityListView,
@@ -252,7 +252,6 @@ urlpatterns = [
     path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
     path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
     path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
-    
     # Trending Products API endpoints
     path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
