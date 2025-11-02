@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -58,8 +61,42 @@ class LoginAPIView(APIView):
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
+
+        # Get client IP address
+        ip_address = self.get_client_ip(request)
+        user_agent = request.META.get("HTTP_USER_AGENT", "")
+
+        # Import here to avoid circular import
+        from .models import LoginAttempt
+
+        # Check if user is currently locked out
+        if username and LoginAttempt.is_user_locked(username, max_attempts=3, minutes=15):
+            remaining_time = LoginAttempt.get_lockout_time_remaining(username, minutes=15)
+            return Response(
+                {
+                    "error": "Account temporarily locked due to too many failed login attempts.",
+                    "retry_after": remaining_time,
+                    "locked_until": (timezone.now() + timedelta(seconds=remaining_time)).isoformat(),
+                },
+                status=status.HTTP_423_LOCKED,
+            )
+
+        # Check if IP is blocked
+        if LoginAttempt.is_ip_blocked(ip_address, max_attempts=10, minutes=15):
+            return Response(
+                {
+                    "error": "Too many failed login attempts from this IP address. Please try again later.",
+                    "retry_after": 900,  # 15 minutes
+                    "blocked_until": (timezone.now() + timedelta(minutes=15)).isoformat(),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Attempt authentication
         user = authenticate(request, username=username, password=password)
+
         if user is not None:
+            # Successful login - create token and return user info
             token, created = Token.objects.get_or_create(user=user)
 
             try:
@@ -78,7 +115,54 @@ class LoginAPIView(APIView):
                 }
             )
         else:
-            return Response({"error": "Invalid Credentials"}, status=status.HTTP_400_BAD_REQUEST)
+            # Failed login - record the attempt
+            LoginAttempt.record_failed_attempt(ip_address=ip_address, username=username, user_agent=user_agent)
+
+            # Check how many failed attempts this makes
+            failed_attempts = LoginAttempt.get_failed_attempts_for_user(username, minutes=15) if username else 0
+            ip_failed_attempts = LoginAttempt.get_failed_attempts_for_ip(ip_address, minutes=15)
+
+            # Customize error message based on attempt count
+            if failed_attempts >= 3:
+                remaining_time = LoginAttempt.get_lockout_time_remaining(username, minutes=15)
+                return Response(
+                    {
+                        "error": "Account temporarily locked due to too many failed login attempts.",
+                        "retry_after": remaining_time,
+                        "attempts_remaining": 0,
+                    },
+                    status=status.HTTP_423_LOCKED,
+                )
+            elif failed_attempts >= 2:
+                return Response(
+                    {
+                        "error": "Invalid credentials. Warning: Account will be locked after one more failed attempt.",
+                        "attempts_remaining": 1,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            elif ip_failed_attempts >= 8:
+                return Response(
+                    {
+                        "error": "Invalid credentials. Warning: IP address will be blocked after a few more failed attempts.",
+                        "attempts_remaining": 10 - ip_failed_attempts,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                return Response(
+                    {"error": "Invalid Credentials", "attempts_remaining": 3 - failed_attempts},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+    def get_client_ip(self, request):
+        """Get the client's IP address from the request."""
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(",")[0].strip()
+        else:
+            ip = request.META.get("REMOTE_ADDR")
+        return ip
 
 
 class LogoutAPIView(APIView):
@@ -196,6 +280,24 @@ class PhoneLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # Get client IP address
+        ip_address = self.get_client_ip(request)
+        user_agent = request.META.get("HTTP_USER_AGENT", "")
+
+        # Import here to avoid circular import
+        from .models import LoginAttempt
+
+        # Check if IP is blocked
+        if LoginAttempt.is_ip_blocked(ip_address, max_attempts=10, minutes=15):
+            return Response(
+                {
+                    "error": "Too many failed login attempts from this IP address. Please try again later.",
+                    "retry_after": 900,  # 15 minutes
+                    "blocked_until": (timezone.now() + timedelta(minutes=15)).isoformat(),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         serializer = PhoneLoginSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -203,11 +305,54 @@ class PhoneLoginView(APIView):
         phone_number = serializer.validated_data["phone_number"]
         otp = serializer.validated_data.get("otp")
 
+        # Check if user is currently locked out (using phone number as identifier)
+        if LoginAttempt.is_user_locked(phone_number, max_attempts=3, minutes=15):
+            remaining_time = LoginAttempt.get_lockout_time_remaining(phone_number, minutes=15)
+            return Response(
+                {
+                    "error": "Account temporarily locked due to too many failed login attempts.",
+                    "retry_after": remaining_time,
+                    "locked_until": (timezone.now() + timedelta(seconds=remaining_time)).isoformat(),
+                },
+                status=status.HTTP_423_LOCKED,
+            )
+
         # If OTP is provided, verify it
         if otp:
             is_valid, message = PhoneOTP.verify_otp(phone_number, otp)
             if not is_valid:
-                return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+                # Record failed attempt
+                LoginAttempt.record_failed_attempt(
+                    ip_address=ip_address, username=phone_number, user_agent=user_agent  # Use phone number as username
+                )
+
+                # Check how many failed attempts this makes
+                failed_attempts = LoginAttempt.get_failed_attempts_for_user(phone_number, minutes=15)
+                ip_failed_attempts = LoginAttempt.get_failed_attempts_for_ip(ip_address, minutes=15)
+
+                # Customize error message based on attempt count
+                if failed_attempts >= 3:
+                    remaining_time = LoginAttempt.get_lockout_time_remaining(phone_number, minutes=15)
+                    return Response(
+                        {
+                            "error": "Account temporarily locked due to too many failed login attempts.",
+                            "retry_after": remaining_time,
+                            "attempts_remaining": 0,
+                        },
+                        status=status.HTTP_423_LOCKED,
+                    )
+                elif failed_attempts >= 2:
+                    return Response(
+                        {
+                            "error": f"{message}. Warning: Account will be locked after one more failed attempt.",
+                            "attempts_remaining": 1,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                else:
+                    return Response(
+                        {"error": message, "attempts_remaining": 3 - failed_attempts}, status=status.HTTP_400_BAD_REQUEST
+                    )
 
         try:
             # Get the user profile with this phone number
@@ -227,7 +372,18 @@ class PhoneLoginView(APIView):
             )
 
         except UserProfile.DoesNotExist:
+            # Record failed attempt for non-existent user
+            LoginAttempt.record_failed_attempt(ip_address=ip_address, username=phone_number, user_agent=user_agent)
             return Response({"error": "No user found with this phone number."}, status=status.HTTP_404_NOT_FOUND)
+
+    def get_client_ip(self, request):
+        """Get the client's IP address from the request."""
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(",")[0].strip()
+        else:
+            ip = request.META.get("REMOTE_ADDR")
+        return ip
 
 
 class TransporterRegistrationAPIView(generics.CreateAPIView):

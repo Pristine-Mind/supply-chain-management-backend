@@ -9,6 +9,8 @@ from drf_spectacular.views import (
 )
 from rest_framework.routers import DefaultRouter
 
+from market.trending_api_views import track_product_view, trending_summary
+from market.trending_views import TrendingProductsViewSet
 from market.views import (
     BidViewSet,
     CartCreateView,
@@ -29,22 +31,19 @@ from market.views import (
     UserBidViewSet,
     UserCartView,
     UserFeedbackView,
+    cancel_marketplace_order,
+    create_order,
     create_purchase,
     log_interaction,
     log_product_view,
-    payment_confirmation,
-    shipping_address_form,
-    verify_khalti_payment,
-    verify_payment,
     marketplace_order_detail,
     my_marketplace_orders,
     payment_confirmation,
     reorder_marketplace_order,
-    cancel_marketplace_order,
-    create_order,
+    shipping_address_form,
+    verify_khalti_payment,
+    verify_payment,
 )
-from market.trending_views import TrendingProductsViewSet
-from market.trending_api_views import track_product_view, trending_summary
 from producer.views import (
     AuditLogViewSet,
     CityListView,
@@ -79,7 +78,6 @@ from producer.views import (
     sales_view,
     stats_dashboard,
 )
-
 from transport import views as transport_views
 from user.views import (
     BusinessRegisterView,
@@ -259,10 +257,39 @@ urlpatterns = [
     path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
     path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
     path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
-
     # Trending Products API endpoints
     path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
 ]
 
+# ============================================================================
+# UNIFIED STATIC FILE SERVING FOR PRODUCTION AND CELERY
+# ============================================================================
+
+# Serve media files in all environments (unified path)
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Serve static files with unified configuration for both DEBUG modes
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Additional robust static file serving for production environments
+if not settings.DEBUG:
+    from django.views.static import serve
+    from django.urls import re_path
+    
+    # Ensure static files are served even in production mode for development
+    urlpatterns += [
+        re_path(r'^static/(?P<path>.*)$', serve, {
+            'document_root': settings.STATIC_ROOT,
+            'show_indexes': False,
+        }),
+        re_path(r'^media/(?P<path>.*)$', serve, {
+            'document_root': settings.MEDIA_ROOT,
+            'show_indexes': False,
+        }),
+    ]
+
+# Print URL configuration for verification
+print(f"🌐 Static file URLs configured:")
+print(f"   Static URL: {settings.STATIC_URL} -> {settings.STATIC_ROOT}")
+print(f"   Media URL: {settings.MEDIA_URL} -> {settings.MEDIA_ROOT}")

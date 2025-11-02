@@ -342,3 +342,86 @@ class PhoneOTP(models.Model):
             return True, "OTP verified successfully"
         except cls.DoesNotExist:
             return False, "Invalid OTP"
+
+
+class LoginAttempt(models.Model):
+    """
+    Model to track login attempts for security purposes.
+    Supports sliding window rate limiting and account lockout.
+    """
+
+    ATTEMPT_TYPE_CHOICES = [
+        ("login_failed", "Login Failed"),
+        ("account_locked", "Account Locked"),
+        ("ip_blocked", "IP Blocked"),
+    ]
+
+    ip_address = models.GenericIPAddressField(verbose_name=_("IP Address"))
+    username = models.CharField(max_length=150, blank=True, null=True, verbose_name=_("Username"))
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, verbose_name=_("User"))
+    attempt_type = models.CharField(max_length=20, choices=ATTEMPT_TYPE_CHOICES, default="login_failed")
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name=_("Timestamp"))
+    user_agent = models.TextField(blank=True, null=True, verbose_name=_("User Agent"))
+
+    class Meta:
+        verbose_name = _("Login Attempt")
+        verbose_name_plural = _("Login Attempts")
+        ordering = ["-timestamp"]
+        indexes = [
+            models.Index(fields=["ip_address", "timestamp"]),
+            models.Index(fields=["username", "timestamp"]),
+            models.Index(fields=["user", "timestamp"]),
+        ]
+
+    def __str__(self):
+        return f"{self.ip_address} - {self.username or 'Unknown'} - {self.timestamp}"
+
+    @classmethod
+    def get_failed_attempts_for_ip(cls, ip_address, minutes=15):
+        """Get failed login attempts for an IP within specified time window"""
+        time_threshold = timezone.now() - timezone.timedelta(minutes=minutes)
+        return cls.objects.filter(ip_address=ip_address, timestamp__gte=time_threshold, attempt_type="login_failed").count()
+
+    @classmethod
+    def get_failed_attempts_for_user(cls, username, minutes=15):
+        """Get failed login attempts for a username within specified time window"""
+        time_threshold = timezone.now() - timezone.timedelta(minutes=minutes)
+        return cls.objects.filter(username=username, timestamp__gte=time_threshold, attempt_type="login_failed").count()
+
+    @classmethod
+    def is_ip_blocked(cls, ip_address, max_attempts=10, minutes=15):
+        """Check if an IP should be blocked based on sliding window"""
+        failed_attempts = cls.get_failed_attempts_for_ip(ip_address, minutes)
+        return failed_attempts >= max_attempts
+
+    @classmethod
+    def is_user_locked(cls, username, max_attempts=3, minutes=15):
+        """Check if a user account should be locked based on sliding window"""
+        failed_attempts = cls.get_failed_attempts_for_user(username, minutes)
+        return failed_attempts >= max_attempts
+
+    @classmethod
+    def record_failed_attempt(cls, ip_address, username=None, user=None, user_agent=None):
+        """Record a failed login attempt"""
+        return cls.objects.create(
+            ip_address=ip_address, username=username, user=user, attempt_type="login_failed", user_agent=user_agent
+        )
+
+    @classmethod
+    def clear_expired_attempts(cls, minutes=15):
+        """Clear login attempts older than specified minutes"""
+        time_threshold = timezone.now() - timezone.timedelta(minutes=minutes)
+        deleted_count = cls.objects.filter(timestamp__lt=time_threshold).delete()[0]
+        return deleted_count
+
+    @classmethod
+    def get_lockout_time_remaining(cls, username, minutes=15):
+        """Get remaining lockout time for a user in seconds"""
+        time_threshold = timezone.now() - timezone.timedelta(minutes=minutes)
+        latest_attempt = cls.objects.filter(username=username, attempt_type="login_failed").first()
+
+        if latest_attempt:
+            lockout_expires = latest_attempt.timestamp + timezone.timedelta(minutes=minutes)
+            if lockout_expires > timezone.now():
+                return int((lockout_expires - timezone.now()).total_seconds())
+        return 0

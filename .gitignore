@@ -133,3 +133,6 @@ dmypy.json
 assets/
 
 chatbot_model/
+staticfiles/
+media/
+static/
