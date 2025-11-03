@@ -163,15 +163,6 @@ AUTH_PASSWORD_VALIDATORS = [
             "min_length": 12,
         },
     },
-    {
-        "NAME": "main.validators.PasswordHistoryValidator",
-        "OPTIONS": {
-            "history_count": 5,
-        },
-    },
-    {
-        "NAME": "main.validators.PasswordStrengthValidator",
-    },
 ]
 
 

@@ -290,7 +290,3 @@ if not settings.DEBUG:
         }),
     ]
 
-# Print URL configuration for verification
-print(f"🌐 Static file URLs configured:")
-print(f"   Static URL: {settings.STATIC_URL} -> {settings.STATIC_ROOT}")
-print(f"   Media URL: {settings.MEDIA_URL} -> {settings.MEDIA_ROOT}")
