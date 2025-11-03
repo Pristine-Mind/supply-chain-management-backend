@@ -272,7 +272,16 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "x-api-key",  # For API key authentication
 ]
-# CORS_URLS_REGEX = r"(^/media/.*$)|(^/graphql/$)"
+
+# Minimize CORS header exposure in production
+if not DEBUG:
+    CORS_EXPOSE_HEADERS = []  # Don't expose any additional headers
+    CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
+else:
+    CORS_EXPOSE_HEADERS = ["content-type", "authorization"]  # Minimal for development
+
+# Production-specific CORS settings
+CORS_URLS_REGEX = r"^/api/.*$"  # Only apply CORS to API endpoints
 # CORS_ALLOW_METHODS = (
 #     "DELETE",
 #     "GET",
@@ -431,7 +440,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 CSRF_COOKIE_SECURE = not DEBUG  # HTTPS only in production
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access
 CSRF_COOKIE_SAMESITE = "Lax"
-CSRF_USE_SESSIONS = True  # Store CSRF token in session
+# CSRF_USE_SESSIONS = True  # Store CSRF token in session - Temporarily disabled for API compatibility
 
 # Security Headers (Django built-in)
 SECURE_BROWSER_XSS_FILTER = True
@@ -439,6 +448,19 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0  # 1 year HSTS in production
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+# Additional production security
+if not DEBUG:
+    # Hide server information
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+    
+    # Hide Django version and server info
+    import django
+    django.VERSION_INFO = (0, 0, 0, 'final', 0)  # Hide Django version
+    
+    # Disable server signature in error pages
+    ADMINS = []  # Don't send error emails that reveal server info
 
 # File Upload Security
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
@@ -481,154 +503,132 @@ APNS_USE_SANDBOX = os.environ.get("APNS_USE_SANDBOX", "True").lower() == "true"
 #     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Additional security configuration
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": True,  # Disable all existing loggers
-    "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
-            "style": "{",
-        },
-        "simple": {
-            "format": "{levelname} {message}",
-            "style": "{",
-        },
-        "security": {
-            "format": "[SECURITY] {asctime} {levelname} {message}",
-            "style": "{",
-        },
-    },
-    "handlers": {
-        "security_file": {
-            "level": "WARNING",
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": os.path.join(BASE_DIR, "logs", "security.log"),
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,
-            "formatter": "security",
-        },
-        "console": {
-            "level": "DEBUG" if DEBUG else "CRITICAL",  # Only show CRITICAL logs in production
-            "class": "logging.StreamHandler",
-            "formatter": "verbose" if DEBUG else "simple",
-        },
-        "null": {
-            "class": "logging.NullHandler",
-        },
-    },
-    "root": {
-        "level": "INFO" if DEBUG else "CRITICAL",
-        "handlers": ["console"] if DEBUG else ["null"],
-    },
-    "loggers": {
-        # Django core loggers
-        "django": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "INFO" if DEBUG else "CRITICAL",
-            "propagate": False,
-        },
-        "django.request": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "CRITICAL",
-            "propagate": False,
-        },
-        "django.db.backends": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "CRITICAL",
-            "propagate": False,
-        },
-        "django.server": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "INFO" if DEBUG else "CRITICAL",
-            "propagate": False,
-        },
-        # Third-party loggers
-        "rest_framework": {
-            "handlers": ["null"],
-            "level": "CRITICAL",
-            "propagate": False,
-        },
-        "celery": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "INFO" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "corsheaders": {
-            "handlers": ["null"],
-            "level": "CRITICAL",
-            "propagate": False,
-        },
-        # Application loggers
-        "user": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "market": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "producer": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "transport": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "payment": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        "notification": {
-            "handlers": ["console"] if DEBUG else ["null"],
-            "level": "DEBUG" if DEBUG else "ERROR",
-            "propagate": False,
-        },
-        # Security loggers (always active)
-        "security": {
-            "handlers": ["security_file"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-        "main.security_middleware": {
-            "handlers": ["security_file"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-        "main.middleware": {
-            "handlers": ["security_file"] if not DEBUG else ["security_file", "console"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-    },
-}
+# LOGGING = {
+#     "version": 1,
+#     "disable_existing_loggers": True,  # Disable all existing loggers
+#     "formatters": {
+#         "verbose": {
+#             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+#             "style": "{",
+#         },
+#         "simple": {
+#             "format": "{levelname} {message}",
+#             "style": "{",
+#         },
+#         "security": {
+#             "format": "[SECURITY] {asctime} {levelname} {message}",
+#             "style": "{",
+#         },
+#     },
+#     "handlers": {
+#         "security_file": {
+#             "level": "WARNING",
+#             "class": "logging.handlers.RotatingFileHandler",
+#             "filename": os.path.join(BASE_DIR, "logs", "security.log"),
+#             "maxBytes": 10485760,  # 10MB
+#             "backupCount": 5,
+#             "formatter": "security",
+#         },
+#         "console": {
+#             "level": "DEBUG" if DEBUG else "CRITICAL",  # Only show CRITICAL logs in production
+#             "class": "logging.StreamHandler",
+#             "formatter": "verbose" if DEBUG else "simple",
+#         },
+#         "null": {
+#             "class": "logging.NullHandler",
+#         },
+#     },
+#     "root": {
+#         "level": "INFO" if DEBUG else "CRITICAL",
+#         "handlers": ["console"] if DEBUG else ["null"],
+#     },
+#     "loggers": {
+#         # Django core loggers
+#         "django": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "INFO" if DEBUG else "CRITICAL",
+#             "propagate": False,
+#         },
+#         "django.request": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "CRITICAL",
+#             "propagate": False,
+#         },
+#         "django.db.backends": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "CRITICAL",
+#             "propagate": False,
+#         },
+#         "django.server": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "INFO" if DEBUG else "CRITICAL",
+#             "propagate": False,
+#         },
+#         # Third-party loggers
+#         "rest_framework": {
+#             "handlers": ["null"],
+#             "level": "CRITICAL",
+#             "propagate": False,
+#         },
+#         "celery": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "INFO" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "corsheaders": {
+#             "handlers": ["null"],
+#             "level": "CRITICAL",
+#             "propagate": False,
+#         },
+#         # Application loggers
+#         "user": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "market": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "producer": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "transport": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "payment": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         "notification": {
+#             "handlers": ["console"] if DEBUG else ["null"],
+#             "level": "DEBUG" if DEBUG else "ERROR",
+#             "propagate": False,
+#         },
+#         # Security loggers (always active)
+#         "security": {
+#             "handlers": ["security_file"],
+#             "level": "WARNING",
+#             "propagate": False,
+#         },
+#         "main.security_middleware": {
+#             "handlers": ["security_file"],
+#             "level": "WARNING",
+#             "propagate": False,
+#         },
+#         "main.middleware": {
+#             "handlers": ["security_file"] if not DEBUG else ["security_file", "console"],
+#             "level": "WARNING",
+#             "propagate": False,
+#         },
+#     },
+# }
 
-# ============================================================================
-# UNIFIED PATH CONFIGURATION FOR DJANGO AND CELERY
-# ============================================================================
-
-# Ensure all file paths are consistent across Django and Celery workers
-FILE_PATHS = {
-    'STATIC_ROOT': STATIC_ROOT,
-    'MEDIA_ROOT': MEDIA_ROOT,
-    'STATIC_URL': STATIC_URL,
-    'MEDIA_URL': MEDIA_URL,
-    'STATICFILES_DIRS': STATICFILES_DIRS,
-}
-
-# Print configuration for verification
-print("📋 Unified File Path Configuration:")
-print(f"   STATIC_ROOT: {STATIC_ROOT}")
-print(f"   MEDIA_ROOT: {MEDIA_ROOT}")
-print(f"   STATIC_URL: {STATIC_URL}")
-print(f"   MEDIA_URL: {MEDIA_URL}")
-print(f"   STATICFILES_DIRS: {STATICFILES_DIRS}")
-
-# Celery-specific static file handling
 CELERY_STATIC_ROOT = STATIC_ROOT
 CELERY_MEDIA_ROOT = MEDIA_ROOT

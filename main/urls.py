@@ -148,6 +148,7 @@ urlpatterns = [
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
     # User Profile APIs
     path("api/v1/user-profile/", ProfileView.as_view(), name="user-profile"),
+    path("api/v1/user-profile/change-password/", ChangePasswordView.as_view(), name="user-profile-change-password"),
     path("api/v1/user/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("api/v1/user/upload-profile-picture/", UploadProfilePictureView.as_view(), name="upload-profile-picture"),
     path(
