@@ -16,7 +16,7 @@ class Khalti(PaymentGatewayInterface):
 
     def __init__(self):
         self.amount: Optional[float] = None
-        self.base_url: str = "https://dev.khalti.com/api/v2/"
+        self.base_url: str = "https://khalti.com/api/v2/"
         self.purchase_order_id: Optional[str] = None
         self.purchase_order_name: Optional[str] = None
         self.inquiry_response: Optional[Dict[str, Any]] = None
@@ -40,8 +40,8 @@ class Khalti(PaymentGatewayInterface):
         """Get payment gateways from Khalti API"""
         print("Fetching payment gateways from Khalti API...")
         try:
-            print("Requesting payment gateways from https://dev.khalti.com/api/v5/payment-gateway/")
-            response = requests.get("https://dev.khalti.com/api/v5/payment-gateway/")
+            print("Requesting payment gateways from https://khalti.com/api/v5/payment-gateway/")
+            response = requests.get("https://khalti.com/api/v5/payment-gateway/")
 
             if response.status_code == 200:
                 data = response.json()
@@ -53,7 +53,7 @@ class Khalti(PaymentGatewayInterface):
 
         try:
             print("Requesting ebanking and mobile banking options from Khalti API...")
-            ebanking_response = requests.get("https://dev.khalti.com/api/v5/bank/", {"payment_type": "ebanking"})
+            ebanking_response = requests.get("https://khalti.com/api/v5/bank/", {"payment_type": "ebanking"})
             ebanking_items = []
             if ebanking_response.status_code == 200:
                 ebanking_data = ebanking_response.json()
@@ -61,7 +61,7 @@ class Khalti(PaymentGatewayInterface):
                     ebanking_data.get("records", []), ["idx", "name", "logo"]
                 )
 
-            mobanking_response = requests.get("https://dev.khalti.com/api/v5/bank/", {"payment_type": "mobilecheckout"})
+            mobanking_response = requests.get("https://khalti.com/api/v5/bank/", {"payment_type": "mobilecheckout"})
             mobanking_items = []
             if mobanking_response.status_code == 200:
                 mobanking_data = mobanking_response.json()

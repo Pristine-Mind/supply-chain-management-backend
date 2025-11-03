@@ -5,11 +5,12 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.authtoken.models import Token
+from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -36,7 +37,6 @@ from .serializers import (
 )
 
 
-@extend_schema_view(request=RegisterSerializer, responses=RegisterSerializer)
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
@@ -487,9 +487,13 @@ class ProfileView(APIView):
         return Response({"success": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class ChangePasswordView(APIView):
     """API view for changing password"""
+    
+    permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=ChangePasswordSerializer, responses={200: {"description": "Password changed successfully"}})
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
 
