@@ -7,8 +7,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
-from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -490,7 +490,7 @@ class ProfileView(APIView):
 @method_decorator(csrf_exempt, name="dispatch")
 class ChangePasswordView(APIView):
     """API view for changing password"""
-    
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(request=ChangePasswordSerializer, responses={200: {"description": "Password changed successfully"}})

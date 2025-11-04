@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -1401,3 +1402,173 @@ class OrderTrackingEvent(models.Model):
     def __str__(self):
         order_number = self.order_number or "Unknown"
         return f"Order {order_number} → {self.status} at {self.created_at}"
+
+
+class Invoice(models.Model):
+    """
+    Invoice model for marketplace sales and orders.
+    Can be generated automatically when payments are completed or manually from admin.
+    """
+
+    INVOICE_STATUS_CHOICES = [
+        ("draft", _("Draft")),
+        ("sent", _("Sent")),
+        ("paid", _("Paid")),
+        ("overdue", _("Overdue")),
+        ("cancelled", _("Cancelled")),
+    ]
+
+    # Invoice identification
+    invoice_number = models.CharField(max_length=50, unique=True, editable=False, verbose_name=_("Invoice Number"))
+    invoice_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Invoice Date"))
+    due_date = models.DateTimeField(verbose_name=_("Due Date"))
+
+    # Relationships
+    marketplace_sale = models.OneToOneField(
+        "MarketplaceSale",
+        on_delete=models.CASCADE,
+        related_name="invoice",
+        null=True,
+        blank=True,
+        verbose_name=_("Marketplace Sale"),
+    )
+    marketplace_order = models.OneToOneField(
+        "MarketplaceOrder",
+        on_delete=models.CASCADE,
+        related_name="invoice",
+        null=True,
+        blank=True,
+        verbose_name=_("Marketplace Order"),
+    )
+    # Reference to payment transaction for new system
+    payment_transaction = models.ForeignKey(
+        "payment.PaymentTransaction",
+        on_delete=models.CASCADE,
+        related_name="invoices",
+        null=True,
+        blank=True,
+        verbose_name=_("Payment Transaction"),
+    )
+
+    # Customer information
+    customer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="invoices", verbose_name=_("Customer"))
+    customer_name = models.CharField(max_length=255, verbose_name=_("Customer Name"))
+    customer_email = models.EmailField(verbose_name=_("Customer Email"))
+    customer_phone = models.CharField(max_length=20, blank=True, verbose_name=_("Customer Phone"))
+    billing_address = models.TextField(verbose_name=_("Billing Address"))
+
+    # Financial information
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Subtotal"))
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Tax Amount"))
+    shipping_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
+    )
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
+    currency = models.CharField(max_length=3, default="NPR", verbose_name=_("Currency"))
+
+    # Status and tracking
+    status = models.CharField(max_length=20, choices=INVOICE_STATUS_CHOICES, default="draft", verbose_name=_("Status"))
+
+    # File storage
+    pdf_file = models.FileField(upload_to="invoices/pdf/", null=True, blank=True, verbose_name=_("PDF File"))
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Sent At"))
+
+    # Additional metadata
+    notes = models.TextField(blank=True, verbose_name=_("Notes"))
+
+    class Meta:
+        verbose_name = _("Invoice")
+        verbose_name_plural = _("Invoices")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["invoice_number"]),
+            models.Index(fields=["customer"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["invoice_date"]),
+        ]
+
+    def __str__(self):
+        return f"Invoice {self.invoice_number} - {self.customer_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            self.invoice_number = self.generate_invoice_number()
+        if not self.due_date:
+            self.due_date = self.invoice_date + timedelta(days=30)  # 30 days default
+        super().save(*args, **kwargs)
+
+    def generate_invoice_number(self):
+        """Generate unique invoice number"""
+        today = timezone.now()
+        prefix = f"INV-{today.strftime('%Y%m%d')}"
+
+        # Get last invoice number for today
+        last_invoice = Invoice.objects.filter(invoice_number__startswith=prefix).order_by("-invoice_number").first()
+
+        if last_invoice:
+            last_number = int(last_invoice.invoice_number.split("-")[-1])
+            new_number = last_number + 1
+        else:
+            new_number = 1
+
+        return f"{prefix}-{new_number:04d}"
+
+    @property
+    def is_overdue(self):
+        """Check if invoice is overdue"""
+        if self.due_date is None:
+            return False
+        return self.due_date < timezone.now() and self.status not in ["paid", "cancelled"]
+
+    @property
+    def source_order_number(self):
+        """Get the source order number"""
+        if self.marketplace_sale:
+            return self.marketplace_sale.order_number
+        elif self.marketplace_order:
+            return self.marketplace_order.order_number
+        elif self.payment_transaction:
+            return self.payment_transaction.order_number
+        return None
+
+    def get_line_items(self):
+        """Get all line items for this invoice"""
+        return self.line_items.all()
+
+
+class InvoiceLineItem(models.Model):
+    """
+    Individual line items for invoices
+    """
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="line_items", verbose_name=_("Invoice"))
+    product_name = models.CharField(max_length=255, verbose_name=_("Product Name"))
+    product_sku = models.CharField(max_length=100, blank=True, verbose_name=_("Product SKU"))
+    description = models.TextField(blank=True, verbose_name=_("Description"))
+    quantity = models.PositiveIntegerField(verbose_name=_("Quantity"))
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Price"))
+
+    # Optional: Link to actual product
+    marketplace_product = models.ForeignKey(
+        "producer.MarketplaceProduct",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_("Marketplace Product"),
+    )
+
+    class Meta:
+        verbose_name = _("Invoice Line Item")
+        verbose_name_plural = _("Invoice Line Items")
+
+    def save(self, *args, **kwargs):
+        self.total_price = self.quantity * self.unit_price
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.product_name} x {self.quantity} = {self.total_price}"

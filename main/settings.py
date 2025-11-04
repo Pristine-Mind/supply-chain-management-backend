@@ -45,14 +45,12 @@ env = environ.Env(
 )
 
 # Read environment variables from .env file
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 
 DEBUG = env("DJANGO_DEBUG")
 
-# Print DEBUG status for verification (remove in production)
-print(f"🔧 DEBUG setting loaded: {DEBUG} (type: {type(DEBUG)})")
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -179,8 +177,8 @@ USE_TZ = True
 # Unified configuration for Django and Celery environments
 # ============================================================================
 
-STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
+STATIC_URL = "/static/"
+MEDIA_URL = "/media/"
 
 # Static files directories - unified path for all environments
 STATICFILES_DIRS = [
@@ -189,13 +187,13 @@ STATICFILES_DIRS = [
 
 # Static files finders - consistent order for all environments
 STATICFILES_FINDERS = [
-    'django.contrib.staticfiles.finders.FileSystemFinder',
-    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    "django.contrib.staticfiles.finders.FileSystemFinder",
+    "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 ]
 
 # Unified static and media roots - same path for production and Celery
-STATIC_ROOT = os.path.join(BASE_DIR, 'assets', 'staticfiles')  # Unified location
-MEDIA_ROOT = os.path.join(BASE_DIR, 'assets', 'media')         # Consistent with existing
+STATIC_ROOT = os.path.join(BASE_DIR, "assets", "staticfiles")  # Unified location
+MEDIA_ROOT = os.path.join(BASE_DIR, "assets", "media")  # Consistent with existing
 
 # Static files storage - consistent configuration
 STORAGES = {
@@ -211,18 +209,16 @@ STORAGES = {
 if not DEBUG:
     # Production mode - ensure static files are collected
     import os
+
     if not os.path.exists(STATIC_ROOT):
         os.makedirs(STATIC_ROOT, exist_ok=True)
-        print("� Created static files directory")
-    
+
     # Check if static files need to be collected
     if not os.listdir(STATIC_ROOT):
-        print("⚠️  Static files not found in production mode!")
-        print(f"   Run: python manage.py collectstatic --noinput")
-        print(f"   Static files will be collected to: {STATIC_ROOT}")
+        pass
 else:
+    pass
     # Development mode - serve directly from source
-    print(f"🔧 Development mode: serving static files from {STATICFILES_DIRS[0]}")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -445,11 +441,12 @@ if not DEBUG:
     # Hide server information
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
-    
+
     # Hide Django version and server info
     import django
-    django.VERSION_INFO = (0, 0, 0, 'final', 0)  # Hide Django version
-    
+
+    django.VERSION_INFO = (0, 0, 0, "final", 0)  # Hide Django version
+
     # Disable server signature in error pages
     ADMINS = []  # Don't send error emails that reveal server info
 

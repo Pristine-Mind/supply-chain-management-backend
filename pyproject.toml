@@ -45,6 +45,7 @@ pandas = "*"
 django-admin-rangefilter = "*"
 firebase-admin = "*"
 pyfcm = "*"
+reportlab = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
