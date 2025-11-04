@@ -20,6 +20,8 @@ from .models import (
     Delivery,
     DeliveryInfo,
     Feedback,
+    Invoice,
+    InvoiceLineItem,
     MarketplaceOrder,
     MarketplaceOrderItem,
     MarketplaceSale,
@@ -583,3 +585,222 @@ class OrderTrackingEventAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     add_roles = ["admin", "manager", "agent"]
     change_roles = ["admin", "manager", "agent"]
     delete_roles = ["admin"]
+
+
+# Invoice Line Item Inline
+class InvoiceLineItemInline(admin.TabularInline):
+    model = InvoiceLineItem
+    extra = 0
+    readonly_fields = ("total_price",)
+    fields = ("product_name", "product_sku", "description", "quantity", "unit_price", "total_price", "marketplace_product")
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "invoice_number",
+        "customer_name",
+        "customer_email",
+        "total_amount",
+        "status",
+        "invoice_date",
+        "source_order_number",
+        "pdf_available",
+    )
+    list_filter = ("status", "invoice_date", "currency", "created_at")
+    search_fields = (
+        "invoice_number",
+        "customer_name",
+        "customer_email",
+        "marketplace_sale__order_number",
+        "marketplace_order__order_number",
+        "payment_transaction__order_number",
+    )
+    readonly_fields = (
+        "invoice_number",
+        "invoice_date",
+        "created_at",
+        "updated_at",
+        "sent_at",
+        "source_order_number",
+        "is_overdue",
+    )
+
+    inlines = [InvoiceLineItemInline]
+
+    fieldsets = (
+        (_("Invoice Information"), {"fields": ("invoice_number", "invoice_date", "due_date", "status", "is_overdue")}),
+        (
+            _("Source Order"),
+            {
+                "fields": ("marketplace_sale", "marketplace_order", "payment_transaction", "source_order_number"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            _("Customer Information"),
+            {"fields": ("customer", "customer_name", "customer_email", "customer_phone", "billing_address")},
+        ),
+        (_("Financial Details"), {"fields": ("subtotal", "tax_amount", "shipping_cost", "total_amount", "currency")}),
+        (_("Files & Communication"), {"fields": ("pdf_file", "sent_at", "notes")}),
+        (_("Timestamps"), {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
+    )
+
+    actions = [
+        "generate_pdf_action",
+        "send_invoice_email_action",
+        "mark_as_sent_action",
+        "mark_as_paid_action",
+        "download_invoice_pdf_action",
+    ]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("customer", "marketplace_sale", "marketplace_order", "payment_transaction")
+
+    def source_order_number(self, obj):
+        """Get the source order number"""
+        return obj.source_order_number or "-"
+
+    source_order_number.short_description = _("Source Order")
+
+    def pdf_available(self, obj):
+        """Check if PDF is available"""
+        return bool(obj.pdf_file)
+
+    pdf_available.boolean = True
+    pdf_available.short_description = _("PDF Available")
+
+    def is_overdue(self, obj):
+        """Check if invoice is overdue"""
+        return obj.is_overdue
+
+    is_overdue.boolean = True
+    is_overdue.short_description = _("Overdue")
+
+    # Custom Actions
+    def generate_pdf_action(self, request, queryset):
+        """Generate PDF for selected invoices"""
+        from .services import InvoiceGenerationService
+
+        success_count = 0
+        error_count = 0
+
+        for invoice in queryset:
+            try:
+                if InvoiceGenerationService.generate_invoice_pdf(invoice):
+                    success_count += 1
+                else:
+                    error_count += 1
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error generating PDF for invoice {invoice.invoice_number}: {str(e)}")
+
+        if success_count > 0:
+            self.message_user(request, f"Successfully generated {success_count} PDF(s).")
+        if error_count > 0:
+            self.message_user(request, f"Failed to generate {error_count} PDF(s). Check logs for details.", level="ERROR")
+
+    generate_pdf_action.short_description = _("Generate PDF for selected invoices")
+
+    def send_invoice_email_action(self, request, queryset):
+        """Send email for selected invoices"""
+        from .services import InvoiceGenerationService
+
+        success_count = 0
+        error_count = 0
+
+        for invoice in queryset:
+            try:
+                if InvoiceGenerationService.send_invoice_email(invoice):
+                    success_count += 1
+                else:
+                    error_count += 1
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error sending email for invoice {invoice.invoice_number}: {str(e)}")
+
+        if success_count > 0:
+            self.message_user(request, f"Successfully sent {success_count} invoice email(s).")
+        if error_count > 0:
+            self.message_user(request, f"Failed to send {error_count} email(s). Check logs for details.", level="ERROR")
+
+    send_invoice_email_action.short_description = _("Send invoice email for selected invoices")
+
+    def mark_as_sent_action(self, request, queryset):
+        """Mark selected invoices as sent"""
+        from django.utils import timezone
+
+        updated = queryset.filter(status="draft").update(status="sent", sent_at=timezone.now())
+
+        if updated > 0:
+            self.message_user(request, f"Successfully marked {updated} invoice(s) as sent.")
+        else:
+            self.message_user(request, "No draft invoices were updated.", level="WARNING")
+
+    mark_as_sent_action.short_description = _("Mark selected invoices as sent")
+
+    def mark_as_paid_action(self, request, queryset):
+        """Mark selected invoices as paid"""
+        updated = queryset.exclude(status="paid").update(status="paid")
+
+        if updated > 0:
+            self.message_user(request, f"Successfully marked {updated} invoice(s) as paid.")
+        else:
+            self.message_user(request, "No unpaid invoices were updated.", level="WARNING")
+
+    mark_as_paid_action.short_description = _("Mark selected invoices as paid")
+
+    def download_invoice_pdf_action(self, request, queryset):
+        """Download PDF for first selected invoice"""
+        invoice = queryset.first()
+        if not invoice:
+            self.message_user(request, "No invoice selected.", level="ERROR")
+            return
+
+        if not invoice.pdf_file:
+            self.message_user(request, f"No PDF available for invoice {invoice.invoice_number}.", level="ERROR")
+            return
+
+        from django.http import HttpResponse
+
+        try:
+            with open(invoice.pdf_file.path, "rb") as pdf_file:
+                response = HttpResponse(pdf_file.read(), content_type="application/pdf")
+                filename = f"invoice_{invoice.invoice_number}.pdf"
+                response["Content-Disposition"] = f'attachment; filename="{filename}"'
+                return response
+        except Exception as e:
+            self.message_user(request, f"Error downloading PDF: {str(e)}", level="ERROR")
+
+    download_invoice_pdf_action.short_description = _("Download PDF for first selected invoice")
+
+    # Role-based permissions
+    view_roles = ["admin", "manager", "accountant", "agent"]
+    add_roles = ["admin", "manager", "accountant"]
+    change_roles = ["admin", "manager", "accountant"]
+    delete_roles = ["admin", "manager"]
+
+
+@admin.register(InvoiceLineItem)
+class InvoiceLineItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
+    list_display = ("invoice", "product_name", "product_sku", "quantity", "unit_price", "total_price")
+    list_filter = ("invoice__status", "invoice__invoice_date")
+    search_fields = ("invoice__invoice_number", "product_name", "product_sku", "invoice__customer_name")
+    readonly_fields = ("total_price",)
+
+    fieldsets = (
+        (_("Product Information"), {"fields": ("product_name", "product_sku", "description", "marketplace_product")}),
+        (_("Pricing"), {"fields": ("quantity", "unit_price", "total_price")}),
+        (_("Invoice"), {"fields": ("invoice",)}),
+    )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("invoice", "marketplace_product")
+
+    # Role-based permissions
+    view_roles = ["admin", "manager", "accountant", "agent"]
+    add_roles = ["admin", "manager", "accountant"]
+    change_roles = ["admin", "manager", "accountant"]
+    delete_roles = ["admin", "manager"]

@@ -275,18 +275,25 @@ urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # Additional robust static file serving for production environments
 if not settings.DEBUG:
-    from django.views.static import serve
     from django.urls import re_path
-    
+    from django.views.static import serve
+
     # Ensure static files are served even in production mode for development
     urlpatterns += [
-        re_path(r'^static/(?P<path>.*)$', serve, {
-            'document_root': settings.STATIC_ROOT,
-            'show_indexes': False,
-        }),
-        re_path(r'^media/(?P<path>.*)$', serve, {
-            'document_root': settings.MEDIA_ROOT,
-            'show_indexes': False,
-        }),
+        re_path(
+            r"^static/(?P<path>.*)$",
+            serve,
+            {
+                "document_root": settings.STATIC_ROOT,
+                "show_indexes": False,
+            },
+        ),
+        re_path(
+            r"^media/(?P<path>.*)$",
+            serve,
+            {
+                "document_root": settings.MEDIA_ROOT,
+                "show_indexes": False,
+            },
+        ),
     ]
-

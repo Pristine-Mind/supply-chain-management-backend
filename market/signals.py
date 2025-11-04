@@ -259,3 +259,143 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
             )
         except Exception as e:
             logger.error(f"Error sending order creation notification: {str(e)}")
+
+
+# Invoice Generation Signals
+@receiver(post_save, sender=MarketplaceSale, dispatch_uid="generate_invoice_from_marketplace_sale")
+def generate_invoice_from_marketplace_sale(sender, instance, created, **kwargs):
+    """
+    Generate invoice when marketplace sale payment is completed
+    """
+    print(f"Signal triggered for MarketplaceSale {instance.order_number}, payment_status: {instance.payment_status}")
+
+    # Process if payment status is paid (both on creation and update)
+    if instance.payment_status == "paid":
+        try:
+            # Check if invoice already exists using proper OneToOne relationship check
+            try:
+                existing_invoice = instance.invoice
+                if existing_invoice:
+                    print(f"Invoice already exists for sale {instance.order_number}: {existing_invoice.invoice_number}")
+                    return
+            except Exception:
+                # No invoice exists yet, which is what we want
+                pass
+
+            # Import here to avoid circular imports
+            from .services import InvoiceGenerationService
+
+            print(f"Creating invoice for sale {instance.order_number}")
+            # Generate invoice
+            invoice = InvoiceGenerationService.create_invoice_from_marketplace_sale(instance)
+            print(f"✅ Invoice {invoice.invoice_number} generated for sale {instance.order_number}")
+
+            # Send invoice via email (optional - can be done manually from admin)
+            try:
+                InvoiceGenerationService.send_invoice_email(invoice)
+                print(f"✅ Invoice {invoice.invoice_number} sent via email")
+            except Exception as e:
+                print(f"⚠️ Error sending invoice email: {str(e)}")
+
+        except Exception as e:
+            print(f"❌ Error generating invoice for sale {instance.order_number}: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+    else:
+        print(
+            f"Sale {instance.order_number} payment_status is '{instance.payment_status}', not 'paid' - skipping invoice generation"
+        )
+
+
+@receiver(post_save, sender=MarketplaceOrder, dispatch_uid="generate_invoice_from_marketplace_order")
+def generate_invoice_from_marketplace_order(sender, instance, created, **kwargs):
+    """
+    Generate invoice when marketplace order payment is completed
+    """
+    print(f"Signal triggered for MarketplaceOrder {instance.order_number}, payment_status: {instance.payment_status}")
+
+    # Only process if payment status is completed
+    if instance.payment_status == "completed":
+        try:
+            # Check if invoice already exists using proper OneToOne relationship check
+            try:
+                existing_invoice = instance.invoice
+                if existing_invoice:
+                    print(f"Invoice already exists for order {instance.order_number}: {existing_invoice.invoice_number}")
+                    return
+            except Exception:
+                # No invoice exists yet, which is what we want
+                pass
+
+            # Import here to avoid circular imports
+            from .services import InvoiceGenerationService
+
+            print(f"Creating invoice for order {instance.order_number}")
+            # Generate invoice (you'll need to implement this method)
+            invoice = InvoiceGenerationService.create_invoice_from_marketplace_order(instance)
+            print(f"✅ Invoice {invoice.invoice_number} generated for order {instance.order_number}")
+
+            # Send invoice via email (optional)
+            try:
+                _ = InvoiceGenerationService.send_invoice_email(invoice)
+                print(f"✅ Invoice {invoice.invoice_number} sent via email")
+            except Exception as e:
+                print(f"⚠️ Error sending invoice email: {str(e)}")
+
+        except Exception as e:
+            print(f"❌ Error generating invoice for order {instance.order_number}: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+    else:
+        print(
+            f"Order {instance.order_number} payment_status is '{instance.payment_status}', not 'completed' - skipping invoice generation"
+        )
+
+
+# Signal for PaymentTransaction (if you want to handle the new payment system)
+try:
+    from payment.models import PaymentTransaction
+
+    @receiver(post_save, sender=PaymentTransaction, dispatch_uid="generate_invoice_from_payment_transaction")
+    def generate_invoice_from_payment_transaction(sender, instance, created, **kwargs):
+        """
+        Generate invoice when payment transaction is completed
+        """
+        print(f"Signal triggered for PaymentTransaction {instance.id}, status: {instance.status}")
+
+        # Only process if status is completed
+        if instance.status == "completed":
+            try:
+                # Check if invoice already exists
+                existing_invoices = instance.invoices.all()
+                if existing_invoices.exists():
+                    print(f"Invoice already exists for payment {instance.id}")
+                    return
+
+                # Import here to avoid circular imports
+                from .services import InvoiceGenerationService
+
+                print(f"Creating invoice for payment {instance.id}")
+                # Generate invoice (both for new creations and status updates)
+                invoice = InvoiceGenerationService.create_invoice_from_payment_transaction(instance)
+                print(f"✅ Invoice {invoice.invoice_number} generated for payment {instance.id}")
+
+                # Send invoice via email (optional)
+                try:
+                    _ = InvoiceGenerationService.send_invoice_email(invoice)
+                    print(f"✅ Invoice {invoice.invoice_number} sent via email")
+                except Exception as e:
+                    print(f"⚠️ Error sending invoice email: {str(e)}")
+
+            except Exception as e:
+                print(f"❌ Error generating invoice for payment {instance.id}: {str(e)}")
+                import traceback
+
+                traceback.print_exc()
+        else:
+            print(f"Payment {instance.id} status is '{instance.status}', not 'completed' - skipping invoice generation")
+
+except ImportError:
+    print("PaymentTransaction model not available - invoice generation signals disabled for payments")
