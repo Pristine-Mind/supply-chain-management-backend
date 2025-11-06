@@ -8,6 +8,7 @@ from user.models import UserProfile
 
 from .models import (
     AuditLog,
+    Category,
     City,
     Customer,
     DirectSale,
@@ -24,10 +25,107 @@ from .models import (
     PurchaseOrder,
     Sale,
     StockList,
+    Subcategory,
+    SubSubcategory,
 )
 
 
 class ProducerSerializer(serializers.ModelSerializer):
+    location_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Producer
+        fields = "__all__"
+        extra_kwargs = {"user": {"read_only": True}}
+
+    def get_location_details(self, producer) -> dict:
+        if producer and producer.location:
+            return json.loads(producer.location.geojson)
+        return None
+
+    def validate_registration_number(self, value):
+        """
+        Validate that the registration number is alphanumeric and unique.
+        """
+        if not value.isalnum():
+            raise serializers.ValidationError("Registration number must be alphanumeric.")
+        return value
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    subcategories_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at', 'subcategories_count']
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_subcategories_count(self, obj):
+        return obj.subcategories.filter(is_active=True).count()
+
+
+class SubSubcategorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='subcategory.category.name', read_only=True)
+    category_code = serializers.CharField(source='subcategory.category.code', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    
+    class Meta:
+        model = SubSubcategory
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at', 
+                 'subcategory', 'category_name', 'category_code', 'subcategory_name']
+        read_only_fields = ['created_at', 'updated_at']
+
+
+# Light version for Product serialization - no nested objects
+class SubSubcategoryLightSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='subcategory.category.name', read_only=True)
+    category_code = serializers.CharField(source='subcategory.category.code', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    
+    class Meta:
+        model = SubSubcategory
+        fields = ['id', 'code', 'name', 'category_name', 'category_code', 'subcategory_name']
+
+
+class SubcategoryLightSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_code = serializers.CharField(source='category.code', read_only=True)
+    sub_subcategories_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Subcategory
+        fields = ['id', 'code', 'name', 'category', 'category_name', 'category_code', 'sub_subcategories_count']
+    
+    def get_sub_subcategories_count(self, obj):
+        return obj.sub_subcategories.filter(is_active=True).count()
+
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_code = serializers.CharField(source='category.code', read_only=True)
+    sub_subcategories = SubSubcategorySerializer(many=True, read_only=True)
+    sub_subcategories_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Subcategory
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at',
+                 'category', 'category_name', 'category_code', 'sub_subcategories', 'sub_subcategories_count']
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_sub_subcategories_count(self, obj):
+        return obj.sub_subcategories.filter(is_active=True).count()
+
+
+class CategoryHierarchySerializer(serializers.ModelSerializer):
+    """Serializer for complete category hierarchy"""
+    subcategories = SubcategorySerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'subcategories']
+
+
+class ProducerCreateUpdateSerializer(serializers.ModelSerializer):
     location_details = serializers.SerializerMethodField()
 
     class Meta:
@@ -127,8 +225,13 @@ class ProductStockUpdateSerializer(serializers.Serializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
-    category_details = serializers.CharField(source="get_category_display", read_only=True)
+    category_details = serializers.CharField(source="get_old_category_display", read_only=True)
     deleted_images = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
+    
+    # New category hierarchy fields - using light serializers for better performance
+    category_info = CategorySerializer(source='category', read_only=True)
+    subcategory_info = SubcategoryLightSerializer(source='subcategory', read_only=True)
+    sub_subcategory_info = SubSubcategoryLightSerializer(source='sub_subcategory', read_only=True)
 
     class Meta:
         model = Product

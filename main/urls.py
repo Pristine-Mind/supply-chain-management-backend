@@ -47,6 +47,7 @@ from market.views import (
 )
 from producer.views import (
     AuditLogViewSet,
+    CategoryViewSet,
     CityListView,
     CustomerViewSet,
     DailyProductStatsView,
@@ -66,6 +67,8 @@ from producer.views import (
     StatsAPIView,
     StockHistoryViewSet,
     StockListView,
+    SubcategoryViewSet,
+    SubSubcategoryViewSet,
     TopOrdersCustomersView,
     TopSalesCustomersView,
     UserInfoView,
@@ -97,6 +100,9 @@ from user.views import (
 )
 
 router = DefaultRouter()
+router.register(r"categories", CategoryViewSet, basename="categories")
+router.register(r"subcategories", SubcategoryViewSet, basename="subcategories")
+router.register(r"sub-subcategories", SubSubcategoryViewSet, basename="sub-subcategories")
 router.register(r"producers", ProducerViewSet)
 router.register(r"customers", CustomerViewSet)
 router.register(r"products", ProductViewSet)
