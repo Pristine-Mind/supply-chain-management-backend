@@ -1,8 +1,9 @@
 import django_filters
+from django.db.models import Q
 
 from user.models import UserProfile
 
-from .models import Customer, MarketplaceProduct, Order, Producer, Product, Sale
+from .models import Customer, MarketplaceProduct, Order, Producer, Product, Sale, Category, Subcategory, SubSubcategory
 
 
 class ProducerFilter(django_filters.FilterSet):
@@ -79,10 +80,15 @@ class ProductFilter(django_filters.FilterSet):
 
 class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    category = django_filters.MultipleChoiceFilter(
-        choices=Product.ProductCategory.choices,
-        field_name="product__category",
-    )
+    # Support both old category codes and new category IDs
+    category = django_filters.CharFilter(method="filter_category", label="Category")
+        # Legacy category filter (supports old codes like FA, EG)
+    category = django_filters.CharFilter(method="filter_category", label="Category")
+    
+    # New hierarchy filters
+    category_id = django_filters.CharFilter(method="filter_category_id", label="Category ID")
+    subcategory_id = django_filters.CharFilter(method="filter_subcategory_id", label="Subcategory ID")
+    sub_subcategory_id = django_filters.CharFilter(method="filter_sub_subcategory_id", label="Sub-subcategory ID")
     city = django_filters.CharFilter(field_name="product__location__name", lookup_expr="exact")
     profile_type = django_filters.ChoiceFilter(
         choices=UserProfile.BusinessType.choices,
@@ -92,7 +98,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
 
     class Meta:
         model = MarketplaceProduct
-        fields = ["search", "category", "city", "profile_type"]
+        fields = ["search", "category", "category_id", "subcategory_id", "sub_subcategory_id", "city", "profile_type"]
 
     def filter_search(self, queryset, name, value):
         if value:
@@ -100,11 +106,55 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         return queryset
 
     def filter_category(self, queryset, name, value):
-        if value:
-            return queryset.filter(product__category=value).distinct()
-        return queryset
+        """Filter by category - supports both old codes (FA, EG, etc.) and new category names/codes"""
+        if not value:
+            return queryset
+            
+        try:
+            # Try to parse as integer (new category ID)
+            category_id = int(value)
+            return queryset.filter(
+                Q(product__category_id=category_id) |
+                Q(product__subcategory__category_id=category_id) |
+                Q(product__sub_subcategory__subcategory__category_id=category_id)
+            )
+        except ValueError:
+            # Not an integer, treat as old category code or name
+            if len(value) == 2 and value.isalpha() and value.isupper():
+                # Old 2-letter category code (FA, EG, etc.)
+                return queryset.filter(product__category__icontains=value)
+            else:
+                # Category name search
+                return queryset.filter(
+                    Q(product__category__name__icontains=value) |
+                    Q(product__subcategory__name__icontains=value) |
+                    Q(product__sub_subcategory__name__icontains=value)
+                )
 
+    def filter_category_id(self, queryset, name, value):
+        """Filter by new category ID"""
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(product__category_id=value) |
+            Q(product__subcategory__category_id=value) |
+            Q(product__sub_subcategory__subcategory__category_id=value)
+        )
 
+    def filter_subcategory_id(self, queryset, name, value):
+        """Filter by subcategory ID"""
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(product__subcategory_id=value) |
+            Q(product__sub_subcategory__subcategory_id=value)
+        )
+
+    def filter_sub_subcategory_id(self, queryset, name, value):
+        """Filter by sub-subcategory ID"""
+        if not value:
+            return queryset
+        return queryset.filter(product__sub_subcategory_id=value)
 class OrderFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
     customer = django_filters.ModelChoiceFilter(field_name="customer", queryset=Customer.objects.none(), label="Customer")
