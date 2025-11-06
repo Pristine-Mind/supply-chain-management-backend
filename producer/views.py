@@ -1558,7 +1558,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
     """
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
-    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
     def hierarchy(self, request):
@@ -1591,7 +1590,6 @@ class SubcategoryViewSet(viewsets.ModelViewSet):
     ViewSet for managing product subcategories
     """
     queryset = Subcategory.objects.filter(is_active=True)
-    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         """Return light serializer by default, full serializer for detail views"""
@@ -1621,7 +1619,6 @@ class SubSubcategoryViewSet(viewsets.ModelViewSet):
     """
     queryset = SubSubcategory.objects.filter(is_active=True)
     serializer_class = SubSubcategorySerializer
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = super().get_queryset()

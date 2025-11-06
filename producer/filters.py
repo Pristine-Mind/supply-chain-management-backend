@@ -80,9 +80,7 @@ class ProductFilter(django_filters.FilterSet):
 
 class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    # Support both old category codes and new category IDs
     category = django_filters.CharFilter(method="filter_category", label="Category")
-        # Legacy category filter (supports old codes like FA, EG)
     category = django_filters.CharFilter(method="filter_category", label="Category")
     
     # New hierarchy filters
@@ -155,6 +153,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         if not value:
             return queryset
         return queryset.filter(product__sub_subcategory_id=value)
+
 class OrderFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
     customer = django_filters.ModelChoiceFilter(field_name="customer", queryset=Customer.objects.none(), label="Customer")
