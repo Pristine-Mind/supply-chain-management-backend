@@ -345,10 +345,30 @@ class MarketplaceProductVariantSerializer(serializers.ModelSerializer):
 
 class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
+    user_id = serializers.IntegerField(read_only=True, source='user.id')
+    username = serializers.CharField(read_only=True, source='user.username')
 
     class Meta:
         model = MarketplaceProductReview
-        fields = ["user", "rating", "review_text", "created_at"]
+        fields = ["id", "product", "user", "user_id", "username", "rating", "review_text", "created_at"]
+        read_only_fields = ["id", "user", "user_id", "username", "created_at"]
+
+    def validate_rating(self, value):
+        """Validate that rating is between 1 and 5."""
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+    def validate(self, data):
+        """Validate that user hasn't already reviewed this product."""
+        request = self.context.get('request')
+        if request and request.user:
+            product = data.get('product')
+            if product and MarketplaceProductReview.objects.filter(
+                product=product, user=request.user
+            ).exists():
+                raise serializers.ValidationError("You have already reviewed this product.")
+        return data
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
