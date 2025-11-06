@@ -31,6 +31,7 @@ from .filters import (
 )
 from .models import (
     AuditLog,
+    Category,
     City,
     Customer,
     DirectSale,
@@ -44,9 +45,13 @@ from .models import (
     Sale,
     StockHistory,
     StockList,
+    Subcategory,
+    SubSubcategory,
 )
 from .serializers import (
     AuditLogSerializer,
+    CategoryHierarchySerializer,
+    CategorySerializer,
     CitySerializer,
     CustomerOrdersSerializer,
     CustomerSalesSerializer,
@@ -71,6 +76,10 @@ from .serializers import (
     ShopQRSerializer,
     StockHistorySerializer,
     StockListSerializer,
+    SubcategoryLightSerializer,
+    SubcategorySerializer,
+    SubSubcategoryLightSerializer,
+    SubSubcategorySerializer,
 )
 from .supply_chain import SupplyChainService
 from .utils import export_queryset_to_excel
@@ -1540,3 +1549,88 @@ class KhaltiVerifyAPIView(APIView):
         payment.status = Payment.Status.FAILED
         payment.save(update_fields=["status"])
         return Response({"error": result.get("error_message", "Verification failed")}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Category Management ViewSets
+class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product categories
+    """
+    queryset = Category.objects.filter(is_active=True)
+    serializer_class = CategorySerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def hierarchy(self, request):
+        """Get complete category hierarchy with subcategories and sub-subcategories"""
+        categories = Category.objects.filter(is_active=True).prefetch_related(
+            'subcategories__sub_subcategories'
+        )
+        serializer = CategoryHierarchySerializer(categories, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def subcategories(self, request, pk=None):
+        """Get subcategories for a specific category (light version - no nested sub-subcategories)"""
+        category = self.get_object()
+        subcategories = category.subcategories.filter(is_active=True)
+        serializer = SubcategoryLightSerializer(subcategories, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def subcategories_full(self, request, pk=None):
+        """Get subcategories with full sub-subcategory details"""
+        category = self.get_object()
+        subcategories = category.subcategories.filter(is_active=True)
+        serializer = SubcategorySerializer(subcategories, many=True)
+        return Response(serializer.data)
+
+
+class SubcategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product subcategories
+    """
+    queryset = Subcategory.objects.filter(is_active=True)
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        """Return light serializer by default, full serializer for detail views"""
+        if self.action == 'retrieve' or self.request.query_params.get('full', False):
+            return SubcategorySerializer
+        return SubcategoryLightSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        category_id = self.request.query_params.get('category', None)
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        return queryset
+
+    @action(detail=True, methods=['get'])
+    def sub_subcategories(self, request, pk=None):
+        """Get sub-subcategories for a specific subcategory"""
+        subcategory = self.get_object()
+        sub_subcategories = subcategory.sub_subcategories.filter(is_active=True)
+        serializer = SubSubcategorySerializer(sub_subcategories, many=True)
+        return Response(serializer.data)
+
+
+class SubSubcategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product sub-subcategories
+    """
+    queryset = SubSubcategory.objects.filter(is_active=True)
+    serializer_class = SubSubcategorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        subcategory_id = self.request.query_params.get('subcategory', None)
+        category_id = self.request.query_params.get('category', None)
+        
+        if subcategory_id:
+            queryset = queryset.filter(subcategory_id=subcategory_id)
+        elif category_id:
+            queryset = queryset.filter(subcategory__category_id=category_id)
+            
+        return queryset

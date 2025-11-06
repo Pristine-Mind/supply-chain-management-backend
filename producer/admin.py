@@ -8,6 +8,7 @@ from user.admin_mixins import RoleBasedAdminMixin
 
 from .models import (
     AuditLog,
+    Category,
     Customer,
     DirectSale,
     LedgerEntry,
@@ -23,6 +24,8 @@ from .models import (
     Sale,
     StockHistory,
     StockList,
+    Subcategory,
+    SubSubcategory,
 )
 
 
@@ -477,5 +480,77 @@ class PurchaseOrderAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_display = ("id", "product", "quantity", "created_at", "approved", "sent_to_vendor")
     search_fields = ("product__name",)
     list_filter = ("approved", "sent_to_vendor")
-    readonly_fields = ("created_at",)
-    autocomplete_fields = ["product"]
+
+
+# Category Administration
+class SubSubcategoryInline(admin.TabularInline):
+    model = SubSubcategory
+    extra = 0
+    fields = ('code', 'name', 'is_active')
+
+
+class SubcategoryInline(admin.TabularInline):
+    model = Subcategory
+    extra = 0
+    fields = ('code', 'name', 'is_active')
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'is_active', 'created_at', 'updated_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'code')
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [SubcategoryInline]
+    
+    fieldsets = (
+        (None, {
+            'fields': ('code', 'name', 'description', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(Subcategory)
+class SubcategoryAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'category', 'is_active', 'created_at', 'updated_at')
+    list_filter = ('category', 'is_active', 'created_at')
+    search_fields = ('name', 'code', 'category__name')
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [SubSubcategoryInline]
+    
+    fieldsets = (
+        (None, {
+            'fields': ('category', 'code', 'name', 'description', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(SubSubcategory)
+class SubSubcategoryAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'subcategory', 'get_category', 'is_active', 'created_at', 'updated_at')
+    list_filter = ('subcategory__category', 'subcategory', 'is_active', 'created_at')
+    search_fields = ('name', 'code', 'subcategory__name', 'subcategory__category__name')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def get_category(self, obj):
+        return obj.subcategory.category.name
+    get_category.short_description = 'Category'
+    get_category.admin_order_field = 'subcategory__category__name'
+    
+    fieldsets = (
+        (None, {
+            'fields': ('subcategory', 'code', 'name', 'description', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )

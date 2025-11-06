@@ -44,7 +44,7 @@ services:
   web:
     <<: *base_server_setup
     ports:
-      - 8000:8000
+      - 8005:8000
     command: python manage.py runserver 0.0.0.0:8000
   
   celery-beat:

@@ -85,6 +85,68 @@ class Customer(models.Model):
         verbose_name_plural = _("Customers")
 
 
+class Category(models.Model):
+    """
+    Main product categories (e.g., Fashion & Apparel, Electronics)
+    """
+    code = models.CharField(max_length=5, unique=True, verbose_name=_("Category Code"))
+    name = models.CharField(max_length=100, verbose_name=_("Category Name"))
+    description = models.TextField(blank=True, verbose_name=_("Category Description"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    class Meta:
+        verbose_name = _("Category")
+        verbose_name_plural = _("Categories")
+        ordering = ['name']
+
+
+class Subcategory(models.Model):
+    """
+    Product subcategories (e.g., Clothing, Footwear under Fashion & Apparel)
+    """
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories', verbose_name=_("Category"))
+    code = models.CharField(max_length=10, unique=True, verbose_name=_("Subcategory Code"))
+    name = models.CharField(max_length=100, verbose_name=_("Subcategory Name"))
+    description = models.TextField(blank=True, verbose_name=_("Subcategory Description"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    class Meta:
+        verbose_name = _("Subcategory")
+        verbose_name_plural = _("Subcategories")
+        ordering = ['category__name', 'name']
+
+
+class SubSubcategory(models.Model):
+    """
+    Product sub-subcategories (e.g., Men's Wear, Women's Wear under Clothing)
+    """
+    subcategory = models.ForeignKey(Subcategory, on_delete=models.CASCADE, related_name='sub_subcategories', verbose_name=_("Subcategory"))
+    code = models.CharField(max_length=15, unique=True, verbose_name=_("Sub-subcategory Code"))
+    name = models.CharField(max_length=100, verbose_name=_("Sub-subcategory Name"))
+    description = models.TextField(blank=True, verbose_name=_("Sub-subcategory Description"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    class Meta:
+        verbose_name = _("Sub-subcategory")
+        verbose_name_plural = _("Sub-subcategories")
+        ordering = ['subcategory__category__name', 'subcategory__name', 'name']
+
+
 class Product(models.Model):
     """
     Represents a product produced by the producer and sold to customers.
@@ -104,6 +166,7 @@ class Product(models.Model):
     - rate: Unit price of each product
     """
 
+    # Keep old category field for backward compatibility during migration
     class ProductCategory(models.TextChoices):
         FASHION_APPAREL = "FA", "Fashion & Apparel"
         ELECTRONICS_GADGETS = "EG", "Electronics & Gadgets"
@@ -112,14 +175,29 @@ class Product(models.Model):
         HOME_LIVING = "HL", "Home & Living"
         TRAVEL_TOURISM = "TT", "Travel & Tourism"
         INDUSTRIAL_SUPPLIES = "IS", "Industrial Supplies"
+        AUTOMOTIVE = "AU", "Automotive"
+        SPORTS_FITNESS = "SP", "Sports & Fitness"
+        BOOKS_MEDIA = "BK", "Books & Media"
+        PET_BABY_CARE = "PB", "Pet & Baby Care"
+        GARDEN_OUTDOOR = "GD", "Garden & Outdoor"
+        FOOD_BEVERAGES = "FD", "Food & Beverages"
         OTHER = "OT", "Other"
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
-    category = models.CharField(
+    
+    # New hierarchical category fields
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Category"))
+    subcategory = models.ForeignKey(Subcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Subcategory"))
+    sub_subcategory = models.ForeignKey(SubSubcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Sub-subcategory"))
+    
+    # Keep old category field for backward compatibility
+    old_category = models.CharField(
         max_length=2,
         choices=ProductCategory.choices,
         default=ProductCategory.OTHER,
+        verbose_name=_("Legacy Category"),
+        help_text=_("This field is kept for backward compatibility and will be removed in future versions")
     )
     description = RichTextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
@@ -154,6 +232,23 @@ class Product(models.Model):
         default=7, verbose_name=_("Lead Time (days)"), help_text="Supplier lead time"
     )
     projected_stockout_date_field = models.DateField(null=True, blank=True, verbose_name=_("Projected Stockout Date"))
+
+    def get_old_category_display(self):
+        """Get display name for the legacy category field"""
+        for code, display in self.ProductCategory.choices:
+            if code == self.old_category:
+                return display
+        return self.old_category
+
+    def get_category_hierarchy(self):
+        """Get the complete category hierarchy as a string"""
+        if self.sub_subcategory:
+            return f"{self.category.name} > {self.subcategory.name} > {self.sub_subcategory.name}"
+        elif self.subcategory:
+            return f"{self.category.name} > {self.subcategory.name}"
+        elif self.category:
+            return self.category.name
+        return "Uncategorized"
 
     def __str__(self):
         return self.name
