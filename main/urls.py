@@ -43,6 +43,7 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
+    MarketplaceProductReviewViewSet,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -115,6 +116,7 @@ router.register(r"feedback", FeedbackViewSet, basename="feedback")
 router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-orders")
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
+router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
