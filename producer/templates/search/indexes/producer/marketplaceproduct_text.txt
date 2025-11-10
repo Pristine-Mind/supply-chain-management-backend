@@ -1,0 +1,7 @@
+{{ object.product.name }}
+{{ object.product.description|striptags }}
+{% if object.product.category %}{{ object.product.category.name }}{% endif %}
+{% if object.product.subcategory %}{{ object.product.subcategory.name }}{% endif %}
+{% if object.product.sub_subcategory %}{{ object.product.sub_subcategory.name }}{% endif %}
+{{ object.listed_price }}
+{{ object.discounted_price }}

@@ -1,5 +1,3 @@
-version: '3.5'
-
 x-server: &base_server_setup
   image: supply-chain-management:latest
   build: .
@@ -13,13 +11,13 @@ x-server: &base_server_setup
     DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
     CELERY_REDIS_URL: ${CELERY_REDIS_URL:-redis://redis:6379/0}
     CACHE_REDIS_URL: ${DJANGO_CACHE_REDIS_URL:-redis://redis:6379/1}
+    ELASTIC_SEARCH_HOST: ${ELASTIC_SEARCH_HOST:-http://elasticsearch:9200}
   env_file:
     - .env
   volumes:
     - .:/code
   depends_on:
     - db
-
 
 services:
   db:
@@ -35,7 +33,7 @@ services:
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-  
+
   redis:
     image: redis:alpine
     volumes:
@@ -46,15 +44,71 @@ services:
     ports:
       - 8005:8000
     command: python manage.py runserver 0.0.0.0:8000
-  
-  celery-beat:
-    <<: *base_server_setup
-    command: bash -c "celery -A main beat --max-interval 3600 -l debug --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+
+  # celery-beat:
+  #   <<: *base_server_setup
+  #   command: bash -c "celery -A main beat --max-interval 3600 -l debug --scheduler django_celery_beat.schedulers:DatabaseScheduler"
 
   celery:
     <<: *base_server_setup
     command: bash -c "celery -A main worker --loglevel=info"
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      # Disable X-Pack security for local development
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=false
+      # Memory settings - increased for stability
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+      # Disable bootstrap checks that can cause issues in Docker
+      - bootstrap.memory_lock=false
+      - bootstrap.system_call_filter=false
+      # CORS settings
+      - http.cors.enabled=true
+      - http.cors.allow-origin=*
+      - http.cors.allow-headers=X-Requested-With,Content-Type,Content-Length,Authorization
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Increased memory limit for better stability
+    mem_limit: 1g
+    restart: unless-stopped
+    volumes:
+      - elastic-search-data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.10
+    container_name: kibana
+    environment:
+      SERVER_NAME: kibana.local
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      # Disable X-Pack security
+      XPACK_SECURITY_ENABLED: false
+    ports:
+      - 5601:5601
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles: [elasticsearch]
+
 volumes:
   postgres_data:
   redis-data:
+  elastic-search-data:
