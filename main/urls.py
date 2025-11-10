@@ -131,6 +131,12 @@ router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="o
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include(router.urls)),
+    # Explicit search endpoint for marketplace (also exposed via router as action)
+    path(
+        "api/v1/marketplace/search/",
+        MarketplaceProductViewSet.as_view({"get": "search"}),
+        name="marketplace-search",
+    ),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),

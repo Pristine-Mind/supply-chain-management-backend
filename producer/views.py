@@ -787,6 +787,114 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             .distinct()
         )
 
+    @action(detail=False, methods=["get"], url_path="search", permission_classes=[AllowAny])
+    def search(self, request):
+        from haystack.query import SearchQuerySet, SQ
+        from rest_framework.pagination import PageNumberPagination
+
+        phrase = request.query_params.get("keyword") or request.query_params.get("q")
+        if phrase is None:
+            return Response({"detail": "Must include a `keyword` or `q` query parameter."}, status=400)
+
+        phrase = phrase.strip()
+        if not phrase:
+            return Response({"detail": "Empty `keyword` provided."}, status=400)
+
+        category = request.query_params.get("category")
+        sub_category = request.query_params.get("sub_category") or request.query_params.get("subcategory")
+        sub_subcategory = request.query_params.get("sub_subcategory")
+
+        sqs = SearchQuerySet().models(MarketplaceProduct)
+
+        try:
+            combined = (
+                SQ(name__startswith=phrase) |
+                SQ(description__contains=phrase) |
+                SQ(category__contains=phrase) |
+                SQ(subcategory__contains=phrase) |
+                SQ(sub_subcategory__contains=phrase) |
+                SQ(text__contains=phrase)
+            )
+            sqs = sqs.filter(combined).order_by("-_score")
+        except Exception:
+            try:
+                sqs = sqs.auto_query(phrase).order_by("-_score")
+            except Exception:
+                sqs = sqs.filter(content=phrase)
+
+        def _id_to_name(val):
+            try:
+                int_val = int(val)
+            except Exception:
+                return val
+            from producer.models import Category, Subcategory, SubSubcategory
+
+            # Try category, then subcategory, then sub_subcategory
+            try:
+                c = Category.objects.filter(id=int_val).first()
+                if c:
+                    return c.name
+            except Exception:
+                pass
+            try:
+                s = Subcategory.objects.filter(id=int_val).first()
+                if s:
+                    return s.name
+            except Exception:
+                pass
+            try:
+                ss = SubSubcategory.objects.filter(id=int_val).first()
+                if ss:
+                    return ss.name
+            except Exception:
+                pass
+            return val
+
+        if category:
+            name_val = _id_to_name(category)
+            try:
+                sqs = sqs.filter(
+                    SQ(category=name_val) | SQ(subcategory=name_val) | SQ(sub_subcategory=name_val)
+                )
+            except Exception:
+                sqs = sqs.filter(
+                    SQ(category__contains=name_val) | SQ(subcategory__contains=name_val) | SQ(sub_subcategory__contains=name_val)
+                )
+        else:
+            def _apply_field_filter(sqs_obj, field_name, value):
+                if not value:
+                    return sqs_obj
+                try:
+                    int_val = int(value)
+                except Exception:
+                    int_val = None
+
+                if int_val:
+                    from producer.models import Category, Subcategory, SubSubcategory
+
+                    try:
+                        if field_name == "subcategory":
+                            sub = Subcategory.objects.get(id=int_val)
+                            return sqs_obj.filter(subcategory=sub.name)
+                        if field_name == "sub_subcategory":
+                            ssub = SubSubcategory.objects.get(id=int_val)
+                            return sqs_obj.filter(sub_subcategory=ssub.name)
+                    except Exception:
+                        return sqs_obj
+
+                return sqs_obj.filter(**{field_name: value})
+
+            sqs = _apply_field_filter(sqs, "subcategory", sub_category)
+            sqs = _apply_field_filter(sqs, "sub_subcategory", sub_subcategory)
+
+        results = [r.object for r in sqs if getattr(r, "object", None) is not None]
+
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get("page_size", 20))
+        page = paginator.paginate_queryset(results, request, view=self)
+        serializer = self.get_serializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
+
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer

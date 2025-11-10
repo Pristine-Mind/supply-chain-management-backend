@@ -42,6 +42,7 @@ env = environ.Env(
     CACHE_REDIS_URL=str,
     BREVO_API_KEY=str,
     KHALTI_SECRET_KEY=str,
+    ELASTIC_SEARCH_HOST=(str, None),
 )
 
 # Read environment variables from .env file
@@ -76,6 +77,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "anymail",
     "ckeditor",
+    "haystack",
     # localapps
     "producer.apps.ProducerConfig",
     "market",
@@ -620,3 +622,18 @@ APNS_USE_SANDBOX = os.environ.get("APNS_USE_SANDBOX", "True").lower() == "true"
 
 CELERY_STATIC_ROOT = STATIC_ROOT
 CELERY_MEDIA_ROOT = MEDIA_ROOT
+
+
+# Required for Django HayStack
+ELASTIC_SEARCH_HOST = env("ELASTIC_SEARCH_HOST") or "http://elasticsearch:9200"
+
+# Required for Django HayStack
+HAYSTACK_CONNECTIONS = {
+    'default': {
+        'ENGINE': 'haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine',
+        'URL': ELASTIC_SEARCH_HOST,
+        'INDEX_NAME': 'new_index',
+    },
+}
+
+HAYSTACK_LIMIT_TO_REGISTERED_MODELS = False
