@@ -1,7 +1,7 @@
 import uuid
 
 from django.contrib.auth.models import User
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -25,12 +25,18 @@ def create_user_profile(sender, instance, created, **kwargs):
         if instance.is_superuser:
             profile_data["shop_id"] = str(uuid.uuid4())
 
-        try:
-            UserProfile.objects.get_or_create(user=instance, defaults=profile_data)
-        except IntegrityError:
-            # In case of a race where a profile was created concurrently
-            # (e.g., admin inline + post_save), ignore the error.
-            pass
+        def _create_profile():
+            try:
+                UserProfile.objects.get_or_create(user=instance, defaults=profile_data)
+            except IntegrityError:
+                # If a concurrent create slipped through, ignore it.
+                pass
+
+        # Delay creation until after the surrounding transaction commits.
+        # This prevents a race where the admin inline creates the profile
+        # in the same transaction and would otherwise cause a unique
+        # constraint violation when both try to insert.
+        transaction.on_commit(_create_profile)
 
 
 # @receiver(post_save, sender=User)
