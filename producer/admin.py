@@ -3,6 +3,9 @@ from typing import Any
 from django.contrib import admin
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django import forms
+from django.core.exceptions import ValidationError
+from PIL import Image
 
 from user.admin_mixins import RoleBasedAdminMixin
 
@@ -389,6 +392,46 @@ class ProductImageAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     autocomplete_fields = [
         "product",
     ]
+
+
+class ProductImageForm(forms.ModelForm):
+    """Custom form that accepts AVIF uploads in the admin.
+
+    Pillow may not validate AVIF files in some environments. We accept
+    files with a .avif extension and skip PIL verification for them. For
+    all other files we attempt to verify using Pillow to keep validation
+    strict for standard formats.
+    """
+
+    image = forms.FileField(required=False)
+
+    class Meta:
+        model = ProductImage
+        fields = "__all__"
+
+    def clean_image(self):
+        f = self.cleaned_data.get("image")
+        if not f:
+            return f
+
+        name = getattr(f, "name", "") or ""
+        if name.lower().endswith(".avif"):
+            # Accept AVIF uploads without Pillow validation.
+            return f
+
+        # For non-AVIF files try to validate using Pillow
+        try:
+            # Pillow's verify() may consume the file pointer; reset after.
+            img = Image.open(f)
+            img.verify()
+            f.seek(0)
+        except Exception:
+            raise ValidationError("Upload a valid image file.")
+
+        return f
+
+# Use the custom form in the admin so AVIF uploads are allowed.
+ProductImageAdmin.form = ProductImageForm
 
 
 @admin.register(LedgerEntry)

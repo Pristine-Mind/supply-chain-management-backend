@@ -93,7 +93,7 @@ class FileUploadSecurityMiddleware(MiddlewareMixin):
 
     # Allowed file extensions
     ALLOWED_EXTENSIONS = {
-        "images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"],
+        "images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".avif"],
         "documents": [".pdf", ".doc", ".docx", ".txt"],
         "data": [".csv", ".xlsx", ".xls"],
     }
