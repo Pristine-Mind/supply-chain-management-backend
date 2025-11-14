@@ -5,6 +5,7 @@ from django.core.files import File
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,61 @@ from .models import (
     UserProductImage,
 )
 from .utils import notify_event
+
+
+def _clear_trending_and_producer_cache(category_name: str = None, featured: bool = False):
+    """Clear cache keys related to trending and producer listing.
+
+    If `category_name` is provided, only keys containing that category name
+    will be removed. If `featured` is True, keys related to featured lists
+    will be removed as well. If Redis isn't available, falls back to clearing
+    the entire cache.
+    """
+    base_patterns = ["trending:*", "producer:*"]
+    patterns = []
+    if category_name:
+        # match query param appearance in cached key
+        patterns.extend([f"trending:*{category_name}*", f"producer:*{category_name}*"])
+    if featured:
+        patterns.append("trending:featured:*")
+
+    # If no specific patterns requested, default to base patterns
+    if not patterns:
+        patterns = base_patterns
+
+    try:
+        # Try to use the redis connection if django_redis is configured
+        from django_redis import get_redis_connection
+
+        conn = get_redis_connection("default")
+        deleted = 0
+        for pattern in patterns:
+            try:
+                for key in conn.scan_iter(match=pattern):
+                    try:
+                        conn.delete(key)
+                        deleted += 1
+                    except Exception:
+                        pass
+            except Exception:
+                try:
+                    keys = conn.keys(pattern)
+                    if keys:
+                        deleted += len(keys)
+                        conn.delete(*keys)
+                except Exception:
+                    pass
+
+        logger.info(f"Cleared {deleted} cache keys for patterns: {patterns}")
+        return
+    except Exception:
+        # Not using django_redis or Redis not available — clear entire cache
+        try:
+            cache.clear()
+            logger.info("Cache cleared (fallback).")
+        except Exception:
+            pass
+
 
 
 def create_product_images(product, marketplace_product):
@@ -218,7 +274,7 @@ def stocklist_notifications(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Product)
 def low_stock_alert(sender, instance, **kwargs):
-    if instance.stock <= instance.reorder_level:
+    if instance.stock <= 10:
         # avoid duplicates
         recent = Notification.objects.filter(
             user=instance.user, notification_type=Notification.Type.STOCK, message__icontains=instance.name
@@ -238,6 +294,45 @@ def low_stock_alert(sender, instance, **kwargs):
                 sms_number=instance.user.user_profile.phone_number,
                 sms_body=msg,
             )
+
+
+    # Invalidate caches when marketplace products or underlying product data change
+    @receiver(post_save, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_save")
+    @receiver(post_delete, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_delete")
+    @receiver(post_save, sender=Product, dispatch_uid="invalidate_cache_product_save")
+    @receiver(post_delete, sender=Product, dispatch_uid="invalidate_cache_product_delete")
+    @receiver(post_save, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_save")
+    @receiver(post_delete, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_delete")
+    def invalidate_product_cache(sender, instance, **kwargs):
+        # Determine category name (string) if available to perform targeted invalidation
+        category_name = None
+        featured = False
+        try:
+            if hasattr(instance, "product") and getattr(instance, "product") is not None:
+                prod = instance.product
+            else:
+                prod = instance
+
+            # product may have category attribute as FK or as simple value
+            cat = getattr(prod, "category", None)
+            if cat is not None:
+                # If it's a model, try to get name; else use string form
+                category_name = getattr(cat, "name", str(cat))
+
+            # If this is a MarketplaceProduct or Product, check featured flag if present
+            featured = bool(getattr(instance, "is_featured", False) or getattr(prod, "is_featured", False))
+        except Exception:
+            category_name = None
+            featured = False
+
+        try:
+            _clear_trending_and_producer_cache(category_name=category_name, featured=featured)
+        except Exception:
+            # last resort: clear whole cache
+            try:
+                cache.clear()
+            except Exception:
+                pass
 
 
 @receiver(post_save, sender=MarketplaceOrder, dispatch_uid="marketplace_order_created_notification")

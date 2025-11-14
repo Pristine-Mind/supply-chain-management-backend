@@ -17,6 +17,12 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce, Rank
 from django.utils import timezone
+from django.conf import settings
+import hashlib
+from django.core.cache import cache
+
+# Cache TTL for trending endpoints (seconds)
+TRENDING_CACHE_TTL = getattr(settings, "TRENDING_CACHE_TTL", 20)
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -141,6 +147,21 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         """
         List trending products with optional filtering
         """
+        # Allow bypassing cache with `nocache=1`
+        nocache = request.query_params.get("nocache")
+
+        # Build a cache key based on full path and user (if authenticated)
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         queryset = self.get_queryset()
 
         # Apply filters
@@ -171,39 +192,104 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset[:20]
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "count": len(serializer.data), "timestamp": timezone.now().isoformat()})
+        payload = {"results": serializer.data, "count": len(serializer.data), "timestamp": timezone.now().isoformat()}
+
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def top_weekly(self, request):
         """
         Get top trending products from the last week
         """
+        nocache = request.query_params.get("nocache")
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:top_weekly:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         queryset = (
             self.get_queryset().filter(weekly_sales_count__gt=0).order_by("-weekly_sales_count", "-trending_score")[:10]
         )
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "period": "weekly", "count": len(serializer.data)})
+        payload = {"results": serializer.data, "period": "weekly", "count": len(serializer.data)}
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def most_viewed(self, request):
         """
         Get most viewed trending products
         """
+        nocache = request.query_params.get("nocache")
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:most_viewed:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         queryset = self.get_queryset().filter(view_count__gt=0).order_by("-view_count", "-trending_score")[:10]
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "period": "most_viewed", "count": len(serializer.data)})
+        payload = {"results": serializer.data, "period": "most_viewed", "count": len(serializer.data)}
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def fastest_selling(self, request):
         """
         Get products with highest sales velocity
         """
+        nocache = request.query_params.get("nocache")
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:fastest_selling:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         queryset = self.get_queryset().filter(sales_velocity__gt=0).order_by("-sales_velocity", "-trending_score")[:10]
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "period": "fastest_selling", "count": len(serializer.data)})
+        payload = {"results": serializer.data, "period": "fastest_selling", "count": len(serializer.data)}
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def new_trending(self, request):
@@ -217,8 +303,27 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-trending_score", "-listed_date")[:10]
         )
 
+        nocache = request.query_params.get("nocache")
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:new_trending:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "period": "new_trending", "count": len(serializer.data)})
+        payload = {"results": serializer.data, "period": "new_trending", "count": len(serializer.data)}
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def categories(self, request):
@@ -332,8 +437,27 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         except (ValueError, TypeError):
             queryset = queryset[:20]
 
+        nocache = request.query_params.get("nocache")
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "trending:featured:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+
+        if not nocache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"results": serializer.data, "count": len(serializer.data), "type": "featured"})
+        payload = {"results": serializer.data, "count": len(serializer.data), "type": "featured"}
+        try:
+            if not nocache:
+                cache.set(cache_key, payload, TRENDING_CACHE_TTL)
+        except Exception:
+            pass
+
+        return Response(payload)
 
     @action(detail=False, methods=["get"])
     def flash_sales(self, request):

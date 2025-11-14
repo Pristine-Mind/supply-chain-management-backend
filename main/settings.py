@@ -385,6 +385,27 @@ CELERY_BEAT_SCHEDULE = {
 
 SITE_URL = "https://appmulyabazzar.com"
 
+# Cache configuration: use Redis if provided, otherwise fall back to local memory cache.
+# Set `CACHE_REDIS_URL` in environment to enable Redis caching (e.g. redis://redis:6379/1).
+CACHE_REDIS_URL = env("CACHE_REDIS_URL") or os.environ.get("CACHE_REDIS_URL")
+if CACHE_REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": CACHE_REDIS_URL,
+            "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        }
+    }
+else:
+    # Development fallback (per-process, not shared between workers)
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# Cache TTL defaults (seconds) used by application-level caches. Can be overridden
+# by environment variables if desired.
+PRODUCER_SEARCH_CACHE_TTL = int(os.environ.get("PRODUCER_SEARCH_CACHE_TTL", 30))
+PRODUCER_LIST_CACHE_TTL = int(os.environ.get("PRODUCER_LIST_CACHE_TTL", 15))
+TRENDING_CACHE_TTL = int(os.environ.get("TRENDING_CACHE_TTL", 20))
+
 KHALTI_SECRET_KEY = env("KHALTI_SECRET_KEY")
 KHALTI_BASE_URL = "https://khalti.com/api/v2/"
 KHALTI_WEBSITE_URL = ""
