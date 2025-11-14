@@ -342,6 +342,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "discounted_price",
         "percent_off",
         "is_offer_active",
+        "is_featured",
         "estimated_delivery_days",
         "shipping_cost",
         "recent_purchases_count",

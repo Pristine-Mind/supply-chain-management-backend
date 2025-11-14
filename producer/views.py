@@ -11,6 +11,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from rest_framework import status, viewsets
+import random
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -786,6 +787,42 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             .order_by("-listed_date")
             .distinct()
         )
+
+    def list(self, request, *args, **kwargs):
+        """List marketplace products but randomize order within the first N results.
+
+        This takes the filtered queryset (so filtering backends still apply),
+        limits to `first_n` products (default 50) ordered by listed_date,
+        shuffles them in-memory, then paginates the shuffled list.
+        """
+        # Apply filtering backends (search, filterset, etc.)
+        qs = self.filter_queryset(self.get_queryset())
+
+        # Determine how many top products to randomize from
+        try:
+            first_n = int(request.query_params.get("first_n", 50))
+        except (ValueError, TypeError):
+            first_n = 50
+
+        # Take first N by listed_date (get_queryset already orders by listed_date)
+        limited_qs = list(qs[: first_n])
+
+        # Shuffle in-place
+        random.shuffle(limited_qs)
+
+        # Use DRF paginator on the shuffled list
+        paginator = self.paginator or PageNumberPagination()
+        # Allow page_size via query param if provided
+        page_size = request.query_params.get("page_size")
+        if page_size:
+            try:
+                paginator.page_size = int(page_size)
+            except (ValueError, TypeError):
+                pass
+
+        page = paginator.paginate_queryset(limited_qs, request, view=self)
+        serializer = self.get_serializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="search", permission_classes=[AllowAny])
     def search(self, request):
