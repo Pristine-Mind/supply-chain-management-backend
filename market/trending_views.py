@@ -12,6 +12,7 @@ from django.db.models import (
     Q,
     Sum,
     Value,
+    ExpressionWrapper,
     When,
     Window,
 )
@@ -111,14 +112,13 @@ class TrendingProductsManager:
         `view_count`, and `rank_score`. Use this for high-traffic endpoints where
         slight approximation is acceptable in exchange for much faster queries.
         """
-        # Coalesce stored fields to ensure numeric values
-        return queryset.annotate(
-            trending_score=(
-                (Coalesce(F("recent_purchases_count"), 0.0) * 3.0) * 0.5
-                + (Coalesce(F("view_count"), 0.0) * 1.0 / 100.0) * 0.3
-                + (Coalesce(F("rank_score"), 0.0) / 5.0) * 0.2
-            )
+        # Build expression using Value() to ensure consistent numeric types
+        expr = (
+            (Coalesce(F("recent_purchases_count"), Value(0.0)) * Value(3.0) * Value(0.5))
+            + (Coalesce(F("view_count"), Value(0.0)) * Value(1.0) / Value(100.0) * Value(0.3))
+            + (Coalesce(F("rank_score"), Value(0.0)) / Value(5.0) * Value(0.2))
         )
+        return queryset.annotate(trending_score=ExpressionWrapper(expr, output_field=FloatField()))
 
     @staticmethod
     def get_trending_categories():
