@@ -804,11 +804,49 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         except (ValueError, TypeError):
             first_n = 50
 
-        # Take first N by listed_date (get_queryset already orders by listed_date)
-        limited_qs = list(qs[: first_n])
+        # Take a candidate pool (larger than first_n) to allow picking from
+        # multiple categories, then build a category-balanced list by
+        # round-robin selecting from each category in random order.
+        candidate_factor = 3
+        max_candidate_cap = 500
+        candidate_size = min(max_candidate_cap, max(first_n * candidate_factor, first_n))
+        candidates = list(qs[:candidate_size])
 
-        # Shuffle in-place
-        random.shuffle(limited_qs)
+        # Group candidates by category (use category id or name where available)
+        from collections import defaultdict
+
+        buckets = defaultdict(list)
+        for mp in candidates:
+            try:
+                cat = mp.product.category
+            except Exception:
+                cat = None
+            # Use id if it's a model, else use the value directly
+            cat_key = getattr(cat, "id", None) if getattr(cat, "id", None) is not None else cat
+            buckets[cat_key].append(mp)
+
+        # Randomize bucket order so categories are interleaved unpredictably
+        category_keys = list(buckets.keys())
+        random.shuffle(category_keys)
+
+        limited_qs = []
+        # Round-robin pick one from each bucket until we reach first_n
+        while len(limited_qs) < first_n and any(buckets[k] for k in category_keys):
+            for k in list(category_keys):
+                if not buckets[k]:
+                    continue
+                # Pop from front to keep higher-ranked items earlier for each category
+                limited_qs.append(buckets[k].pop(0))
+                if len(limited_qs) >= first_n:
+                    break
+
+        # If still short, append remaining candidates in order
+        if len(limited_qs) < first_n:
+            remaining = [mp for k in category_keys for mp in buckets[k]]
+            for mp in remaining:
+                if len(limited_qs) >= first_n:
+                    break
+                limited_qs.append(mp)
 
         # Use DRF paginator on the shuffled list
         paginator = self.paginator or PageNumberPagination()
