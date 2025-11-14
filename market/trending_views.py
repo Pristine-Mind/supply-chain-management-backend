@@ -213,7 +213,7 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         week_ago = timezone.now() - timedelta(days=7)
         queryset = (
             self.get_queryset()
-            .filter(listed_date__gte=week_ago, trending_score__gt=0.1)
+            .filter(listed_date__gte=week_ago)
             .order_by("-trending_score", "-listed_date")[:10]
         )
 
@@ -316,6 +316,24 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
                 "type": "deals",
             }
         )
+
+    @action(detail=False, methods=["get"])
+    def featured(self, request):
+        """
+        Get featured products marked by admins.
+        """
+        queryset = self.get_queryset().filter(is_featured=True).order_by("-trending_score")
+
+        # Limit results
+        limit = request.query_params.get("limit", 20)
+        try:
+            limit = int(limit)
+            queryset = queryset[:limit]
+        except (ValueError, TypeError):
+            queryset = queryset[:20]
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"results": serializer.data, "count": len(serializer.data), "type": "featured"})
 
     @action(detail=False, methods=["get"])
     def flash_sales(self, request):

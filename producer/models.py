@@ -583,6 +583,7 @@ class MarketplaceProduct(models.Model):
     )
     view_count = models.PositiveIntegerField(default=0, verbose_name=_("View Count"))
     rank_score = models.FloatField(default=0, verbose_name=_("Rank Score"))
+    is_featured = models.BooleanField(default=False, verbose_name=_("Is Featured"))
 
     def save(self, *args, **kwargs):
         user_profile = None

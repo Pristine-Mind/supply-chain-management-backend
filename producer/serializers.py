@@ -490,6 +490,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_offer_active = serializers.BooleanField(read_only=True)
     offer_countdown = serializers.SerializerMethodField()
     is_free_shipping = serializers.BooleanField(read_only=True)
+    is_featured = serializers.BooleanField(read_only=False)
     # views_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -509,6 +510,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "estimated_delivery_days",
             "shipping_cost",
             "is_free_shipping",
+            "is_featured",
             "recent_purchases_count",
             "listed_date",
             "is_available",
