@@ -854,8 +854,22 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                     break
                 limited_qs.append(mp)
 
-        # Use DRF paginator on the shuffled list
-        # First, attempt to return a cached response for identical queries
+        # Build the final ordered list: randomized first `first_n`, then the rest
+        try:
+            selected_ids = [int(mp.id) for mp in limited_qs]
+        except Exception:
+            selected_ids = []
+
+        # Get remaining products (preserve original queryset ordering)
+        try:
+            remaining_qs = list(qs.exclude(id__in=selected_ids)) if selected_ids else list(qs)
+        except Exception:
+            # Fallback: use candidates not already selected
+            remaining_qs = [mp for mp in list(qs) if getattr(mp, "id", None) not in selected_ids]
+
+        final_list = limited_qs + remaining_qs
+
+        # Use DRF paginator on the combined list
         try:
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
@@ -874,7 +888,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
 
-        page = paginator.paginate_queryset(limited_qs, request, view=self)
+        page = paginator.paginate_queryset(final_list, request, view=self)
         serializer = self.get_serializer(page, many=True, context={"request": request})
         response = paginator.get_paginated_response(serializer.data)
 
