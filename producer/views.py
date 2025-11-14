@@ -21,6 +21,12 @@ from rest_framework.views import APIView
 from market.models import MarketplaceProduct
 from market.serializers import MarketplaceProductSerializer
 from user.models import UserProfile
+import hashlib
+from django.core.cache import cache
+
+# Cache TTLs (seconds) - can be overridden in Django settings
+SEARCH_CACHE_TTL = getattr(settings, "PRODUCER_SEARCH_CACHE_TTL", 30)
+LIST_CACHE_TTL = getattr(settings, "PRODUCER_LIST_CACHE_TTL", 15)
 
 from .filters import (
     CustomerFilter,
@@ -849,6 +855,16 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 limited_qs.append(mp)
 
         # Use DRF paginator on the shuffled list
+        # First, attempt to return a cached response for identical queries
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "producer:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         paginator = self.paginator or PageNumberPagination()
         # Allow page_size via query param if provided
         page_size = request.query_params.get("page_size")
@@ -860,7 +876,15 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
         page = paginator.paginate_queryset(limited_qs, request, view=self)
         serializer = self.get_serializer(page, many=True, context={"request": request})
-        return paginator.get_paginated_response(serializer.data)
+        response = paginator.get_paginated_response(serializer.data)
+
+        # Cache the response data (dict) for a short TTL
+        try:
+            cache.set(cache_key, response.data, LIST_CACHE_TTL)
+        except Exception:
+            pass
+
+        return response
 
     @action(detail=False, methods=["get"], url_path="search", permission_classes=[AllowAny])
     def search(self, request):
@@ -878,6 +902,16 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         category = request.query_params.get("category")
         sub_category = request.query_params.get("sub_category") or request.query_params.get("subcategory")
         sub_subcategory = request.query_params.get("sub_subcategory")
+
+        # Cache search results for identical queries for a short TTL
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+        cache_key = "producer:search:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         sqs = SearchQuerySet().models(MarketplaceProduct)
 
@@ -968,7 +1002,15 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         paginator.page_size = int(request.query_params.get("page_size", 20))
         page = paginator.paginate_queryset(results, request, view=self)
         serializer = self.get_serializer(page, many=True, context={"request": request})
-        return paginator.get_paginated_response(serializer.data)
+        response = paginator.get_paginated_response(serializer.data)
+
+        # Cache the response payload for a short TTL
+        try:
+            cache.set(cache_key, response.data, SEARCH_CACHE_TTL)
+        except Exception:
+            pass
+
+        return response
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
