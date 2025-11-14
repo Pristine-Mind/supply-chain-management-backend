@@ -103,6 +103,24 @@ class TrendingProductsManager:
         )
 
     @staticmethod
+    def calculate_trending_score_fast(queryset):
+        """Lightweight trending score calculation using stored counters.
+
+        This avoids expensive COUNT joins and window functions by relying on
+        precomputed fields on `MarketplaceProduct` such as `recent_purchases_count`,
+        `view_count`, and `rank_score`. Use this for high-traffic endpoints where
+        slight approximation is acceptable in exchange for much faster queries.
+        """
+        # Coalesce stored fields to ensure numeric values
+        return queryset.annotate(
+            trending_score=(
+                (Coalesce(F("recent_purchases_count"), 0.0) * 3.0) * 0.5
+                + (Coalesce(F("view_count"), 0.0) * 1.0 / 100.0) * 0.3
+                + (Coalesce(F("rank_score"), 0.0) / 5.0) * 0.2
+            )
+        )
+
+    @staticmethod
     def get_trending_categories():
         """
         Get trending product categories with metrics
@@ -205,7 +223,7 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def top_weekly(self, request):
         """
-        Get top trending products from the last week
+        Get top trending products for the last week (fast path).
         """
         nocache = request.query_params.get("nocache")
         try:
@@ -219,8 +237,13 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             if cached is not None:
                 return Response(cached)
 
+        week_ago = timezone.now() - timedelta(days=7)
+
+        # Use an approximation: rely on stored `recent_purchases_count` as a proxy
+        base_qs = MarketplaceProduct.objects.filter(is_available=True, listed_date__gte=week_ago, recent_purchases_count__gt=0)
         queryset = (
-            self.get_queryset().filter(weekly_sales_count__gt=0).order_by("-weekly_sales_count", "-trending_score")[:10]
+            TrendingProductsManager.calculate_trending_score_fast(base_qs)
+            .order_by("-trending_score")[:10]
         )
 
         serializer = self.get_serializer(queryset, many=True)
@@ -250,7 +273,13 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             if cached is not None:
                 return Response(cached)
 
-        queryset = self.get_queryset().filter(view_count__gt=0).order_by("-view_count", "-trending_score")[:10]
+        # Build a fast queryset that annotates a lightweight trending_score
+        base_qs = MarketplaceProduct.objects.filter(is_available=True)
+        queryset = (
+            TrendingProductsManager.calculate_trending_score_fast(base_qs)
+            .filter(view_count__gt=0)
+            .order_by("-view_count", "-trending_score")[:10]
+        )
 
         serializer = self.get_serializer(queryset, many=True)
         payload = {"results": serializer.data, "period": "most_viewed", "count": len(serializer.data)}
@@ -296,13 +325,6 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Get newly listed products that are trending
         """
-        week_ago = timezone.now() - timedelta(days=7)
-        queryset = (
-            self.get_queryset()
-            .filter(listed_date__gte=week_ago)
-            .order_by("-trending_score", "-listed_date")[:10]
-        )
-
         nocache = request.query_params.get("nocache")
         try:
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
@@ -314,6 +336,13 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             cached = cache.get(cache_key)
             if cached is not None:
                 return Response(cached)
+
+        week_ago = timezone.now() - timedelta(days=7)
+        base_qs = MarketplaceProduct.objects.filter(is_available=True, listed_date__gte=week_ago)
+        queryset = (
+            TrendingProductsManager.calculate_trending_score_fast(base_qs)
+            .order_by("-trending_score", "-listed_date")[:10]
+        )
 
         serializer = self.get_serializer(queryset, many=True)
         payload = {"results": serializer.data, "period": "new_trending", "count": len(serializer.data)}
