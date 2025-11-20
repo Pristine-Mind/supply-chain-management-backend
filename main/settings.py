@@ -271,6 +271,26 @@ else:
 
 # Production-specific CORS settings
 CORS_URLS_REGEX = r"^/api/.*$"  # Only apply CORS to API endpoints
+
+# CSRF Trusted Origins - Allow cross-origin requests to API endpoints
+CSRF_TRUSTED_ORIGINS = [
+    "https://appmulyabazzar.com",
+    "https://www.appmulyabazzar.com",
+    "https://admin.appmulyabazzar.com",
+]
+
+# For development only
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS.extend(
+        [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+    )
 # CORS_ALLOW_METHODS = (
 #     "DELETE",
 #     "GET",
@@ -305,7 +325,8 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.BasicAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        # Using custom session auth that doesn't enforce CSRF for API endpoints
+        "main.authentication.CSRFExemptSessionAuthentication",
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
