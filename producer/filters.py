@@ -3,7 +3,17 @@ from django.db.models import Q
 
 from user.models import UserProfile
 
-from .models import Customer, MarketplaceProduct, Order, Producer, Product, Sale, Category, Subcategory, SubSubcategory
+from .models import (
+    Category,
+    Customer,
+    MarketplaceProduct,
+    Order,
+    Producer,
+    Product,
+    Sale,
+    Subcategory,
+    SubSubcategory,
+)
 
 
 class ProducerFilter(django_filters.FilterSet):
@@ -82,7 +92,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
     category = django_filters.CharFilter(method="filter_category", label="Category")
     category = django_filters.CharFilter(method="filter_category", label="Category")
-    
+
     # New hierarchy filters
     category_id = django_filters.CharFilter(method="filter_category_id", label="Category ID")
     subcategory_id = django_filters.CharFilter(method="filter_subcategory_id", label="Subcategory ID")
@@ -93,10 +103,23 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         field_name="product__user__user_profile__business_type",
         label="Profile Type",
     )
+    is_made_in_nepal = django_filters.BooleanFilter(
+        field_name="is_made_in_nepal",
+        label="Made in Nepal",
+    )
 
     class Meta:
         model = MarketplaceProduct
-        fields = ["search", "category", "category_id", "subcategory_id", "sub_subcategory_id", "city", "profile_type"]
+        fields = [
+            "search",
+            "category",
+            "category_id",
+            "subcategory_id",
+            "sub_subcategory_id",
+            "city",
+            "profile_type",
+            "is_made_in_nepal",
+        ]
 
     def filter_search(self, queryset, name, value):
         if value:
@@ -107,14 +130,14 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         """Filter by category - supports both old codes (FA, EG, etc.) and new category names/codes"""
         if not value:
             return queryset
-            
+
         try:
             # Try to parse as integer (new category ID)
             category_id = int(value)
             return queryset.filter(
-                Q(product__category_id=category_id) |
-                Q(product__subcategory__category_id=category_id) |
-                Q(product__sub_subcategory__subcategory__category_id=category_id)
+                Q(product__category_id=category_id)
+                | Q(product__subcategory__category_id=category_id)
+                | Q(product__sub_subcategory__subcategory__category_id=category_id)
             )
         except ValueError:
             # Not an integer, treat as old category code or name
@@ -124,9 +147,9 @@ class MarketplaceProductFilter(django_filters.FilterSet):
             else:
                 # Category name search
                 return queryset.filter(
-                    Q(product__category__name__icontains=value) |
-                    Q(product__subcategory__name__icontains=value) |
-                    Q(product__sub_subcategory__name__icontains=value)
+                    Q(product__category__name__icontains=value)
+                    | Q(product__subcategory__name__icontains=value)
+                    | Q(product__sub_subcategory__name__icontains=value)
                 )
 
     def filter_category_id(self, queryset, name, value):
@@ -134,25 +157,23 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         if not value:
             return queryset
         return queryset.filter(
-            Q(product__category_id=value) |
-            Q(product__subcategory__category_id=value) |
-            Q(product__sub_subcategory__subcategory__category_id=value)
+            Q(product__category_id=value)
+            | Q(product__subcategory__category_id=value)
+            | Q(product__sub_subcategory__subcategory__category_id=value)
         )
 
     def filter_subcategory_id(self, queryset, name, value):
         """Filter by subcategory ID"""
         if not value:
             return queryset
-        return queryset.filter(
-            Q(product__subcategory_id=value) |
-            Q(product__sub_subcategory__subcategory_id=value)
-        )
+        return queryset.filter(Q(product__subcategory_id=value) | Q(product__sub_subcategory__subcategory_id=value))
 
     def filter_sub_subcategory_id(self, queryset, name, value):
         """Filter by sub-subcategory ID"""
         if not value:
             return queryset
         return queryset.filter(product__sub_subcategory_id=value)
+
 
 class OrderFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")

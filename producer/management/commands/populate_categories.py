@@ -1,21 +1,22 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
+
 from producer.models import Category, Subcategory, SubSubcategory
 
 
 class Command(BaseCommand):
-    help = 'Populate the database with hierarchical category data'
+    help = "Populate the database with hierarchical category data"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--clear',
-            action='store_true',
-            help='Clear existing categories before populating',
+            "--clear",
+            action="store_true",
+            help="Clear existing categories before populating",
         )
 
     def handle(self, *args, **options):
-        if options['clear']:
-            self.stdout.write('Clearing existing categories...')
+        if options["clear"]:
+            self.stdout.write("Clearing existing categories...")
             SubSubcategory.objects.all().delete()
             Subcategory.objects.all().delete()
             Category.objects.all().delete()
@@ -37,8 +38,8 @@ class Command(BaseCommand):
                                 {"code": "FA_CL_SW", "name": "Sleepwear & Loungewear"},
                                 {"code": "FA_CL_SP", "name": "Sportswear"},
                                 {"code": "FA_CL_FW", "name": "Formal Wear"},
-                                {"code": "FA_CL_TW", "name": "Traditional Wear"}
-                            ]
+                                {"code": "FA_CL_TW", "name": "Traditional Wear"},
+                            ],
                         },
                         {
                             "code": "FA_FW",
@@ -51,8 +52,8 @@ class Command(BaseCommand):
                                 {"code": "FA_FW_BT", "name": "Boots"},
                                 {"code": "FA_FW_HH", "name": "High Heels"},
                                 {"code": "FA_FW_FL", "name": "Flats"},
-                                {"code": "FA_FW_SK", "name": "Sneakers"}
-                            ]
+                                {"code": "FA_FW_SK", "name": "Sneakers"},
+                            ],
                         },
                         {
                             "code": "FA_AC",
@@ -65,10 +66,10 @@ class Command(BaseCommand):
                                 {"code": "FA_AC_EY", "name": "Eyewear"},
                                 {"code": "FA_AC_SC", "name": "Scarves & Ties"},
                                 {"code": "FA_AC_GL", "name": "Gloves"},
-                                {"code": "FA_AC_UM", "name": "Umbrellas"}
-                            ]
-                        }
-                    ]
+                                {"code": "FA_AC_UM", "name": "Umbrellas"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "EG",
@@ -85,8 +86,8 @@ class Command(BaseCommand):
                                 {"code": "EG_MB_AC", "name": "Computer Accessories"},
                                 {"code": "EG_MB_WR", "name": "Wearable Technology"},
                                 {"code": "EG_MB_ST", "name": "Storage Devices"},
-                                {"code": "EG_MB_NW", "name": "Networking Equipment"}
-                            ]
+                                {"code": "EG_MB_NW", "name": "Networking Equipment"},
+                            ],
                         },
                         {
                             "code": "EG_HA",
@@ -99,8 +100,8 @@ class Command(BaseCommand):
                                 {"code": "EG_HA_SA", "name": "Small Appliances"},
                                 {"code": "EG_HA_VC", "name": "Vacuum Cleaners"},
                                 {"code": "EG_HA_WH", "name": "Water Heaters"},
-                                {"code": "EG_HA_RF", "name": "Refrigeration"}
-                            ]
+                                {"code": "EG_HA_RF", "name": "Refrigeration"},
+                            ],
                         },
                         {
                             "code": "EG_EN",
@@ -113,10 +114,10 @@ class Command(BaseCommand):
                                 {"code": "EG_EN_SM", "name": "Smart Home Devices"},
                                 {"code": "EG_EN_DR", "name": "Drones & RC"},
                                 {"code": "EG_EN_VR", "name": "VR & AR Devices"},
-                                {"code": "EG_EN_ST", "name": "Streaming Devices"}
-                            ]
-                        }
-                    ]
+                                {"code": "EG_EN_ST", "name": "Streaming Devices"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "GE",
@@ -133,8 +134,8 @@ class Command(BaseCommand):
                                 {"code": "GE_FD_SN", "name": "Snacks & Confectionery"},
                                 {"code": "GE_FD_MT", "name": "Meat & Seafood"},
                                 {"code": "GE_FD_FZ", "name": "Frozen Foods"},
-                                {"code": "GE_FD_OR", "name": "Organic & Health Foods"}
-                            ]
+                                {"code": "GE_FD_OR", "name": "Organic & Health Foods"},
+                            ],
                         },
                         {
                             "code": "GE_HC",
@@ -147,8 +148,8 @@ class Command(BaseCommand):
                                 {"code": "GE_HC_AR", "name": "Air Fresheners"},
                                 {"code": "GE_HC_DS", "name": "Dishware & Supplies"},
                                 {"code": "GE_HC_ST", "name": "Storage & Organization"},
-                                {"code": "GE_HC_BG", "name": "Bags & Wraps"}
-                            ]
+                                {"code": "GE_HC_BG", "name": "Bags & Wraps"},
+                            ],
                         },
                         {
                             "code": "GE_PC",
@@ -161,10 +162,10 @@ class Command(BaseCommand):
                                 {"code": "GE_PC_FH", "name": "Feminine Hygiene"},
                                 {"code": "GE_PC_BB", "name": "Baby Care"},
                                 {"code": "GE_PC_DT", "name": "Deodorants & Perfumes"},
-                                {"code": "GE_PC_FT", "name": "Foot Care"}
-                            ]
-                        }
-                    ]
+                                {"code": "GE_PC_FT", "name": "Foot Care"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "HB",
@@ -181,8 +182,8 @@ class Command(BaseCommand):
                                 {"code": "HB_SK_AC", "name": "Acne Treatment"},
                                 {"code": "HB_SK_SN", "name": "Sensitive Skin"},
                                 {"code": "HB_SK_EX", "name": "Exfoliation"},
-                                {"code": "HB_SK_MZ", "name": "Moisturizers"}
-                            ]
+                                {"code": "HB_SK_MZ", "name": "Moisturizers"},
+                            ],
                         },
                         {
                             "code": "HB_MU",
@@ -195,8 +196,8 @@ class Command(BaseCommand):
                                 {"code": "HB_MU_TO", "name": "Tools & Brushes"},
                                 {"code": "HB_MU_PR", "name": "Primers & Setting"},
                                 {"code": "HB_MU_HL", "name": "Highlighters & Contour"},
-                                {"code": "HB_MU_RM", "name": "Makeup Removers"}
-                            ]
+                                {"code": "HB_MU_RM", "name": "Makeup Removers"},
+                            ],
                         },
                         {
                             "code": "HB_HL",
@@ -209,10 +210,10 @@ class Command(BaseCommand):
                                 {"code": "HB_HL_AR", "name": "Aromatherapy"},
                                 {"code": "HB_HL_HB", "name": "Herbal & Natural"},
                                 {"code": "HB_HL_PT", "name": "Protein & Sports Nutrition"},
-                                {"code": "HB_HL_MM", "name": "Medical Monitoring"}
-                            ]
-                        }
-                    ]
+                                {"code": "HB_HL_MM", "name": "Medical Monitoring"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "HL",
@@ -229,8 +230,8 @@ class Command(BaseCommand):
                                 {"code": "HL_FR_OD", "name": "Outdoor Furniture"},
                                 {"code": "HL_FR_KT", "name": "Kitchen Furniture"},
                                 {"code": "HL_FR_ST", "name": "Storage Furniture"},
-                                {"code": "HL_FR_KD", "name": "Kids Furniture"}
-                            ]
+                                {"code": "HL_FR_KD", "name": "Kids Furniture"},
+                            ],
                         },
                         {
                             "code": "HL_DC",
@@ -243,8 +244,8 @@ class Command(BaseCommand):
                                 {"code": "HL_DC_PL", "name": "Plants & Planters"},
                                 {"code": "HL_DC_CS", "name": "Cushions & Throws"},
                                 {"code": "HL_DC_MR", "name": "Mirrors"},
-                                {"code": "HL_DC_CL", "name": "Candles & Fragrances"}
-                            ]
+                                {"code": "HL_DC_CL", "name": "Candles & Fragrances"},
+                            ],
                         },
                         {
                             "code": "HL_KT",
@@ -257,8 +258,8 @@ class Command(BaseCommand):
                                 {"code": "HL_KT_LN", "name": "Linens & Textiles"},
                                 {"code": "HL_KT_GL", "name": "Glassware & Drinkware"},
                                 {"code": "HL_KT_KN", "name": "Knives & Cutlery"},
-                                {"code": "HL_KT_AP", "name": "Small Appliances"}
-                            ]
+                                {"code": "HL_KT_AP", "name": "Small Appliances"},
+                            ],
                         },
                         {
                             "code": "HL_BD",
@@ -271,10 +272,10 @@ class Command(BaseCommand):
                                 {"code": "HL_BD_BL", "name": "Blankets & Comforters"},
                                 {"code": "HL_BD_MT", "name": "Mattresses & Toppers"},
                                 {"code": "HL_BD_SH", "name": "Shower Curtains"},
-                                {"code": "HL_BD_RB", "name": "Robes & Sleepwear"}
-                            ]
-                        }
-                    ]
+                                {"code": "HL_BD_RB", "name": "Robes & Sleepwear"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "TT",
@@ -291,8 +292,8 @@ class Command(BaseCommand):
                                 {"code": "TT_LG_AC", "name": "Travel Accessories"},
                                 {"code": "TT_LG_CB", "name": "Carry-on Bags"},
                                 {"code": "TT_LG_WB", "name": "Wheeled Bags"},
-                                {"code": "TT_LG_LT", "name": "Laptop & Business Bags"}
-                            ]
+                                {"code": "TT_LG_LT", "name": "Laptop & Business Bags"},
+                            ],
                         },
                         {
                             "code": "TT_OD",
@@ -305,8 +306,8 @@ class Command(BaseCommand):
                                 {"code": "TT_OD_SF", "name": "Safety & Navigation"},
                                 {"code": "TT_OD_CK", "name": "Cooking & Survival"},
                                 {"code": "TT_OD_BK", "name": "Biking & Cycling"},
-                                {"code": "TT_OD_FS", "name": "Fishing & Hunting"}
-                            ]
+                                {"code": "TT_OD_FS", "name": "Fishing & Hunting"},
+                            ],
                         },
                         {
                             "code": "TT_TR",
@@ -319,10 +320,10 @@ class Command(BaseCommand):
                                 {"code": "TT_TR_DC", "name": "Documents & Money"},
                                 {"code": "TT_TR_HL", "name": "Health & Safety"},
                                 {"code": "TT_TR_AD", "name": "Adapters & Converters"},
-                                {"code": "TT_TR_EN", "name": "Entertainment & Books"}
-                            ]
-                        }
-                    ]
+                                {"code": "TT_TR_EN", "name": "Entertainment & Books"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "IS",
@@ -339,8 +340,8 @@ class Command(BaseCommand):
                                 {"code": "IS_TL_WE", "name": "Welding & Cutting"},
                                 {"code": "IS_TL_CR", "name": "Construction Tools"},
                                 {"code": "IS_TL_GD", "name": "Gardening & Landscaping"},
-                                {"code": "IS_TL_AU", "name": "Automotive Tools"}
-                            ]
+                                {"code": "IS_TL_AU", "name": "Automotive Tools"},
+                            ],
                         },
                         {
                             "code": "IS_RW",
@@ -353,8 +354,8 @@ class Command(BaseCommand):
                                 {"code": "IS_RW_WD", "name": "Wood & Lumber"},
                                 {"code": "IS_RW_ST", "name": "Stone & Concrete"},
                                 {"code": "IS_RW_GL", "name": "Glass & Ceramics"},
-                                {"code": "IS_RW_RB", "name": "Rubber & Adhesives"}
-                            ]
+                                {"code": "IS_RW_RB", "name": "Rubber & Adhesives"},
+                            ],
                         },
                         {
                             "code": "IS_MC",
@@ -367,10 +368,10 @@ class Command(BaseCommand):
                                 {"code": "IS_MC_MT", "name": "Maintenance Supplies"},
                                 {"code": "IS_MC_BR", "name": "Bearings & Motion"},
                                 {"code": "IS_MC_FL", "name": "Fluid Handling"},
-                                {"code": "IS_MC_CT", "name": "Control Systems"}
-                            ]
-                        }
-                    ]
+                                {"code": "IS_MC_CT", "name": "Control Systems"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "AU",
@@ -387,8 +388,8 @@ class Command(BaseCommand):
                                 {"code": "AU_PT_IN", "name": "Interior & Comfort"},
                                 {"code": "AU_PT_TR", "name": "Transmission & Drivetrain"},
                                 {"code": "AU_PT_FL", "name": "Fluids & Chemicals"},
-                                {"code": "AU_PT_TI", "name": "Tires & Wheels"}
-                            ]
+                                {"code": "AU_PT_TI", "name": "Tires & Wheels"},
+                            ],
                         },
                         {
                             "code": "AU_AC",
@@ -401,8 +402,8 @@ class Command(BaseCommand):
                                 {"code": "AU_AC_ST", "name": "Storage & Organization"},
                                 {"code": "AU_AC_SP", "name": "Sports & Recreation"},
                                 {"code": "AU_AC_DG", "name": "Diagnostic Tools"},
-                                {"code": "AU_AC_EM", "name": "Emergency Kits"}
-                            ]
+                                {"code": "AU_AC_EM", "name": "Emergency Kits"},
+                            ],
                         },
                         {
                             "code": "AU_MO",
@@ -415,10 +416,10 @@ class Command(BaseCommand):
                                 {"code": "AU_MO_SF", "name": "Safety Equipment"},
                                 {"code": "AU_MO_AT", "name": "ATV & Off-road"},
                                 {"code": "AU_MO_TI", "name": "Tires & Wheels"},
-                                {"code": "AU_MO_EL", "name": "Electronics"}
-                            ]
-                        }
-                    ]
+                                {"code": "AU_MO_EL", "name": "Electronics"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "SP",
@@ -435,8 +436,8 @@ class Command(BaseCommand):
                                 {"code": "SP_FT_AC", "name": "Fitness Accessories"},
                                 {"code": "SP_FT_WR", "name": "Wearable Fitness Tech"},
                                 {"code": "SP_FT_MT", "name": "Exercise Mats"},
-                                {"code": "SP_FT_HM", "name": "Home Gym Equipment"}
-                            ]
+                                {"code": "SP_FT_HM", "name": "Home Gym Equipment"},
+                            ],
                         },
                         {
                             "code": "SP_OT",
@@ -449,8 +450,8 @@ class Command(BaseCommand):
                                 {"code": "SP_OT_SK", "name": "Skiing & Snow Sports"},
                                 {"code": "SP_OT_FS", "name": "Fishing & Hunting"},
                                 {"code": "SP_OT_GL", "name": "Golf"},
-                                {"code": "SP_OT_TN", "name": "Tennis & Racquet Sports"}
-                            ]
+                                {"code": "SP_OT_TN", "name": "Tennis & Racquet Sports"},
+                            ],
                         },
                         {
                             "code": "SP_TM",
@@ -463,10 +464,10 @@ class Command(BaseCommand):
                                 {"code": "SP_TM_HY", "name": "Hockey"},
                                 {"code": "SP_TM_CR", "name": "Cricket"},
                                 {"code": "SP_TM_RG", "name": "Rugby"},
-                                {"code": "SP_TM_BD", "name": "Badminton"}
-                            ]
-                        }
-                    ]
+                                {"code": "SP_TM_BD", "name": "Badminton"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "BK",
@@ -483,8 +484,8 @@ class Command(BaseCommand):
                                 {"code": "BK_BK_RF", "name": "Reference & Dictionaries"},
                                 {"code": "BK_BK_RL", "name": "Religion & Spirituality"},
                                 {"code": "BK_BK_HB", "name": "Health & Self-Help"},
-                                {"code": "BK_BK_BG", "name": "Biography & Memoir"}
-                            ]
+                                {"code": "BK_BK_BG", "name": "Biography & Memoir"},
+                            ],
                         },
                         {
                             "code": "BK_MD",
@@ -497,8 +498,8 @@ class Command(BaseCommand):
                                 {"code": "BK_MD_AB", "name": "Audiobooks"},
                                 {"code": "BK_MD_EB", "name": "E-books"},
                                 {"code": "BK_MD_PC", "name": "Podcasts"},
-                                {"code": "BK_MD_OC", "name": "Online Courses"}
-                            ]
+                                {"code": "BK_MD_OC", "name": "Online Courses"},
+                            ],
                         },
                         {
                             "code": "BK_ST",
@@ -511,10 +512,10 @@ class Command(BaseCommand):
                                 {"code": "BK_ST_OF", "name": "Office Equipment"},
                                 {"code": "BK_ST_SC", "name": "School Supplies"},
                                 {"code": "BK_ST_CL", "name": "Calendars & Planners"},
-                                {"code": "BK_ST_GF", "name": "Gifts & Cards"}
-                            ]
-                        }
-                    ]
+                                {"code": "BK_ST_GF", "name": "Gifts & Cards"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "PB",
@@ -531,8 +532,8 @@ class Command(BaseCommand):
                                 {"code": "PB_PT_GR", "name": "Grooming & Health"},
                                 {"code": "PB_PT_CL", "name": "Collars & Leashes"},
                                 {"code": "PB_PT_AQ", "name": "Aquarium & Fish"},
-                                {"code": "PB_PT_SM", "name": "Small Animals & Birds"}
-                            ]
+                                {"code": "PB_PT_SM", "name": "Small Animals & Birds"},
+                            ],
                         },
                         {
                             "code": "PB_BB",
@@ -545,8 +546,8 @@ class Command(BaseCommand):
                                 {"code": "PB_BB_FR", "name": "Furniture & Nursery"},
                                 {"code": "PB_BB_ST", "name": "Strollers & Car Seats"},
                                 {"code": "PB_BB_FE", "name": "Feeding & Bottles"},
-                                {"code": "PB_BB_BT", "name": "Bath & Skincare"}
-                            ]
+                                {"code": "PB_BB_BT", "name": "Bath & Skincare"},
+                            ],
                         },
                         {
                             "code": "PB_MT",
@@ -559,10 +560,10 @@ class Command(BaseCommand):
                                 {"code": "PB_MT_VT", "name": "Vitamins & Supplements"},
                                 {"code": "PB_MT_EX", "name": "Exercise & Fitness"},
                                 {"code": "PB_MT_BK", "name": "Books & Education"},
-                                {"code": "PB_MT_AC", "name": "Accessories"}
-                            ]
-                        }
-                    ]
+                                {"code": "PB_MT_AC", "name": "Accessories"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "GD",
@@ -579,8 +580,8 @@ class Command(BaseCommand):
                                 {"code": "GD_GR_IR", "name": "Irrigation & Watering"},
                                 {"code": "GD_GR_PS", "name": "Pest Control"},
                                 {"code": "GD_GR_GH", "name": "Greenhouses & Structures"},
-                                {"code": "GD_GR_DC", "name": "Garden Decor"}
-                            ]
+                                {"code": "GD_GR_DC", "name": "Garden Decor"},
+                            ],
                         },
                         {
                             "code": "GD_OD",
@@ -593,8 +594,8 @@ class Command(BaseCommand):
                                 {"code": "GD_OD_HT", "name": "Heating & Cooling"},
                                 {"code": "GD_OD_DC", "name": "Outdoor Decor"},
                                 {"code": "GD_OD_PL", "name": "Pools & Water Features"},
-                                {"code": "GD_OD_ST", "name": "Storage & Sheds"}
-                            ]
+                                {"code": "GD_OD_ST", "name": "Storage & Sheds"},
+                            ],
                         },
                         {
                             "code": "GD_LS",
@@ -607,10 +608,10 @@ class Command(BaseCommand):
                                 {"code": "GD_LS_RT", "name": "Retaining Walls"},
                                 {"code": "GD_LS_DR", "name": "Drainage Solutions"},
                                 {"code": "GD_LS_TF", "name": "Turf & Grass"},
-                                {"code": "GD_LS_TL", "name": "Landscape Tools"}
-                            ]
-                        }
-                    ]
+                                {"code": "GD_LS_TL", "name": "Landscape Tools"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "FD",
@@ -627,8 +628,8 @@ class Command(BaseCommand):
                                 {"code": "FD_FR_DR", "name": "Dairy Products"},
                                 {"code": "FD_FR_BK", "name": "Bakery & Bread"},
                                 {"code": "FD_FR_DL", "name": "Deli & Prepared"},
-                                {"code": "FD_FR_OR", "name": "Organic & Natural"}
-                            ]
+                                {"code": "FD_FR_OR", "name": "Organic & Natural"},
+                            ],
                         },
                         {
                             "code": "FD_PK",
@@ -641,8 +642,8 @@ class Command(BaseCommand):
                                 {"code": "FD_PK_CS", "name": "Cereals & Breakfast"},
                                 {"code": "FD_PK_PS", "name": "Pasta & Rice"},
                                 {"code": "FD_PK_SP", "name": "Spices & Seasonings"},
-                                {"code": "FD_PK_SS", "name": "Sauces & Condiments"}
-                            ]
+                                {"code": "FD_PK_SS", "name": "Sauces & Condiments"},
+                            ],
                         },
                         {
                             "code": "FD_BV",
@@ -655,10 +656,10 @@ class Command(BaseCommand):
                                 {"code": "FD_BV_EN", "name": "Energy & Sports Drinks"},
                                 {"code": "FD_BV_ML", "name": "Milk & Dairy Drinks"},
                                 {"code": "FD_BV_HT", "name": "Health & Wellness Drinks"},
-                                {"code": "FD_BV_SP", "name": "Specialty & International"}
-                            ]
-                        }
-                    ]
+                                {"code": "FD_BV_SP", "name": "Specialty & International"},
+                            ],
+                        },
+                    ],
                 },
                 {
                     "code": "OT",
@@ -675,8 +676,8 @@ class Command(BaseCommand):
                                 {"code": "OT_SP_MT", "name": "Military & Tactical"},
                                 {"code": "OT_SP_RL", "name": "Religious Items"},
                                 {"code": "OT_SP_WD", "name": "Wedding & Events"},
-                                {"code": "OT_SP_PT", "name": "Party Supplies"}
-                            ]
+                                {"code": "OT_SP_PT", "name": "Party Supplies"},
+                            ],
                         },
                         {
                             "code": "OT_SV",
@@ -689,8 +690,8 @@ class Command(BaseCommand):
                                 {"code": "OT_SV_ED", "name": "Education & Training"},
                                 {"code": "OT_SV_HL", "name": "Health & Wellness Services"},
                                 {"code": "OT_SV_EV", "name": "Event Services"},
-                                {"code": "OT_SV_TR", "name": "Transportation Services"}
-                            ]
+                                {"code": "OT_SV_TR", "name": "Transportation Services"},
+                            ],
                         },
                         {
                             "code": "OT_MS",
@@ -703,49 +704,39 @@ class Command(BaseCommand):
                                 {"code": "OT_MS_CS", "name": "Custom & Personalized"},
                                 {"code": "OT_MS_VT", "name": "Vintage & Retro"},
                                 {"code": "OT_MS_LX", "name": "Luxury Items"},
-                                {"code": "OT_MS_EC", "name": "Eco-Friendly Products"}
-                            ]
-                        }
-                    ]
-                }
+                                {"code": "OT_MS_EC", "name": "Eco-Friendly Products"},
+                            ],
+                        },
+                    ],
+                },
             ]
         }
 
         with transaction.atomic():
-            self.stdout.write('Creating categories...')
-            
-            for category_data in categories_data['categories']:
+            self.stdout.write("Creating categories...")
+
+            for category_data in categories_data["categories"]:
                 category, created = Category.objects.get_or_create(
-                    code=category_data['code'],
-                    defaults={'name': category_data['name']}
+                    code=category_data["code"], defaults={"name": category_data["name"]}
                 )
                 if created:
-                    self.stdout.write(f'  Created category: {category.name}')
+                    self.stdout.write(f"  Created category: {category.name}")
                 else:
-                    self.stdout.write(f'  Category already exists: {category.name}')
+                    self.stdout.write(f"  Category already exists: {category.name}")
 
-                for subcategory_data in category_data['subcategories']:
+                for subcategory_data in category_data["subcategories"]:
                     subcategory, created = Subcategory.objects.get_or_create(
-                        code=subcategory_data['code'],
-                        defaults={
-                            'name': subcategory_data['name'],
-                            'category': category
-                        }
+                        code=subcategory_data["code"], defaults={"name": subcategory_data["name"], "category": category}
                     )
                     if created:
-                        self.stdout.write(f'    Created subcategory: {subcategory.name}')
+                        self.stdout.write(f"    Created subcategory: {subcategory.name}")
 
-                    for sub_subcategory_data in subcategory_data['sub_subcategories']:
+                    for sub_subcategory_data in subcategory_data["sub_subcategories"]:
                         sub_subcategory, created = SubSubcategory.objects.get_or_create(
-                            code=sub_subcategory_data['code'],
-                            defaults={
-                                'name': sub_subcategory_data['name'],
-                                'subcategory': subcategory
-                            }
+                            code=sub_subcategory_data["code"],
+                            defaults={"name": sub_subcategory_data["name"], "subcategory": subcategory},
                         )
                         if created:
-                            self.stdout.write(f'      Created sub-subcategory: {sub_subcategory.name}')
+                            self.stdout.write(f"      Created sub-subcategory: {sub_subcategory.name}")
 
-        self.stdout.write(
-            self.style.SUCCESS('Successfully populated categories!')
-        )
+        self.stdout.write(self.style.SUCCESS("Successfully populated categories!"))

@@ -21,6 +21,7 @@ from market.views import (
     DeliveryCreateView,
     FeedbackViewSet,
     GlobalEnumView,
+    MarketplaceProductReviewViewSet,
     MarketplaceSaleViewSet,
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
@@ -43,7 +44,6 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
-    MarketplaceProductReviewViewSet,
 )
 from producer.views import (
     AuditLogViewSet,

@@ -671,10 +671,10 @@ ELASTIC_SEARCH_HOST = env("ELASTIC_SEARCH_HOST") or "http://elasticsearch:9200"
 
 # Required for Django HayStack
 HAYSTACK_CONNECTIONS = {
-    'default': {
-        'ENGINE': 'haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine',
-        'URL': ELASTIC_SEARCH_HOST,
-        'INDEX_NAME': 'new_index',
+    "default": {
+        "ENGINE": "haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine",
+        "URL": ELASTIC_SEARCH_HOST,
+        "INDEX_NAME": "new_index",
     },
 }
 

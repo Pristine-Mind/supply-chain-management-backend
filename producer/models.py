@@ -89,6 +89,7 @@ class Category(models.Model):
     """
     Main product categories (e.g., Fashion & Apparel, Electronics)
     """
+
     code = models.CharField(max_length=5, unique=True, verbose_name=_("Category Code"))
     name = models.CharField(max_length=100, verbose_name=_("Category Name"))
     description = models.TextField(blank=True, verbose_name=_("Category Description"))
@@ -102,14 +103,17 @@ class Category(models.Model):
     class Meta:
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")
-        ordering = ['name']
+        ordering = ["name"]
 
 
 class Subcategory(models.Model):
     """
     Product subcategories (e.g., Clothing, Footwear under Fashion & Apparel)
     """
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories', verbose_name=_("Category"))
+
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="subcategories", verbose_name=_("Category")
+    )
     code = models.CharField(max_length=10, unique=True, verbose_name=_("Subcategory Code"))
     name = models.CharField(max_length=100, verbose_name=_("Subcategory Name"))
     description = models.TextField(blank=True, verbose_name=_("Subcategory Description"))
@@ -123,14 +127,17 @@ class Subcategory(models.Model):
     class Meta:
         verbose_name = _("Subcategory")
         verbose_name_plural = _("Subcategories")
-        ordering = ['category__name', 'name']
+        ordering = ["category__name", "name"]
 
 
 class SubSubcategory(models.Model):
     """
     Product sub-subcategories (e.g., Men's Wear, Women's Wear under Clothing)
     """
-    subcategory = models.ForeignKey(Subcategory, on_delete=models.CASCADE, related_name='sub_subcategories', verbose_name=_("Subcategory"))
+
+    subcategory = models.ForeignKey(
+        Subcategory, on_delete=models.CASCADE, related_name="sub_subcategories", verbose_name=_("Subcategory")
+    )
     code = models.CharField(max_length=15, unique=True, verbose_name=_("Sub-subcategory Code"))
     name = models.CharField(max_length=100, verbose_name=_("Sub-subcategory Name"))
     description = models.TextField(blank=True, verbose_name=_("Sub-subcategory Description"))
@@ -144,7 +151,7 @@ class SubSubcategory(models.Model):
     class Meta:
         verbose_name = _("Sub-subcategory")
         verbose_name_plural = _("Sub-subcategories")
-        ordering = ['subcategory__category__name', 'subcategory__name', 'name']
+        ordering = ["subcategory__category__name", "subcategory__name", "name"]
 
 
 class Product(models.Model):
@@ -185,19 +192,23 @@ class Product(models.Model):
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
-    
+
     # New hierarchical category fields
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Category"))
-    subcategory = models.ForeignKey(Subcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Subcategory"))
-    sub_subcategory = models.ForeignKey(SubSubcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Sub-subcategory"))
-    
+    subcategory = models.ForeignKey(
+        Subcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Subcategory")
+    )
+    sub_subcategory = models.ForeignKey(
+        SubSubcategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Sub-subcategory")
+    )
+
     # Keep old category field for backward compatibility
     old_category = models.CharField(
         max_length=2,
         choices=ProductCategory.choices,
         default=ProductCategory.OTHER,
         verbose_name=_("Legacy Category"),
-        help_text=_("This field is kept for backward compatibility and will be removed in future versions")
+        help_text=_("This field is kept for backward compatibility and will be removed in future versions"),
     )
     description = RichTextField(verbose_name=_("Product Description"))
     sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
@@ -584,6 +595,9 @@ class MarketplaceProduct(models.Model):
     view_count = models.PositiveIntegerField(default=0, verbose_name=_("View Count"))
     rank_score = models.FloatField(default=0, verbose_name=_("Rank Score"))
     is_featured = models.BooleanField(default=False, verbose_name=_("Is Featured"))
+    is_made_in_nepal = models.BooleanField(
+        default=False, verbose_name=_("Made in Nepal"), help_text=_("Indicates if this product is made in Nepal")
+    )
 
     def save(self, *args, **kwargs):
         user_profile = None

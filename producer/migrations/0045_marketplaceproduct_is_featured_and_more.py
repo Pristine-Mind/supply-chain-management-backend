@@ -6,18 +6,39 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0044_migrate_product_categories'),
+        ("producer", "0044_migrate_product_categories"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketplaceproduct',
-            name='is_featured',
-            field=models.BooleanField(default=False, verbose_name='Is Featured'),
+            model_name="marketplaceproduct",
+            name="is_featured",
+            field=models.BooleanField(default=False, verbose_name="Is Featured"),
         ),
         migrations.AlterField(
-            model_name='product',
-            name='old_category',
-            field=models.CharField(choices=[('FA', 'Fashion & Apparel'), ('EG', 'Electronics & Gadgets'), ('GE', 'Groceries & Essentials'), ('HB', 'Health & Beauty'), ('HL', 'Home & Living'), ('TT', 'Travel & Tourism'), ('IS', 'Industrial Supplies'), ('AU', 'Automotive'), ('SP', 'Sports & Fitness'), ('BK', 'Books & Media'), ('PB', 'Pet & Baby Care'), ('GD', 'Garden & Outdoor'), ('FD', 'Food & Beverages'), ('OT', 'Other')], default='OT', help_text='This field is kept for backward compatibility and will be removed in future versions', max_length=2, verbose_name='Legacy Category'),
+            model_name="product",
+            name="old_category",
+            field=models.CharField(
+                choices=[
+                    ("FA", "Fashion & Apparel"),
+                    ("EG", "Electronics & Gadgets"),
+                    ("GE", "Groceries & Essentials"),
+                    ("HB", "Health & Beauty"),
+                    ("HL", "Home & Living"),
+                    ("TT", "Travel & Tourism"),
+                    ("IS", "Industrial Supplies"),
+                    ("AU", "Automotive"),
+                    ("SP", "Sports & Fitness"),
+                    ("BK", "Books & Media"),
+                    ("PB", "Pet & Baby Care"),
+                    ("GD", "Garden & Outdoor"),
+                    ("FD", "Food & Beverages"),
+                    ("OT", "Other"),
+                ],
+                default="OT",
+                help_text="This field is kept for backward compatibility and will be removed in future versions",
+                max_length=2,
+                verbose_name="Legacy Category",
+            ),
         ),
     ]

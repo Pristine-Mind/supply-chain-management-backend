@@ -134,6 +134,12 @@ urlpatterns = [
         MarketplaceProductViewSet.as_view({"get": "search"}),
         name="marketplace-search",
     ),
+    # Explicit endpoint for made in Nepal products
+    path(
+        "api/v1/marketplace/made-in-nepal/",
+        MarketplaceProductViewSet.as_view({"get": "made_in_nepal"}),
+        name="marketplace-made-in-nepal",
+    ),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),

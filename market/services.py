@@ -15,9 +15,15 @@ from django.utils import timezone
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
     PDF_AVAILABLE = True
 except ImportError:
@@ -235,123 +241,116 @@ class InvoiceGenerationService:
 
         try:
             buffer = BytesIO()
-            doc = SimpleDocTemplate(
-                buffer, 
-                pagesize=A4,
-                rightMargin=40,
-                leftMargin=40,
-                topMargin=40,
-                bottomMargin=40
-            )
+            doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
             styles = getSampleStyleSheet()
             story = []
 
             # Define colors - Orange theme
-            primary_color = colors.HexColor('#ff8c00')  # Dark orange
-            light_orange = colors.HexColor('#ffa500')   # Orange
-            text_dark = colors.HexColor('#1a202c')
-            text_gray = colors.HexColor('#718096')
-            bg_light = colors.HexColor('#f7fafc')
-            bg_gray = colors.HexColor('#edf2f7')
+            primary_color = colors.HexColor("#ff8c00")  # Dark orange
+            light_orange = colors.HexColor("#ffa500")  # Orange
+            text_dark = colors.HexColor("#1a202c")
+            text_gray = colors.HexColor("#718096")
+            bg_light = colors.HexColor("#f7fafc")
+            bg_gray = colors.HexColor("#edf2f7")
 
             # Header section - Orange background with INVOICE and MulyaBazzar
             header_content = [
                 [
-                    Paragraph("<b>INVOICE</b><br/><font size='8'>MulyaBazzar</font>", ParagraphStyle(
-                        'HeaderTitle',
-                        parent=styles['Normal'],
-                        fontSize=28,
-                        textColor=colors.white,
-                        fontName='Helvetica-Bold',
-                        leading=32
-                    )),
-                    Paragraph("✓ PAID", ParagraphStyle(
-                        'StatusBadge',
-                        parent=styles['Normal'],
-                        fontSize=11,
-                        textColor=colors.white,
-                        fontName='Helvetica-Bold',
-                        alignment=2
-                    ))
+                    Paragraph(
+                        "<b>INVOICE</b><br/><font size='8'>MulyaBazzar</font>",
+                        ParagraphStyle(
+                            "HeaderTitle",
+                            parent=styles["Normal"],
+                            fontSize=28,
+                            textColor=colors.white,
+                            fontName="Helvetica-Bold",
+                            leading=32,
+                        ),
+                    ),
+                    Paragraph(
+                        "✓ PAID",
+                        ParagraphStyle(
+                            "StatusBadge",
+                            parent=styles["Normal"],
+                            fontSize=11,
+                            textColor=colors.white,
+                            fontName="Helvetica-Bold",
+                            alignment=2,
+                        ),
+                    ),
                 ]
             ]
 
-            header_table = Table(header_content, colWidths=[4.5*inch, 1.5*inch])
-            header_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), primary_color),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 20),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 20),
-                ('TOPPADDING', (0, 0), (-1, -1), 25),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 25),
-            ]))
+            header_table = Table(header_content, colWidths=[4.5 * inch, 1.5 * inch])
+            header_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), primary_color),
+                        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+                        ("TOPPADDING", (0, 0), (-1, -1), 25),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 25),
+                    ]
+                )
+            )
 
             story.append(header_table)
             story.append(Spacer(1, 30))
 
             # Invoice details in 2x2 grid below header
             detail_data = [
-                [
-                    "Invoice Number:",
-                    invoice.invoice_number,
-                    "Invoice Date:",
-                    invoice.invoice_date.strftime("%Y-%m-%d")
-                ],
-                [
-                    "Order Number:",
-                    invoice.source_order_number or "N/A",
-                    "Status:",
-                    invoice.get_status_display()
-                ]
+                ["Invoice Number:", invoice.invoice_number, "Invoice Date:", invoice.invoice_date.strftime("%Y-%m-%d")],
+                ["Order Number:", invoice.source_order_number or "N/A", "Status:", invoice.get_status_display()],
             ]
 
-            detail_table = Table(detail_data, colWidths=[1.2*inch, 1.6*inch, 1.2*inch, 1.6*inch])
-            detail_table.setStyle(TableStyle([
-                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-                ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('TEXTCOLOR', (0, 0), (-1, -1), text_dark),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ]))
+            detail_table = Table(detail_data, colWidths=[1.2 * inch, 1.6 * inch, 1.2 * inch, 1.6 * inch])
+            detail_table.setStyle(
+                TableStyle(
+                    [
+                        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                        ("FONTNAME", (3, 0), (3, -1), "Helvetica"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 9),
+                        ("TEXTCOLOR", (0, 0), (-1, -1), text_dark),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                        ("TOPPADDING", (0, 0), (-1, -1), 6),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
 
             story.append(detail_table)
             story.append(Spacer(1, 25))
 
             # Billing section
             billing_header_style = ParagraphStyle(
-                'BillingHeader',
-                parent=styles['Normal'],
+                "BillingHeader",
+                parent=styles["Normal"],
                 fontSize=9,
                 textColor=text_gray,
-                fontName='Helvetica-Bold',
+                fontName="Helvetica-Bold",
                 spaceAfter=10,
-                letterSpacing=1
+                letterSpacing=1,
             )
 
             customer_name_style = ParagraphStyle(
-                'CustomerName',
-                parent=styles['Normal'],
+                "CustomerName",
+                parent=styles["Normal"],
                 fontSize=13,
                 textColor=text_dark,
-                fontName='Helvetica-Bold',
-                spaceAfter=8
+                fontName="Helvetica-Bold",
+                spaceAfter=8,
             )
 
             customer_info_style = ParagraphStyle(
-                'CustomerInfo',
-                parent=styles['Normal'],
-                fontSize=10,
-                textColor=text_dark,
-                spaceAfter=4
+                "CustomerInfo", parent=styles["Normal"], fontSize=10, textColor=text_dark, spaceAfter=4
             )
 
             billing_content = [
@@ -366,17 +365,21 @@ class InvoiceGenerationService:
             if invoice.customer_phone:
                 billing_content.append([Paragraph(invoice.customer_phone, customer_info_style)])
 
-            billing_table = Table(billing_content, colWidths=[5.5*inch])
-            billing_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), bg_light),
-                ('LEFTPADDING', (0, 0), (-1, -1), 20),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 20),
-                ('TOPPADDING', (0, 0), (0, 0), 20),
-                ('TOPPADDING', (0, 1), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -2), 0),
-                ('BOTTOMPADDING', (0, -1), (-1, -1), 20),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ]))
+            billing_table = Table(billing_content, colWidths=[5.5 * inch])
+            billing_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), bg_light),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+                        ("TOPPADDING", (0, 0), (0, 0), 20),
+                        ("TOPPADDING", (0, 1), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -2), 0),
+                        ("BOTTOMPADDING", (0, -1), (-1, -1), 20),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ]
+                )
+            )
 
             story.append(billing_table)
             story.append(Spacer(1, 25))
@@ -385,43 +388,47 @@ class InvoiceGenerationService:
             items_data = [["ITEM", "SKU", "QTY", "UNIT PRICE", "TOTAL"]]
 
             for item in invoice.line_items.all():
-                items_data.append([
-                    item.product_name,
-                    item.product_sku or "-",
-                    str(item.quantity),
-                    f"NPR\n{item.unit_price:,.2f}",
-                    f"NPR\n{item.total_price:,.2f}"
-                ])
+                items_data.append(
+                    [
+                        item.product_name,
+                        item.product_sku or "-",
+                        str(item.quantity),
+                        f"NPR\n{item.unit_price:,.2f}",
+                        f"NPR\n{item.total_price:,.2f}",
+                    ]
+                )
 
-            items_table = Table(items_data, colWidths=[2*inch, 1*inch, 0.7*inch, 1*inch, 1*inch])
-            items_table.setStyle(TableStyle([
-                # Header row
-                ('BACKGROUND', (0, 0), (-1, 0), bg_gray),
-                ('TEXTCOLOR', (0, 0), (-1, 0), text_gray),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 9),
-                ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-                ('ALIGN', (1, 0), (2, 0), 'CENTER'),
-                ('ALIGN', (3, 0), (-1, 0), 'RIGHT'),
-                ('TOPPADDING', (0, 0), (-1, 0), 12),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                
-                # Data rows
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 9),
-                ('TEXTCOLOR', (0, 1), (-1, -1), text_dark),
-                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-                ('ALIGN', (1, 1), (2, -1), 'CENTER'),
-                ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
-                ('TOPPADDING', (0, 1), (-1, -1), 15),
-                ('BOTTOMPADDING', (0, 1), (-1, -1), 15),
-                ('LEFTPADDING', (0, 0), (-1, -1), 15),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 15),
-                
-                # Borders
-                ('LINEBELOW', (0, 1), (-1, -2), 0.5, colors.HexColor('#e2e8f0')),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ]))
+            items_table = Table(items_data, colWidths=[2 * inch, 1 * inch, 0.7 * inch, 1 * inch, 1 * inch])
+            items_table.setStyle(
+                TableStyle(
+                    [
+                        # Header row
+                        ("BACKGROUND", (0, 0), (-1, 0), bg_gray),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), text_gray),
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, 0), 9),
+                        ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                        ("ALIGN", (1, 0), (2, 0), "CENTER"),
+                        ("ALIGN", (3, 0), (-1, 0), "RIGHT"),
+                        ("TOPPADDING", (0, 0), (-1, 0), 12),
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                        # Data rows
+                        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                        ("FONTSIZE", (0, 1), (-1, -1), 9),
+                        ("TEXTCOLOR", (0, 1), (-1, -1), text_dark),
+                        ("ALIGN", (0, 1), (0, -1), "LEFT"),
+                        ("ALIGN", (1, 1), (2, -1), "CENTER"),
+                        ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+                        ("TOPPADDING", (0, 1), (-1, -1), 15),
+                        ("BOTTOMPADDING", (0, 1), (-1, -1), 15),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 15),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 15),
+                        # Borders
+                        ("LINEBELOW", (0, 1), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
 
             story.append(items_table)
             story.append(Spacer(1, 25))
@@ -438,74 +445,80 @@ class InvoiceGenerationService:
             summary_data.append(["", ""])  # Spacer row
             summary_data.append(["Total Amount", f"NPR {invoice.total_amount:,.2f}"])
 
-            summary_table = Table(summary_data, colWidths=[4.2*inch, 1.3*inch])
-            summary_table.setStyle(TableStyle([
-                # Regular rows
-                ('ALIGN', (0, 0), (0, -2), 'RIGHT'),
-                ('ALIGN', (1, 0), (1, -2), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, -2), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -2), 10),
-                ('TEXTCOLOR', (0, 0), (-1, -2), text_gray),
-                ('TOPPADDING', (0, 0), (-1, -2), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -2), 8),
-                
-                # Total row
-                ('ALIGN', (0, -1), (-1, -1), 'RIGHT'),
-                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, -1), (-1, -1), 14),
-                ('TEXTCOLOR', (0, -1), (-1, -1), text_dark),
-                ('TOPPADDING', (0, -1), (-1, -1), 15),
-                ('BOTTOMPADDING', (0, -1), (-1, -1), 15),
-                ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#cbd5e0')),
-                
-                ('RIGHTPADDING', (0, 0), (-1, -1), 15),
-                ('LEFTPADDING', (0, 0), (-1, -1), 15),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ]))
+            summary_table = Table(summary_data, colWidths=[4.2 * inch, 1.3 * inch])
+            summary_table.setStyle(
+                TableStyle(
+                    [
+                        # Regular rows
+                        ("ALIGN", (0, 0), (0, -2), "RIGHT"),
+                        ("ALIGN", (1, 0), (1, -2), "RIGHT"),
+                        ("FONTNAME", (0, 0), (-1, -2), "Helvetica"),
+                        ("FONTSIZE", (0, 0), (-1, -2), 10),
+                        ("TEXTCOLOR", (0, 0), (-1, -2), text_gray),
+                        ("TOPPADDING", (0, 0), (-1, -2), 8),
+                        ("BOTTOMPADDING", (0, 0), (-1, -2), 8),
+                        # Total row
+                        ("ALIGN", (0, -1), (-1, -1), "RIGHT"),
+                        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, -1), (-1, -1), 14),
+                        ("TEXTCOLOR", (0, -1), (-1, -1), text_dark),
+                        ("TOPPADDING", (0, -1), (-1, -1), 15),
+                        ("BOTTOMPADDING", (0, -1), (-1, -1), 15),
+                        ("LINEABOVE", (0, -1), (-1, -1), 2, colors.HexColor("#cbd5e0")),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 15),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 15),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
 
             story.append(summary_table)
             story.append(Spacer(1, 40))
 
             # Footer
             footer_title_style = ParagraphStyle(
-                'FooterTitle',
-                parent=styles['Normal'],
+                "FooterTitle",
+                parent=styles["Normal"],
                 fontSize=13,
                 textColor=text_dark,
-                fontName='Helvetica-Bold',
+                fontName="Helvetica-Bold",
                 alignment=1,
-                spaceAfter=6
+                spaceAfter=6,
             )
 
             footer_text_style = ParagraphStyle(
-                'FooterText',
-                parent=styles['Normal'],
+                "FooterText",
+                parent=styles["Normal"],
                 fontSize=9,
                 textColor=text_gray,
-                fontName='Helvetica',
+                fontName="Helvetica",
                 alignment=1,
-                spaceAfter=2
+                spaceAfter=2,
             )
 
             footer_data = [
                 [Paragraph("Thank you for your business!", footer_title_style)],
                 [Spacer(1, 4)],
                 [Paragraph("MulyaBazzar Team", footer_text_style)],
-                [Paragraph("For inquiries, please contact our support team", footer_text_style)]
+                [Paragraph("For inquiries, please contact our support team", footer_text_style)],
             ]
 
-            footer_table = Table(footer_data, colWidths=[5.5*inch])
-            footer_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), bg_light),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 20),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 20),
-                ('TOPPADDING', (0, 0), (0, 0), 20),
-                ('TOPPADDING', (0, 1), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -2), 0),
-                ('BOTTOMPADDING', (0, -1), (-1, -1), 20),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ]))
+            footer_table = Table(footer_data, colWidths=[5.5 * inch])
+            footer_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), bg_light),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+                        ("TOPPADDING", (0, 0), (0, 0), 20),
+                        ("TOPPADDING", (0, 1), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -2), 0),
+                        ("BOTTOMPADDING", (0, -1), (-1, -1), 20),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
 
             story.append(footer_table)
 
