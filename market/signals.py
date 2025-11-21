@@ -1,11 +1,11 @@
 import logging
 import os
 
+from django.core.cache import cache
 from django.core.files import File
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
-from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,6 @@ def _clear_trending_and_producer_cache(category_name: str = None, featured: bool
             logger.info("Cache cleared (fallback).")
         except Exception:
             pass
-
 
 
 def create_product_images(product, marketplace_product):
@@ -294,7 +293,6 @@ def low_stock_alert(sender, instance, **kwargs):
                 sms_number=instance.user.user_profile.phone_number,
                 sms_body=msg,
             )
-
 
     # Invalidate caches when marketplace products or underlying product data change
     @receiver(post_save, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_save")

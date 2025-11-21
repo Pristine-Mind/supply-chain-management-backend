@@ -1,10 +1,10 @@
 from typing import Any
 
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.http import HttpRequest
-from django import forms
-from django.core.exceptions import ValidationError
 from PIL import Image
 
 from user.admin_mixins import RoleBasedAdminMixin
@@ -343,6 +343,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "percent_off",
         "is_offer_active",
         "is_featured",
+        "is_made_in_nepal",
         "estimated_delivery_days",
         "shipping_cost",
         "recent_purchases_count",
@@ -352,7 +353,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "rank_score",
     )
     search_fields = ("product__name",)
-    list_filter = ("is_available", "listed_date")
+    list_filter = ("is_available", "is_made_in_nepal", "is_featured", "listed_date")
     autocomplete_fields = ["product"]
     readonly_fields = ("listed_date",)
     inlines = [
@@ -430,6 +431,7 @@ class ProductImageForm(forms.ModelForm):
             raise ValidationError("Upload a valid image file.")
 
         return f
+
 
 # Use the custom form in the admin so AVIF uploads are allowed.
 ProductImageAdmin.form = ProductImageForm
@@ -530,71 +532,57 @@ class PurchaseOrderAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 class SubSubcategoryInline(admin.TabularInline):
     model = SubSubcategory
     extra = 0
-    fields = ('code', 'name', 'is_active')
+    fields = ("code", "name", "is_active")
 
 
 class SubcategoryInline(admin.TabularInline):
     model = Subcategory
     extra = 0
-    fields = ('code', 'name', 'is_active')
+    fields = ("code", "name", "is_active")
 
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'code')
-    readonly_fields = ('created_at', 'updated_at')
+    list_display = ("code", "name", "is_active", "created_at", "updated_at")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("name", "code")
+    readonly_fields = ("created_at", "updated_at")
     inlines = [SubcategoryInline]
-    
+
     fieldsets = (
-        (None, {
-            'fields': ('code', 'name', 'description', 'is_active')
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (None, {"fields": ("code", "name", "description", "is_active")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
 
 
 @admin.register(Subcategory)
 class SubcategoryAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'category', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('category', 'is_active', 'created_at')
-    search_fields = ('name', 'code', 'category__name')
-    readonly_fields = ('created_at', 'updated_at')
+    list_display = ("code", "name", "category", "is_active", "created_at", "updated_at")
+    list_filter = ("category", "is_active", "created_at")
+    search_fields = ("name", "code", "category__name")
+    readonly_fields = ("created_at", "updated_at")
     inlines = [SubSubcategoryInline]
-    
+
     fieldsets = (
-        (None, {
-            'fields': ('category', 'code', 'name', 'description', 'is_active')
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (None, {"fields": ("category", "code", "name", "description", "is_active")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
 
 
 @admin.register(SubSubcategory)
 class SubSubcategoryAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'subcategory', 'get_category', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('subcategory__category', 'subcategory', 'is_active', 'created_at')
-    search_fields = ('name', 'code', 'subcategory__name', 'subcategory__category__name')
-    readonly_fields = ('created_at', 'updated_at')
-    
+    list_display = ("code", "name", "subcategory", "get_category", "is_active", "created_at", "updated_at")
+    list_filter = ("subcategory__category", "subcategory", "is_active", "created_at")
+    search_fields = ("name", "code", "subcategory__name", "subcategory__category__name")
+    readonly_fields = ("created_at", "updated_at")
+
     def get_category(self, obj):
         return obj.subcategory.category.name
-    get_category.short_description = 'Category'
-    get_category.admin_order_field = 'subcategory__category__name'
-    
+
+    get_category.short_description = "Category"
+    get_category.admin_order_field = "subcategory__category__name"
+
     fieldsets = (
-        (None, {
-            'fields': ('subcategory', 'code', 'name', 'description', 'is_active')
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (None, {"fields": ("subcategory", "code", "name", "description", "is_active")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )

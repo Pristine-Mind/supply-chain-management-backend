@@ -16,6 +16,7 @@ class MarketplaceProductIndex(indexes.SearchIndex, indexes.Indexable):
     subcategory = indexes.CharField(model_attr="product__subcategory__name", null=True)
     sub_subcategory = indexes.CharField(model_attr="product__sub_subcategory__name", null=True)
     is_available = indexes.BooleanField(model_attr="is_available")
+    is_made_in_nepal = indexes.BooleanField(model_attr="is_made_in_nepal")
 
     def get_model(self):
         return MarketplaceProduct

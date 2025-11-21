@@ -29,6 +29,7 @@ from market.models import (
     UserInteraction,
 )
 from producer.models import MarketplaceProduct, MarketplaceProductReview
+from producer.serializers import MarketplaceProductReviewSerializer
 
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
@@ -68,7 +69,6 @@ from .serializers import (
     SellerBidSerializer,
     SellerProductSerializer,
 )
-from producer.serializers import MarketplaceProductReviewSerializer
 from .utils import sms_service
 
 
@@ -1272,12 +1272,13 @@ class MarketplaceProductReviewViewSet(viewsets.ModelViewSet):
     ViewSet for MarketplaceProduct reviews.
     Allows authenticated users to create, read, update, and delete their own reviews.
     """
+
     serializer_class = MarketplaceProductReviewSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """Filter reviews based on the product parameter."""
-        product_id = self.request.query_params.get('product_id')
+        product_id = self.request.query_params.get("product_id")
         if product_id:
             return MarketplaceProductReview.objects.filter(product_id=product_id)
         return MarketplaceProductReview.objects.all()
@@ -1288,7 +1289,7 @@ class MarketplaceProductReviewViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """Allow read access to all, but require authentication for write operations."""
-        if self.action in ['list', 'retrieve']:
+        if self.action in ["list", "retrieve"]:
             permission_classes = [AllowAny]
         else:
             permission_classes = [IsAuthenticated]
@@ -1297,33 +1298,34 @@ class MarketplaceProductReviewViewSet(viewsets.ModelViewSet):
     def get_object(self):
         """Ensure users can only access their own reviews for update/delete operations."""
         obj = super().get_object()
-        
+
         # For update/delete operations, ensure user owns the review
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ["update", "partial_update", "destroy"]:
             if obj.user != self.request.user:
                 from rest_framework.exceptions import PermissionDenied
+
                 raise PermissionDenied("You can only modify your own reviews.")
-        
+
         return obj
 
-    @action(detail=False, methods=['get'], url_path='my-reviews')
+    @action(detail=False, methods=["get"], url_path="my-reviews")
     def my_reviews(self, request):
         """Get all reviews created by the authenticated user."""
         if not request.user.is_authenticated:
-            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
-        
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
         reviews = MarketplaceProductReview.objects.filter(user=request.user)
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='product/(?P<product_id>[^/.]+)')
+    @action(detail=False, methods=["get"], url_path="product/(?P<product_id>[^/.]+)")
     def product_reviews(self, request, product_id=None):
         """Get all reviews for a specific product."""
         try:
             product = MarketplaceProduct.objects.get(id=product_id)
         except MarketplaceProduct.DoesNotExist:
-            return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
         reviews = MarketplaceProductReview.objects.filter(product=product)
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)

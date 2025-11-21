@@ -1,7 +1,10 @@
+import hashlib
 import logging
+import random
 from datetime import date, datetime, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -11,7 +14,6 @@ from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from rest_framework import status, viewsets
-import random
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -21,8 +23,6 @@ from rest_framework.views import APIView
 from market.models import MarketplaceProduct
 from market.serializers import MarketplaceProductSerializer
 from user.models import UserProfile
-import hashlib
-from django.core.cache import cache
 
 # Cache TTLs (seconds) - can be overridden in Django settings
 SEARCH_CACHE_TTL = getattr(settings, "PRODUCER_SEARCH_CACHE_TTL", 30)
@@ -874,7 +874,9 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "producer:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "producer:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
         cached = cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -902,7 +904,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="search", permission_classes=[AllowAny])
     def search(self, request):
-        from haystack.query import SearchQuerySet, SQ
+        from haystack.query import SQ, SearchQuerySet
         from rest_framework.pagination import PageNumberPagination
 
         phrase = request.query_params.get("keyword") or request.query_params.get("q")
@@ -922,7 +924,9 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "producer:search:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "producer:search:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
         cached = cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -931,12 +935,12 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
         try:
             combined = (
-                SQ(name__startswith=phrase) |
-                SQ(description__contains=phrase) |
-                SQ(category__contains=phrase) |
-                SQ(subcategory__contains=phrase) |
-                SQ(sub_subcategory__contains=phrase) |
-                SQ(text__contains=phrase)
+                SQ(name__startswith=phrase)
+                | SQ(description__contains=phrase)
+                | SQ(category__contains=phrase)
+                | SQ(subcategory__contains=phrase)
+                | SQ(sub_subcategory__contains=phrase)
+                | SQ(text__contains=phrase)
             )
             sqs = sqs.filter(combined).order_by("-_score")
         except Exception:
@@ -976,14 +980,15 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         if category:
             name_val = _id_to_name(category)
             try:
-                sqs = sqs.filter(
-                    SQ(category=name_val) | SQ(subcategory=name_val) | SQ(sub_subcategory=name_val)
-                )
+                sqs = sqs.filter(SQ(category=name_val) | SQ(subcategory=name_val) | SQ(sub_subcategory=name_val))
             except Exception:
                 sqs = sqs.filter(
-                    SQ(category__contains=name_val) | SQ(subcategory__contains=name_val) | SQ(sub_subcategory__contains=name_val)
+                    SQ(category__contains=name_val)
+                    | SQ(subcategory__contains=name_val)
+                    | SQ(sub_subcategory__contains=name_val)
                 )
         else:
+
             def _apply_field_filter(sqs_obj, field_name, value):
                 if not value:
                     return sqs_obj
@@ -1795,27 +1800,26 @@ class CategoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing product categories
     """
+
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def hierarchy(self, request):
         """Get complete category hierarchy with subcategories and sub-subcategories"""
-        categories = Category.objects.filter(is_active=True).prefetch_related(
-            'subcategories__sub_subcategories'
-        )
+        categories = Category.objects.filter(is_active=True).prefetch_related("subcategories__sub_subcategories")
         serializer = CategoryHierarchySerializer(categories, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def subcategories(self, request, pk=None):
         """Get subcategories for a specific category (light version - no nested sub-subcategories)"""
         category = self.get_object()
         subcategories = category.subcategories.filter(is_active=True)
         serializer = SubcategoryLightSerializer(subcategories, many=True)
         return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'])
+
+    @action(detail=True, methods=["get"])
     def subcategories_full(self, request, pk=None):
         """Get subcategories with full sub-subcategory details"""
         category = self.get_object()
@@ -1828,22 +1832,23 @@ class SubcategoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing product subcategories
     """
+
     queryset = Subcategory.objects.filter(is_active=True)
 
     def get_serializer_class(self):
         """Return light serializer by default, full serializer for detail views"""
-        if self.action == 'retrieve' or self.request.query_params.get('full', False):
+        if self.action == "retrieve" or self.request.query_params.get("full", False):
             return SubcategorySerializer
         return SubcategoryLightSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        category_id = self.request.query_params.get('category', None)
+        category_id = self.request.query_params.get("category", None)
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         return queryset
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def sub_subcategories(self, request, pk=None):
         """Get sub-subcategories for a specific subcategory"""
         subcategory = self.get_object()
@@ -1856,17 +1861,18 @@ class SubSubcategoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing product sub-subcategories
     """
+
     queryset = SubSubcategory.objects.filter(is_active=True)
     serializer_class = SubSubcategorySerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        subcategory_id = self.request.query_params.get('subcategory', None)
-        category_id = self.request.query_params.get('category', None)
-        
+        subcategory_id = self.request.query_params.get("subcategory", None)
+        category_id = self.request.query_params.get("category", None)
+
         if subcategory_id:
             queryset = queryset.filter(subcategory_id=subcategory_id)
         elif category_id:
             queryset = queryset.filter(subcategory__category_id=category_id)
-            
+
         return queryset

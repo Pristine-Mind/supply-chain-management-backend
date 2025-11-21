@@ -1,10 +1,14 @@
+import hashlib
 from datetime import timedelta
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db.models import (
     Avg,
     Case,
     CharField,
     Count,
+    ExpressionWrapper,
     F,
     FloatField,
     Max,
@@ -12,15 +16,11 @@ from django.db.models import (
     Q,
     Sum,
     Value,
-    ExpressionWrapper,
     When,
     Window,
 )
 from django.db.models.functions import Coalesce, Rank
 from django.utils import timezone
-from django.conf import settings
-import hashlib
-from django.core.cache import cache
 
 # Cache TTL for trending endpoints (seconds)
 TRENDING_CACHE_TTL = getattr(settings, "TRENDING_CACHE_TTL", 20)
@@ -173,7 +173,9 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -230,7 +232,9 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:top_weekly:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:top_weekly:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -240,11 +244,10 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         week_ago = timezone.now() - timedelta(days=7)
 
         # Use an approximation: rely on stored `recent_purchases_count` as a proxy
-        base_qs = MarketplaceProduct.objects.filter(is_available=True, listed_date__gte=week_ago, recent_purchases_count__gt=0)
-        queryset = (
-            TrendingProductsManager.calculate_trending_score_fast(base_qs)
-            .order_by("-trending_score")[:10]
+        base_qs = MarketplaceProduct.objects.filter(
+            is_available=True, listed_date__gte=week_ago, recent_purchases_count__gt=0
         )
+        queryset = TrendingProductsManager.calculate_trending_score_fast(base_qs).order_by("-trending_score")[:10]
 
         serializer = self.get_serializer(queryset, many=True)
         payload = {"results": serializer.data, "period": "weekly", "count": len(serializer.data)}
@@ -266,7 +269,9 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:most_viewed:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:most_viewed:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -301,7 +306,10 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:fastest_selling:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:fastest_selling:"
+            + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -330,7 +338,10 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:new_trending:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:new_trending:"
+            + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -339,10 +350,9 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
 
         week_ago = timezone.now() - timedelta(days=7)
         base_qs = MarketplaceProduct.objects.filter(is_available=True, listed_date__gte=week_ago)
-        queryset = (
-            TrendingProductsManager.calculate_trending_score_fast(base_qs)
-            .order_by("-trending_score", "-listed_date")[:10]
-        )
+        queryset = TrendingProductsManager.calculate_trending_score_fast(base_qs).order_by(
+            "-trending_score", "-listed_date"
+        )[:10]
 
         serializer = self.get_serializer(queryset, many=True)
         payload = {"results": serializer.data, "period": "new_trending", "count": len(serializer.data)}
@@ -471,7 +481,9 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
             user_part = "anon"
-        cache_key = "trending:featured:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        cache_key = (
+            "trending:featured:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
 
         if not nocache:
             cached = cache.get(cache_key)
@@ -753,3 +765,19 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
         }
 
         return Response({"stats": stats_data, "timestamp": timezone.now().isoformat(), "type": "deal_statistics"})
+
+    @action(detail=False, methods=["get"], url_path="made-in-nepal", permission_classes=[AllowAny])
+    def made_in_nepal(self, request):
+        # Get base queryset filtered for made in Nepal products
+        qs = self.get_queryset().filter(is_made_in_nepal=True)
+        qs = self.filter_queryset(qs)
+        paginator = self.paginator
+        page_size = request.query_params.get("page_size")
+        if page_size:
+            try:
+                paginator.page_size = int(page_size)
+            except (ValueError, TypeError):
+                pass
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = self.get_serializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)

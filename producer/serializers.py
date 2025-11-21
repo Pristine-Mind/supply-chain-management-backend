@@ -54,75 +54,99 @@ class ProducerSerializer(serializers.ModelSerializer):
 
 class CategorySerializer(serializers.ModelSerializer):
     subcategories_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Category
-        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at', 'subcategories_count']
-        read_only_fields = ['created_at', 'updated_at']
-    
+        fields = ["id", "code", "name", "description", "is_active", "created_at", "updated_at", "subcategories_count"]
+        read_only_fields = ["created_at", "updated_at"]
+
     def get_subcategories_count(self, obj):
         return obj.subcategories.filter(is_active=True).count()
 
 
 class SubSubcategorySerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='subcategory.category.name', read_only=True)
-    category_code = serializers.CharField(source='subcategory.category.code', read_only=True)
-    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
-    
+    category_name = serializers.CharField(source="subcategory.category.name", read_only=True)
+    category_code = serializers.CharField(source="subcategory.category.code", read_only=True)
+    subcategory_name = serializers.CharField(source="subcategory.name", read_only=True)
+
     class Meta:
         model = SubSubcategory
-        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at', 
-                 'subcategory', 'category_name', 'category_code', 'subcategory_name']
-        read_only_fields = ['created_at', 'updated_at']
+        fields = [
+            "id",
+            "code",
+            "name",
+            "description",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "subcategory",
+            "category_name",
+            "category_code",
+            "subcategory_name",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 # Light version for Product serialization - no nested objects
 class SubSubcategoryLightSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='subcategory.category.name', read_only=True)
-    category_code = serializers.CharField(source='subcategory.category.code', read_only=True)
-    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
-    
+    category_name = serializers.CharField(source="subcategory.category.name", read_only=True)
+    category_code = serializers.CharField(source="subcategory.category.code", read_only=True)
+    subcategory_name = serializers.CharField(source="subcategory.name", read_only=True)
+
     class Meta:
         model = SubSubcategory
-        fields = ['id', 'code', 'name', 'category_name', 'category_code', 'subcategory_name']
+        fields = ["id", "code", "name", "category_name", "category_code", "subcategory_name"]
 
 
 class SubcategoryLightSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    category_code = serializers.CharField(source='category.code', read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_code = serializers.CharField(source="category.code", read_only=True)
     sub_subcategories_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Subcategory
-        fields = ['id', 'code', 'name', 'category', 'category_name', 'category_code', 'sub_subcategories_count']
-    
+        fields = ["id", "code", "name", "category", "category_name", "category_code", "sub_subcategories_count"]
+
     def get_sub_subcategories_count(self, obj):
         return obj.sub_subcategories.filter(is_active=True).count()
 
 
 class SubcategorySerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    category_code = serializers.CharField(source='category.code', read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_code = serializers.CharField(source="category.code", read_only=True)
     sub_subcategories = SubSubcategorySerializer(many=True, read_only=True)
     sub_subcategories_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Subcategory
-        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at',
-                 'category', 'category_name', 'category_code', 'sub_subcategories', 'sub_subcategories_count']
-        read_only_fields = ['created_at', 'updated_at']
-    
+        fields = [
+            "id",
+            "code",
+            "name",
+            "description",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "category",
+            "category_name",
+            "category_code",
+            "sub_subcategories",
+            "sub_subcategories_count",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
     def get_sub_subcategories_count(self, obj):
         return obj.sub_subcategories.filter(is_active=True).count()
 
 
 class CategoryHierarchySerializer(serializers.ModelSerializer):
     """Serializer for complete category hierarchy"""
+
     subcategories = SubcategorySerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Category
-        fields = ['id', 'code', 'name', 'description', 'is_active', 'subcategories']
+        fields = ["id", "code", "name", "description", "is_active", "subcategories"]
 
 
 class ProducerCreateUpdateSerializer(serializers.ModelSerializer):
@@ -227,11 +251,11 @@ class ProductSerializer(serializers.ModelSerializer):
     uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
     category_details = serializers.CharField(source="get_old_category_display", read_only=True)
     deleted_images = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
-    
+
     # New category hierarchy fields - using light serializers for better performance
-    category_info = CategorySerializer(source='category', read_only=True)
-    subcategory_info = SubcategoryLightSerializer(source='subcategory', read_only=True)
-    sub_subcategory_info = SubSubcategoryLightSerializer(source='sub_subcategory', read_only=True)
+    category_info = CategorySerializer(source="category", read_only=True)
+    subcategory_info = SubcategoryLightSerializer(source="subcategory", read_only=True)
+    sub_subcategory_info = SubSubcategoryLightSerializer(source="sub_subcategory", read_only=True)
 
     class Meta:
         model = Product
@@ -448,8 +472,8 @@ class MarketplaceProductVariantSerializer(serializers.ModelSerializer):
 
 class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
-    user_id = serializers.IntegerField(read_only=True, source='user.id')
-    username = serializers.CharField(read_only=True, source='user.username')
+    user_id = serializers.IntegerField(read_only=True, source="user.id")
+    username = serializers.CharField(read_only=True, source="user.username")
 
     class Meta:
         model = MarketplaceProductReview
@@ -464,12 +488,10 @@ class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """Validate that user hasn't already reviewed this product."""
-        request = self.context.get('request')
+        request = self.context.get("request")
         if request and request.user:
-            product = data.get('product')
-            if product and MarketplaceProductReview.objects.filter(
-                product=product, user=request.user
-            ).exists():
+            product = data.get("product")
+            if product and MarketplaceProductReview.objects.filter(product=product, user=request.user).exists():
                 raise serializers.ValidationError("You have already reviewed this product.")
         return data
 
@@ -491,6 +513,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     offer_countdown = serializers.SerializerMethodField()
     is_free_shipping = serializers.BooleanField(read_only=True)
     is_featured = serializers.BooleanField(read_only=False)
+    is_made_in_nepal = serializers.BooleanField(read_only=False)
     # views_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -511,6 +534,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "shipping_cost",
             "is_free_shipping",
             "is_featured",
+            "is_made_in_nepal",
             "recent_purchases_count",
             "listed_date",
             "is_available",
