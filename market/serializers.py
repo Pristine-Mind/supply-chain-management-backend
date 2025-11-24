@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from market.utils import notify_event
-from producer.models import MarketplaceProduct
+from producer.models import MarketplaceProduct, Sale
 from producer.serializers import MarketplaceProductSerializer
 
 from .models import (
@@ -556,13 +556,29 @@ class MarketplaceSaleSerializer(serializers.ModelSerializer):
 
 
 class DeliverySerializer(serializers.ModelSerializer):
-    cart = serializers.PrimaryKeyRelatedField(queryset=Cart.objects.all())
+    cart = serializers.PrimaryKeyRelatedField(queryset=Cart.objects.all(), required=False, allow_null=True)
+    sale = serializers.PrimaryKeyRelatedField(queryset=Sale.objects.all(), required=False, allow_null=True)
+    marketplace_sale = serializers.PrimaryKeyRelatedField(
+        queryset=MarketplaceSale.objects.all(), required=False, allow_null=True
+    )
+    marketplace_order = serializers.PrimaryKeyRelatedField(
+        queryset=MarketplaceOrder.objects.all(), required=False, allow_null=True
+    )
+
+    # Read-only computed fields
+    delivery_source = serializers.ReadOnlyField()
+    total_items = serializers.ReadOnlyField()
+    total_value = serializers.ReadOnlyField()
+    product_details = serializers.ReadOnlyField()
 
     class Meta:
         model = Delivery
         fields = [
             "id",
             "cart",
+            "sale",
+            "marketplace_sale",
+            "marketplace_order",
             "customer_name",
             "phone_number",
             "email",
@@ -570,11 +586,127 @@ class DeliverySerializer(serializers.ModelSerializer):
             "city",
             "state",
             "zip_code",
-            "created_at",
-            "updated_at",
             "latitude",
             "longitude",
+            "additional_instructions",
+            "shop_id",
+            "delivery_status",
+            "delivery_person_name",
+            "delivery_person_phone",
+            "delivery_service",
+            "tracking_number",
+            "estimated_delivery_date",
+            "actual_delivery_date",
+            "created_at",
+            "updated_at",
+            # Computed fields
+            "delivery_source",
+            "total_items",
+            "total_value",
+            "product_details",
         ]
+        read_only_fields = [
+            "id",
+            "shop_id",  # Automatically set from user profile
+            "created_at",
+            "updated_at",
+            "delivery_source",
+            "total_items",
+            "total_value",
+            "product_details",
+        ]
+
+    # def get_shop_id_from_user(self, user):
+    #     """
+    #     Get shop_id from user profile.
+    #     """
+    #     try:
+    #         if hasattr(user, 'user_profile') and user.user_profile:
+    #             return getattr(user.user_profile, 'shop_id', None)
+    #     except AttributeError:
+    #         pass
+    #     return None
+
+    # def create(self, validated_data):
+    #     """
+    #     Create a delivery and automatically set shop_id from user profile.
+    #     """
+    #     request = self.context.get('request')
+    #     if request and request.user:
+    #         validated_data['shop_id'] = self.get_shop_id_from_user(request.user)
+
+    #     return super().create(validated_data)
+
+    # def update(self, instance, validated_data):
+    #     """
+    #     Update a delivery and automatically set shop_id from user profile if not already set.
+    #     """
+    #     request = self.context.get('request')
+    #     if request and request.user and not instance.shop_id:
+    #         validated_data['shop_id'] = self.get_shop_id_from_user(request.user)
+
+    #     return super().update(instance, validated_data)
+
+    def validate(self, data):
+        """
+        Validate that at least one source (cart, sale, marketplace_sale, marketplace_order) is provided.
+        """
+        cart = data.get("cart")
+        sale = data.get("sale")
+        marketplace_sale = data.get("marketplace_sale")
+        marketplace_order = data.get("marketplace_order")
+
+        if not any([cart, sale, marketplace_sale, marketplace_order]):
+            raise serializers.ValidationError(
+                "At least one of cart, sale, marketplace_sale, or marketplace_order must be provided."
+            )
+
+        return data
+
+
+class CreateDeliveryFromSaleSerializer(serializers.Serializer):
+    """
+    Simplified serializer for creating deliveries from sales.
+    """
+
+    sale_id = serializers.IntegerField()
+    customer_name = serializers.CharField(max_length=255)
+    phone_number = serializers.CharField(max_length=20)
+    email = serializers.EmailField()
+    address = serializers.CharField(style={"base_template": "textarea.html"})
+    city = serializers.CharField(max_length=100)
+    state = serializers.CharField(max_length=100)
+    zip_code = serializers.CharField(max_length=20)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
+    additional_instructions = serializers.CharField(
+        required=False, allow_blank=True, style={"base_template": "textarea.html"}
+    )
+
+    def validate_sale_id(self, value):
+        """
+        Validate that the sale exists and belongs to the current user.
+        """
+        request = self.context.get("request")
+        if not request or not request.user:
+            raise serializers.ValidationError("Authentication required.")
+
+        try:
+            sale = Sale.objects.get(id=value, user=request.user)
+            return value
+        except Sale.DoesNotExist:
+            raise serializers.ValidationError("Sale not found or you do not have permission to access it.")
+
+    def create(self, validated_data):
+        """
+        Create a delivery from the sale with automatic shop_id handling.
+        """
+        sale_id = validated_data.pop("sale_id")
+        sale = Sale.objects.get(id=sale_id, user=self.context["request"].user)
+
+        # The create_delivery method on Sale will automatically handle shop_id
+        delivery = sale.create_delivery(**validated_data)
+        return delivery
 
 
 class OrderTrackingEventSerializer(serializers.ModelSerializer):

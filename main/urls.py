@@ -2,12 +2,15 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularRedocView,
-    SpectacularSwaggerView,
-)
 from rest_framework.routers import DefaultRouter
+
+# Only import API documentation in DEBUG mode
+if settings.DEBUG:
+    from drf_spectacular.views import (
+        SpectacularAPIView,
+        SpectacularRedocView,
+        SpectacularSwaggerView,
+    )
 
 from market.trending_api_views import track_product_view, trending_summary
 from market.trending_views import TrendingProductsViewSet
@@ -173,9 +176,6 @@ urlpatterns = [
     path("api/v1/procurement/", procurement_view, name="procurement"),
     path("api/v1/sales/", sales_view, name="sales"),
     path("api/v1/reconciliation/", reconciliation_view, name="reconciliation"),
-    path("docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    path("api-docs/", SpectacularAPIView.as_view(), name="schema"),
-    path("api-docs/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/export/producers/", export_producers_to_excel, name="export_producers"),
     path("api/export/customers/", export_customers_to_excel, name="export_customers"),
     path("api/export/products/", export_products_to_excel, name="export_products"),
@@ -311,3 +311,5 @@ if not settings.DEBUG:
             },
         ),
     ]
+
+

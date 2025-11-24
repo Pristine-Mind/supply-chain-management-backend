@@ -20,7 +20,7 @@ try:
 except ImportError:
     format_currency = None
 
-from producer.models import City, MarketplaceProduct
+from producer.models import City, MarketplaceProduct, Sale
 
 
 class Purchase(models.Model):
@@ -322,21 +322,151 @@ class CartItem(models.Model):
 
 
 class Delivery(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="delivery")
+    # Cart relationship (nullable for deliveries created from sales)
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="delivery", null=True, blank=True)
+
+    # Sale relationship (for deliveries created directly from producer sales)
+    sale = models.ForeignKey(
+        Sale, on_delete=models.CASCADE, related_name="deliveries", null=True, blank=True, verbose_name=_("Sale")
+    )
+
+    # MarketplaceSale relationship (for deliveries created from marketplace sales)
+    marketplace_sale = models.ForeignKey(
+        "MarketplaceSale",
+        on_delete=models.CASCADE,
+        related_name="direct_deliveries",
+        null=True,
+        blank=True,
+        verbose_name=_("Marketplace Sale"),
+    )
+
+    # Order relationship (for deliveries created from marketplace orders)
+    marketplace_order = models.ForeignKey(
+        "MarketplaceOrder",
+        on_delete=models.CASCADE,
+        related_name="order_deliveries",
+        null=True,
+        blank=True,
+        verbose_name=_("Marketplace Order"),
+    )
+
+    # Customer information
     customer_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20)
     email = models.CharField(max_length=255)
+
+    # Delivery address
     address = models.TextField()
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100)
     zip_code = models.CharField(max_length=20)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+
+    # Additional information
+    additional_instructions = models.TextField(blank=True, null=True)
+    shop_id = models.CharField(max_length=100, blank=True, null=True)
+
+    # Delivery tracking
+    delivery_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", _("Pending")),
+            ("assigned", _("Assigned")),
+            ("picked_up", _("Picked Up")),
+            ("in_transit", _("In Transit")),
+            ("delivered", _("Delivered")),
+            ("failed", _("Failed")),
+            ("cancelled", _("Cancelled")),
+        ],
+        default="pending",
+        verbose_name=_("Delivery Status"),
+    )
+
+    # Delivery person/service information
+    delivery_person_name = models.CharField(max_length=255, blank=True, null=True)
+    delivery_person_phone = models.CharField(max_length=20, blank=True, null=True)
+    delivery_service = models.CharField(max_length=100, blank=True, null=True)
+    tracking_number = models.CharField(max_length=100, blank=True, null=True, unique=True)
+
+    # Estimated and actual delivery times
+    estimated_delivery_date = models.DateTimeField(null=True, blank=True)
+    actual_delivery_date = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    latitude = models.FloatField()
-    longitude = models.FloatField()
+
+    class Meta:
+        verbose_name = _("Delivery")
+        verbose_name_plural = _("Deliveries")
+        indexes = [
+            models.Index(fields=["delivery_status"]),
+            models.Index(fields=["tracking_number"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def clean(self):
+        """Validate that at least one of cart, sale, marketplace_sale, or marketplace_order is provided."""
+        if not any([self.cart, self.sale, self.marketplace_sale, self.marketplace_order]):
+            raise ValidationError("At least one of cart, sale, marketplace_sale, or marketplace_order must be provided.")
 
     def __str__(self):
-        return f"Delivery for {self.customer_name} - {self.city}"
+        return f"Delivery for {self.customer_name} - {self.city} ({self.get_delivery_status_display()})"
+
+    @property
+    def delivery_source(self):
+        """Return the source of this delivery (cart, sale, marketplace_sale, or order)."""
+        if self.cart:
+            return f"Cart #{self.cart.id}"
+        elif self.sale:
+            return f"Sale #{self.sale.id} (Order: {self.sale.order.order_number})"
+        elif self.marketplace_sale:
+            return f"Marketplace Sale #{self.marketplace_sale.order_number}"
+        elif self.marketplace_order:
+            return f"Order #{self.marketplace_order.order_number}"
+        return "Unknown source"
+
+    @property
+    def total_items(self):
+        """Calculate total number of items in this delivery."""
+        if self.cart:
+            return sum(item.quantity for item in self.cart.items.all())
+        elif self.sale:
+            return self.sale.quantity
+        elif self.marketplace_sale:
+            return self.marketplace_sale.quantity
+        elif self.marketplace_order:
+            return sum(item.quantity for item in self.marketplace_order.items.all())
+        return 0
+
+    @property
+    def total_value(self):
+        """Calculate total value of items in this delivery."""
+        if self.cart:
+            return sum(item.product.price * item.quantity for item in self.cart.items.all())
+        elif self.sale:
+            return self.sale.sale_price * self.sale.quantity
+        elif self.marketplace_sale:
+            return self.marketplace_sale.total_amount
+        elif self.marketplace_order:
+            return self.marketplace_order.total_amount
+        return 0
+
+    @property
+    def product_details(self):
+        """Get details about the products in this delivery."""
+        if self.cart:
+            return [{"name": item.product.product.name, "quantity": item.quantity} for item in self.cart.items.all()]
+        elif self.sale:
+            return [{"name": self.sale.order.product.name, "quantity": self.sale.quantity}]
+        elif self.marketplace_sale:
+            return [{"name": self.marketplace_sale.product.product.name, "quantity": self.marketplace_sale.quantity}]
+        elif self.marketplace_order:
+            return [
+                {"name": item.product.product.name, "quantity": item.quantity} for item in self.marketplace_order.items.all()
+            ]
+        return []
 
 
 class SaleStatus(models.TextChoices):
@@ -522,7 +652,12 @@ class MarketplaceSale(models.Model):
 
     # Delivery Information
     delivery = models.OneToOneField(
-        Delivery, on_delete=models.SET_NULL, null=True, blank=True, related_name="sale", verbose_name=_("Delivery Details")
+        Delivery,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="marketplace_sale_delivery",
+        verbose_name=_("Delivery Details"),
     )
 
     # Additional Information

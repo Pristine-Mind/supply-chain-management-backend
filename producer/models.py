@@ -477,6 +477,56 @@ class Sale(models.Model):
         self.order.product.stock -= self.quantity
         self.order.product.save()
 
+    def create_delivery(
+        self,
+        customer_name,
+        phone_number,
+        email,
+        address,
+        city,
+        state,
+        zip_code,
+        latitude=None,
+        longitude=None,
+        additional_instructions=None,
+    ):
+        """
+        Create a delivery record for this sale.
+
+        Args:
+            customer_name (str): Name of the customer
+            phone_number (str): Customer's phone number
+            email (str): Customer's email
+            address (str): Delivery address
+            city (str): Delivery city
+            state (str): Delivery state
+            zip_code (str): Delivery zip code
+            latitude (float, optional): Delivery latitude
+            longitude (float, optional): Delivery longitude
+            additional_instructions (str, optional): Additional delivery instructions
+
+        Returns:
+            Delivery: Created delivery instance
+        """
+        from market.models import Delivery
+
+        delivery = Delivery.objects.create(
+            sale=self,
+            customer_name=customer_name,
+            phone_number=phone_number,
+            email=email,
+            address=address,
+            city=city,
+            state=state,
+            zip_code=zip_code,
+            latitude=latitude,
+            longitude=longitude,
+            additional_instructions=additional_instructions,
+            shop_id=getattr(self.user.user_profile, "shop_id", None) if hasattr(self.user, "user_profile") else None,
+        )
+
+        return delivery
+
 
 class StockList(models.Model):
     """
