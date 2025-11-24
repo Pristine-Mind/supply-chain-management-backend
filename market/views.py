@@ -56,6 +56,7 @@ from .serializers import (
     CartItemSerializer,
     CartSerializer,
     ChatMessageSerializer,
+    CreateDeliveryFromSaleSerializer,
     CreateOrderSerializer,
     DeliveryInfoSerializer,
     DeliverySerializer,
@@ -524,12 +525,144 @@ class CartItemDeleteView(generics.DestroyAPIView):
 class DeliveryCreateView(generics.CreateAPIView):
     queryset = Delivery.objects.all()
     serializer_class = DeliverySerializer
+    permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
+        """
+        Create a delivery. Supports creation from cart, sale, marketplace_sale, or marketplace_order.
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        # Get the delivery source for logging
+        delivery_source = None
+        if serializer.validated_data.get("cart"):
+            delivery_source = "cart"
+        elif serializer.validated_data.get("sale"):
+            delivery_source = "sale"
+        elif serializer.validated_data.get("marketplace_sale"):
+            delivery_source = "marketplace_sale"
+        elif serializer.validated_data.get("marketplace_order"):
+            delivery_source = "marketplace_order"
+
         self.perform_create(serializer)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        response_data = serializer.data
+        response_data["message"] = f"Delivery created successfully from {delivery_source}"
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class DeliveryViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for viewing and editing deliveries.
+    Supports deliveries from carts, sales, marketplace sales, and marketplace orders.
+    """
+
+    serializer_class = DeliverySerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ["delivery_status", "city", "state"]
+    search_fields = ["customer_name", "phone_number", "tracking_number", "address"]
+    ordering_fields = ["created_at", "estimated_delivery_date", "actual_delivery_date"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        """
+        Return deliveries based on user role and permissions.
+        """
+        user = self.request.user
+        queryset = Delivery.objects.all()
+
+        if not user.is_staff:
+            # For non-staff users, show deliveries related to their sales or orders
+            queryset = queryset.filter(
+                models.Q(sale__user=user)  # Deliveries from their sales
+                | models.Q(marketplace_sale__seller=user)  # Deliveries from their marketplace sales
+                | models.Q(marketplace_sale__buyer=user)  # Deliveries from their purchases
+                | models.Q(marketplace_order__customer=user)  # Deliveries from their orders
+                | models.Q(cart__user=user)  # Deliveries from their cart
+            ).distinct()
+
+        return queryset
+
+    @action(detail=True, methods=["patch"], url_path="update-status")
+    def update_delivery_status(self, request, pk=None):
+        """
+        Update the delivery status and related information.
+        """
+        delivery = self.get_object()
+        new_status = request.data.get("delivery_status")
+
+        if not new_status:
+            return Response({"error": "delivery_status is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate status transition
+        valid_statuses = ["pending", "assigned", "picked_up", "in_transit", "delivered", "failed", "cancelled"]
+        if new_status not in valid_statuses:
+            return Response(
+                {"error": f"Invalid status. Valid options: {valid_statuses}"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        old_status = delivery.delivery_status
+        delivery.delivery_status = new_status
+
+        # Update actual delivery date if status is delivered
+        if new_status == "delivered" and not delivery.actual_delivery_date:
+            delivery.actual_delivery_date = timezone.now()
+
+        # Update other fields if provided
+        if "delivery_person_name" in request.data:
+            delivery.delivery_person_name = request.data["delivery_person_name"]
+        if "delivery_person_phone" in request.data:
+            delivery.delivery_person_phone = request.data["delivery_person_phone"]
+        if "tracking_number" in request.data:
+            delivery.tracking_number = request.data["tracking_number"]
+
+        delivery.save()
+
+        serializer = self.get_serializer(delivery)
+        return Response(
+            {"message": f"Delivery status updated from {old_status} to {new_status}", "delivery": serializer.data}
+        )
+
+    @action(detail=False, methods=["get"], url_path="by-source/(?P<source_type>[^/.]+)/(?P<source_id>[^/.]+)")
+    def get_by_source(self, request, source_type=None, source_id=None):
+        """
+        Get deliveries by source type and ID.
+        source_type can be: cart, sale, marketplace_sale, marketplace_order
+        """
+        valid_sources = ["cart", "sale", "marketplace_sale", "marketplace_order"]
+        if source_type not in valid_sources:
+            return Response(
+                {"error": f"Invalid source_type. Valid options: {valid_sources}"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        filter_kwargs = {f"{source_type}_id": source_id}
+        deliveries = self.get_queryset().filter(**filter_kwargs)
+
+        serializer = self.get_serializer(deliveries, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], url_path="create-from-sale")
+    def create_from_sale(self, request):
+        """
+        Create a delivery directly from a sale with simplified parameters.
+        Uses CreateDeliveryFromSaleSerializer for validation and automatic shop_id handling.
+        """
+        serializer = CreateDeliveryFromSaleSerializer(data=request.data, context={"request": request})
+
+        if serializer.is_valid():
+            try:
+                delivery = serializer.save()
+                delivery_serializer = self.get_serializer(delivery)
+                return Response(
+                    {"message": "Delivery created successfully from sale", "delivery": delivery_serializer.data},
+                    status=status.HTTP_201_CREATED,
+                )
+            except Exception as e:
+                return Response({"error": f"Failed to create delivery: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class MarketplaceSaleViewSet(viewsets.ModelViewSet):

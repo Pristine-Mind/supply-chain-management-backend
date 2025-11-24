@@ -19,6 +19,7 @@ from market.views import (
     CartItemUpdateView,
     ChatMessageViewSet,
     DeliveryCreateView,
+    DeliveryViewSet,
     FeedbackViewSet,
     GlobalEnumView,
     MarketplaceOrderViewSet,
@@ -120,6 +121,7 @@ router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-ord
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
+router.register(r"deliveries", DeliveryViewSet, basename="delivery")
 router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")

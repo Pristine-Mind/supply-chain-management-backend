@@ -314,10 +314,39 @@ class MarketplaceSaleAdmin(admin.ModelAdmin):
 
 @admin.register(Delivery)
 class DeliveryAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
-    list_display = ("cart", "customer_name", "phone_number", "city", "state", "created_at")
-    list_filter = ("city", "state", "created_at")
-    search_fields = ("customer_name", "phone_number", "address")
-    readonly_fields = ("created_at", "updated_at")
+    list_display = (
+        "customer_name",
+        "phone_number",
+        "city",
+        "state",
+        "delivery_status",
+        "delivery_source_display",
+        "tracking_number",
+        "created_at",
+    )
+    list_filter = ("city", "state", "delivery_status", "created_at")
+    search_fields = ("customer_name", "phone_number", "address", "tracking_number")
+    readonly_fields = ("created_at", "updated_at", "delivery_source")
+
+    fieldsets = (
+        (_("Source"), {"fields": ("cart", "sale", "marketplace_sale", "marketplace_order", "delivery_source")}),
+        (_("Customer Information"), {"fields": ("customer_name", "phone_number", "email")}),
+        (_("Delivery Address"), {"fields": ("address", "city", "state", "zip_code", "latitude", "longitude")}),
+        (_("Delivery Status"), {"fields": ("delivery_status", "tracking_number")}),
+        (
+            _("Delivery Personnel"),
+            {"fields": ("delivery_person_name", "delivery_person_phone", "delivery_service"), "classes": ("collapse",)},
+        ),
+        (_("Delivery Times"), {"fields": ("estimated_delivery_date", "actual_delivery_date"), "classes": ("collapse",)}),
+        (_("Additional Information"), {"fields": ("additional_instructions", "shop_id"), "classes": ("collapse",)}),
+        (_("Timestamps"), {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
+    )
+
+    def delivery_source_display(self, obj):
+        """Display the source of the delivery in a readable format."""
+        return obj.delivery_source
+
+    delivery_source_display.short_description = _("Source")
 
     view_roles = ["admin", "manager", "agent"]
     add_roles = ["admin", "manager", "agent"]

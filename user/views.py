@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -13,6 +14,23 @@ from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+# Conditional import for spectacular decorators
+try:
+    from drf_spectacular.utils import extend_schema, extend_schema_view
+    spectacular_available = True
+except ImportError:
+    # Fallback decorators that do nothing
+    def extend_schema(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def extend_schema_view(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    spectacular_available = False
 
 from transport.serializers import (
     TransporterCreateSerializer,

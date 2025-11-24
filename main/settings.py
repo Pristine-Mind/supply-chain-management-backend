@@ -92,6 +92,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "main.security_middleware.SecurityHeadersMiddleware",  # Custom security headers
+    "main.security_middleware.ServerInfoHidingMiddleware",  # Hide server information
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -331,6 +332,24 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+# Keep spectacular for schema generation but disable public endpoints in production
+# This prevents AttributeError while still hiding documentation from users
+if not DEBUG:
+    print("🔒 API documentation endpoints disabled in production")
+else:
+    print("📚 API documentation enabled in DEBUG mode")
+
+# Disable API documentation in production but keep valid schema class
+if not DEBUG:
+    # Use basic DRF schema instead of None to avoid errors
+    REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "rest_framework.schemas.AutoSchema"
+    # Remove spectacular from installed apps in production
+    try:
+        INSTALLED_APPS.remove("drf_spectacular")
+        print("🔒 API documentation disabled in production")
+    except ValueError:
+        pass
+
 CELERY_REDIS_URL = env("CELERY_REDIS_URL")
 CELERY_BROKER_URL = CELERY_REDIS_URL
 CELERY_RESULT_BACKEND = CELERY_REDIS_URL
@@ -439,12 +458,21 @@ SMS_SENDER = os.environ.get("SMS_SENDER")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Mulya Bazzar API",
-    "DESCRIPTION": "Mulya Bazzar API Documenation",
+    "DESCRIPTION": "Mulya Bazzar API Documentation",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "ENUM_NAME_OVERRIDES": {},
     "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
+    "SCHEMA_PATH_PREFIX": "/api/v1/",
+    # Remove the problematic DEFAULT_GENERATOR_CLASS to use the default
 }
+
+# Disable spectacular endpoints in production but keep schema generation working
+if not DEBUG:
+    SPECTACULAR_SETTINGS.update({
+        "SERVE_INCLUDE_SCHEMA": False,
+        "SERVE_PUBLIC": False,
+    })
 
 SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
 SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
@@ -485,12 +513,11 @@ if not DEBUG:
     # Hide server information
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
-
+    
     # Hide Django version and server info
     import django
-
-    django.VERSION_INFO = (0, 0, 0, "final", 0)  # Hide Django version
-
+    django.VERSION_INFO = (0, 0, 0, 'final', 0)  # Hide Django version
+    
     # Disable server signature in error pages
     ADMINS = []  # Don't send error emails that reveal server info
 

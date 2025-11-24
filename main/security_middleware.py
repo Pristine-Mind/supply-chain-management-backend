@@ -18,7 +18,7 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         """Add security headers to response"""
 
-        # HTTPS Security Headers
+        # HTTPS Security Headers (only in production)
         if not settings.DEBUG:
             response["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
             response["X-Content-Type-Options"] = "nosniff"
@@ -26,23 +26,53 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
             response["X-XSS-Protection"] = "1; mode=block"
             response["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-            # Content Security Policy
-            response["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: https:; "
-                "font-src 'self' data:; "
-                "connect-src 'self' https://khalti.com https://dev.khalti.com; "
-                "frame-ancestors 'none';"
-            )
+            # Minimal Content Security Policy (less verbose)
+            response["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
 
-        # API Security Headers
-        if request.path.startswith("/api/"):
+            # Remove server signature
+            if "Server" in response:
+                del response["Server"]
+
+        # Minimal API Security Headers (only for sensitive endpoints)
+        sensitive_paths = ["/api/login/", "/admin/", "/api/v1/payments/"]
+        if any(request.path.startswith(path) for path in sensitive_paths):
             response["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
+        elif request.path.startswith("/api/"):
+            # Less restrictive caching for public APIs
+            response["Cache-Control"] = "public, max-age=300"  # 5 minutes
 
+        return response
+
+
+class ServerInfoHidingMiddleware(MiddlewareMixin):
+    """
+    Middleware to hide server information and minimize header exposure in production.
+    """
+    
+    def process_response(self, request, response):
+        """Remove or minimize server information headers"""
+        
+        if not settings.DEBUG:
+            # Remove server signature headers
+            headers_to_remove = [
+                'Server',
+                'X-Powered-By', 
+                'X-AspNet-Version',
+                'X-AspNetMvc-Version',
+                'X-Django-Version'
+            ]
+            
+            for header in headers_to_remove:
+                if header in response:
+                    del response[header]
+            
+            # Minimize content-encoding information
+            if 'Content-Encoding' in response:
+                # Keep compression but don't reveal method details
+                response['Content-Encoding'] = response.get('Content-Encoding', '')
+        
         return response
 
 
