@@ -47,6 +47,7 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
+    DeliveryViewSet,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -129,6 +130,7 @@ router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
+router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
 
 
 urlpatterns = [
