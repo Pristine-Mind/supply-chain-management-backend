@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "admin_auto_filters",
     "rest_framework",
     "rest_framework.authtoken",
+    "rest_framework_simplejwt",
     "corsheaders",
     "django_filters",
     "django_celery_beat",
@@ -331,6 +332,8 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.TokenAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "external_delivery.middleware.auth.ExternalAPIAuthentication",
         "rest_framework.authentication.BasicAuthentication",
         # Using custom session auth that doesn't enforce CSRF for API endpoints
         "main.authentication.CSRFExemptSessionAuthentication",
@@ -753,3 +756,26 @@ EXTERNAL_PLAN_LIMITS = {
         "rate_limit_hour": 5000,
     },
 }
+
+# JWT Configuration for External Business Authentication
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "VERIFYING_KEY": None,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "TOKEN_TYPE_CLAIM": "token_type",
+}
+
+# External Delivery Integration Settings
+EXTERNAL_API_MAX_REQUEST_SIZE = 1024 * 1024  # 1MB
+FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="https://yourapp.com")
+WEBHOOK_TIMEOUT = 30
+WEBHOOK_MAX_RETRIES = 3

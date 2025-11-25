@@ -13,6 +13,35 @@ from ..models import APIUsageLog, ExternalBusiness
 from ..utils import log_api_usage
 
 
+class ExternalAPIUser:
+    """
+    Custom user-like object for external API authentication
+    """
+
+    def __init__(self, external_business):
+        self.external_business = external_business
+        self.id = None
+        self.pk = None
+        self.username = f"external_{external_business.business_name}"
+        self.email = external_business.business_email
+        self.is_authenticated = True
+        self.is_active = True
+        self.is_staff = False
+        self.is_superuser = False
+
+    def __str__(self):
+        return f"ExternalAPIUser({self.external_business.business_name})"
+
+    def has_perm(self, perm, obj=None):
+        return False
+
+    def has_perms(self, perm_list, obj=None):
+        return False
+
+    def has_module_perms(self, package_name):
+        return False
+
+
 class ExternalAPIAuthentication(BaseAuthentication):
     """
     Custom authentication for external API requests
@@ -29,8 +58,9 @@ class ExternalAPIAuthentication(BaseAuthentication):
             # Set external_business on request for permission checks
             request.external_business = external_business
 
-            # Return user as None since we're using external authentication
-            return (AnonymousUser(), None)
+            # Return custom authenticated user object
+            user = ExternalAPIUser(external_business)
+            return (user, None)
 
         except ExternalBusiness.DoesNotExist:
             raise AuthenticationFailed("Invalid API key")

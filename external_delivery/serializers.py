@@ -360,3 +360,99 @@ class WebhookTestSerializer(serializers.Serializer):
     webhook_url = serializers.URLField()
     event_type = serializers.CharField(max_length=50)
     test_data = serializers.JSONField(required=False, default=dict)
+
+
+# Authentication Serializers
+
+
+class ExternalBusinessLoginSerializer(serializers.Serializer):
+    """Serializer for external business login"""
+
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class ExternalBusinessProfileSerializer(serializers.ModelSerializer):
+    """Serializer for external business profile (dashboard view)"""
+
+    has_user_account = serializers.SerializerMethodField()
+    total_deliveries = serializers.SerializerMethodField()
+    current_month_deliveries = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExternalBusiness
+        fields = [
+            "id",
+            "business_name",
+            "business_email",
+            "contact_person",
+            "contact_phone",
+            "business_address",
+            "website",
+            "plan",
+            "status",
+            "api_key",
+            "webhook_url",
+            "max_delivery_value",
+            "allowed_pickup_cities",
+            "allowed_delivery_cities",
+            "rate_limit_per_minute",
+            "rate_limit_per_hour",
+            "created_at",
+            "last_login",
+            "has_user_account",
+            "total_deliveries",
+            "current_month_deliveries",
+        ]
+        read_only_fields = [
+            "id",
+            "api_key",
+            "status",
+            "created_at",
+            "has_user_account",
+            "total_deliveries",
+            "current_month_deliveries",
+        ]
+
+    def get_has_user_account(self, obj):
+        return obj.user is not None
+
+    def get_total_deliveries(self, obj):
+        return obj.external_deliveries.count()
+
+    def get_current_month_deliveries(self, obj):
+        now = timezone.now()
+        return obj.external_deliveries.filter(created_at__year=now.year, created_at__month=now.month).count()
+
+
+class AccountSetupSerializer(serializers.Serializer):
+    """Serializer for external business account setup"""
+
+    api_key = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data["password"] != data["confirm_password"]:
+            raise serializers.ValidationError("Passwords do not match")
+        return data
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for changing password"""
+
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data["new_password"] != data["confirm_password"]:
+            raise serializers.ValidationError("New passwords do not match")
+        return data
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    """Serializer for password reset request"""
+
+    email = serializers.EmailField()
+    api_key = serializers.CharField(required=False)
