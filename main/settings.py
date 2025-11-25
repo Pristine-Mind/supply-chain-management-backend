@@ -469,10 +469,12 @@ SPECTACULAR_SETTINGS = {
 
 # Disable spectacular endpoints in production but keep schema generation working
 if not DEBUG:
-    SPECTACULAR_SETTINGS.update({
-        "SERVE_INCLUDE_SCHEMA": False,
-        "SERVE_PUBLIC": False,
-    })
+    SPECTACULAR_SETTINGS.update(
+        {
+            "SERVE_INCLUDE_SCHEMA": False,
+            "SERVE_PUBLIC": False,
+        }
+    )
 
 SPARROWSMS_API_KEY = os.environ.get("SPARROWSMS_API_KEY")
 SPARROWSMS_SENDER_ID = os.environ.get("SPARROWSMS_SENDER_ID")
@@ -513,11 +515,12 @@ if not DEBUG:
     # Hide server information
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
-    
+
     # Hide Django version and server info
     import django
-    django.VERSION_INFO = (0, 0, 0, 'final', 0)  # Hide Django version
-    
+
+    django.VERSION_INFO = (0, 0, 0, "final", 0)  # Hide Django version
+
     # Disable server signature in error pages
     ADMINS = []  # Don't send error emails that reveal server info
 

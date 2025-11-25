@@ -20,6 +20,7 @@ from producer.models import (
 )
 
 from .models import (
+    Delivery,
     MarketplaceOrder,
     MarketplaceSale,
     MarketplaceUserProduct,
@@ -492,3 +493,82 @@ try:
 
 except ImportError:
     print("PaymentTransaction model not available - invoice generation signals disabled for payments")
+
+
+@receiver(post_save, sender=Delivery, dispatch_uid="create_transport_delivery_from_sale")
+def create_transport_delivery_from_sale(sender, instance, created, **kwargs):
+    """
+    Create a transport delivery record when a market delivery is created from a sale.
+    This makes the delivery available to transporters.
+    """
+    # Only create transport delivery for new deliveries that are from sales
+    if not created or not instance.sale:
+        return
+
+    try:
+        # Import here to avoid circular imports
+        from transport.models import Delivery as TransportDelivery, TransportStatus, DeliveryPriority
+        from django.utils import timezone
+
+        # Check if transport delivery already exists
+        if TransportDelivery.objects.filter(sale=instance.sale).exists():
+            return
+
+        # Set default dates if not provided
+        now = timezone.now()
+        pickup_date = instance.estimated_delivery_date or (now + timezone.timedelta(days=1))
+        delivery_date = instance.estimated_delivery_date or (now + timezone.timedelta(days=2))
+
+        # Get producer/seller details for pickup
+        producer_obj = instance.sale.order.product.producer
+        producer_user = producer_obj.user if producer_obj else None
+
+        # Use producer profile information for pickup address
+        pickup_addr = producer_obj.address if producer_obj and producer_obj.address else "Producer Address"
+        pickup_city = producer_obj.city.name if producer_obj and producer_obj.city else "Unknown"
+        pickup_state = producer_obj.state if producer_obj and producer_obj.state else ""
+        pickup_lat = producer_obj.latitude if producer_obj and producer_obj.latitude else instance.latitude
+        pickup_lng = producer_obj.longitude if producer_obj and producer_obj.longitude else instance.longitude
+
+        # Get producer contact details
+        pickup_contact_name = (
+            producer_obj.business_name
+            if producer_obj and producer_obj.business_name
+            else (producer_user.get_full_name() if producer_user else "Producer")
+        )
+        pickup_phone = (
+            producer_obj.phone_number
+            if producer_obj and producer_obj.phone_number
+            else (getattr(producer_user, "phone", "") if producer_user else "")
+        )
+
+        # Create transport delivery record
+        transport_delivery = TransportDelivery.objects.create(
+            sale=instance.sale,
+            pickup_address=f"{pickup_addr}, {pickup_city}, {pickup_state}".strip(", "),
+            pickup_latitude=pickup_lat,
+            pickup_longitude=pickup_lng,
+            pickup_contact_name=pickup_contact_name,
+            pickup_contact_phone=pickup_phone,
+            delivery_address=f"{instance.address}, {instance.city}, {instance.state} {instance.zip_code}",
+            delivery_latitude=instance.latitude,
+            delivery_longitude=instance.longitude,
+            delivery_contact_name=instance.customer_name,
+            delivery_contact_phone=instance.phone_number,
+            delivery_instructions=instance.additional_instructions or "",
+            package_weight=1.0,  # Default weight, can be updated
+            package_value=float(instance.sale.sale_price) if instance.sale.sale_price else 100.0,
+            status=TransportStatus.AVAILABLE,
+            priority=DeliveryPriority.NORMAL,
+            delivery_fee=10.00,  # Default delivery fee, can be updated based on distance
+            requested_pickup_date=pickup_date,
+            requested_delivery_date=delivery_date,
+        )
+
+        logger.info(f"Created transport delivery {transport_delivery.delivery_id} for sale {instance.sale.id}")
+
+    except Exception as e:
+        logger.error(f"Error creating transport delivery for sale {instance.sale.id}: {str(e)}")
+        import traceback
+
+        traceback.print_exc()

@@ -50,29 +50,23 @@ class ServerInfoHidingMiddleware(MiddlewareMixin):
     """
     Middleware to hide server information and minimize header exposure in production.
     """
-    
+
     def process_response(self, request, response):
         """Remove or minimize server information headers"""
-        
+
         if not settings.DEBUG:
             # Remove server signature headers
-            headers_to_remove = [
-                'Server',
-                'X-Powered-By', 
-                'X-AspNet-Version',
-                'X-AspNetMvc-Version',
-                'X-Django-Version'
-            ]
-            
+            headers_to_remove = ["Server", "X-Powered-By", "X-AspNet-Version", "X-AspNetMvc-Version", "X-Django-Version"]
+
             for header in headers_to_remove:
                 if header in response:
                     del response[header]
-            
+
             # Minimize content-encoding information
-            if 'Content-Encoding' in response:
+            if "Content-Encoding" in response:
                 # Keep compression but don't reveal method details
-                response['Content-Encoding'] = response.get('Content-Encoding', '')
-        
+                response["Content-Encoding"] = response.get("Content-Encoding", "")
+
         return response
 
 

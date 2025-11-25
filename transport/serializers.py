@@ -198,10 +198,59 @@ class MarketplaceSaleBasicSerializer(serializers.Serializer):
         return obj.product.product.user.get_full_name() if hasattr(obj, "product") and obj.product else "N/A"
 
 
+class SaleBasicSerializer(serializers.Serializer):
+    """Basic serializer for Sale to avoid circular imports"""
+
+    id = serializers.IntegerField(read_only=True)
+    sale_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    quantity = serializers.IntegerField(read_only=True)
+    sale_date = serializers.DateTimeField(read_only=True)
+
+    # Customer and product information
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    product_name = serializers.SerializerMethodField()
+    seller_name = serializers.SerializerMethodField()
+    seller_address = serializers.SerializerMethodField()
+    seller_city = serializers.SerializerMethodField()
+
+    def get_customer_name(self, obj):
+        return obj.order.customer.user.get_full_name() if hasattr(obj, "order") and obj.order.customer else "N/A"
+
+    def get_customer_phone(self, obj):
+        return str(obj.order.customer.phone) if hasattr(obj, "order") and obj.order.customer else "N/A"
+
+    def get_product_name(self, obj):
+        return obj.order.product.name if hasattr(obj, "order") and obj.order.product else "N/A"
+
+    def get_seller_name(self, obj):
+        if hasattr(obj, "order") and obj.order.product and obj.order.product.producer:
+            producer = obj.order.product.producer
+            return (
+                producer.business_name
+                if producer.business_name
+                else (producer.user.get_full_name() if producer.user else "Producer")
+            )
+        return "N/A"
+
+    def get_seller_address(self, obj):
+        if hasattr(obj, "order") and obj.order.product and obj.order.product.producer:
+            producer = obj.order.product.producer
+            return producer.address if producer.address else "N/A"
+        return "N/A"
+
+    def get_seller_city(self, obj):
+        if hasattr(obj, "order") and obj.order.product and obj.order.product.producer:
+            producer = obj.order.product.producer
+            return producer.city.name if producer.city else "N/A"
+        return "N/A"
+
+
 class DeliverySerializer(serializers.ModelSerializer):
     """Serializer for Delivery model"""
 
     marketplace_sale = MarketplaceSaleBasicSerializer(read_only=True)
+    sale = SaleBasicSerializer(read_only=True)
     transporter = TransporterSerializer(read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     priority_display = serializers.CharField(source="get_priority_display", read_only=True)
@@ -216,6 +265,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             "id",
             "delivery_id",
             "marketplace_sale",
+            "sale",
             "tracking_number",
             "pickup_address",
             "pickup_latitude",
@@ -285,6 +335,7 @@ class DeliveryListSerializer(serializers.ModelSerializer):
 
     transporter_name = serializers.SerializerMethodField()
     marketplace_sale = MarketplaceSaleBasicSerializer(read_only=True)
+    sale = SaleBasicSerializer(read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     priority_display = serializers.CharField(source="get_priority_display", read_only=True)
     is_overdue = serializers.ReadOnlyField()
@@ -296,6 +347,7 @@ class DeliveryListSerializer(serializers.ModelSerializer):
             "delivery_id",
             "tracking_number",
             "marketplace_sale",
+            "sale",
             "pickup_address",
             "delivery_address",
             "package_weight",

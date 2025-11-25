@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
 
 from market.models import MarketplaceSale
+from producer.models import Sale
 
 
 class TransportStatus(models.TextChoices):
@@ -186,11 +187,23 @@ class Delivery(models.Model):
 
     # Basic Information
     delivery_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+
+    # Source relationships (one of these should be set)
     marketplace_sale = models.OneToOneField(
         MarketplaceSale,
         on_delete=models.CASCADE,
         related_name="delivery_details",
+        null=True,
+        blank=True,
     )
+    sale = models.OneToOneField(
+        Sale,
+        on_delete=models.CASCADE,
+        related_name="transport_delivery",
+        null=True,
+        blank=True,
+    )
+
     tracking_number = models.CharField(max_length=20, unique=True, blank=True, null=True)
 
     # Pickup Information
@@ -276,6 +289,25 @@ class Delivery(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def clean(self):
+        """Validate that exactly one of marketplace_sale or sale is provided."""
+        from django.core.exceptions import ValidationError
+
+        # Count how many source fields are provided
+        source_count = sum([bool(self.marketplace_sale), bool(self.sale)])
+
+        if source_count == 0:
+            raise ValidationError("Either marketplace_sale or sale must be provided.")
+        elif source_count > 1:
+            raise ValidationError("Only one of marketplace_sale or sale can be provided, not both.")
+
+    def save(self, *args, **kwargs):
+        """Override save to call clean validation and generate tracking number."""
+        self.clean()
+        if not self.tracking_number:
+            self.tracking_number = self.generate_tracking_number()
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = _("Delivery")
         verbose_name_plural = _("Deliveries")
@@ -290,11 +322,15 @@ class Delivery(models.Model):
             models.Index(fields=["tracking_number"]),
             models.Index(fields=["created_at"]),
         ]
-
-    def save(self, *args, **kwargs):
-        if not self.tracking_number:
-            self.tracking_number = self.generate_tracking_number()
-        super().save(*args, **kwargs)
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(marketplace_sale__isnull=False, sale__isnull=True)
+                    | models.Q(marketplace_sale__isnull=True, sale__isnull=False)
+                ),
+                name="transport_delivery_source_constraint",
+            )
+        ]
 
     def generate_tracking_number(self):
         """Generate a unique tracking number"""
