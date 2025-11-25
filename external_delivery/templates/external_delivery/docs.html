@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>External Delivery Integration - API Documentation</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            margin: 0; 
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .endpoint {
+            background: #e9ecef;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 3px solid #28a745;
+        }
+        .method {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .get { background: #007bff; }
+        .post { background: #28a745; }
+        .put { background: #ffc107; color: #212529; }
+        .delete { background: #dc3545; }
+        code {
+            background: #f1f3f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        .button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚚 External Delivery Integration Platform</h1>
+            <p>Complete API documentation for integrating your ecommerce business with our delivery network</p>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Getting Started</h2>
+            <p>Welcome to our External Delivery Integration Platform! This system allows external ecommerce businesses to integrate with our delivery network seamlessly.</p>
+            
+            <div class="success">
+                <strong>✅ Your Integration is Ready!</strong><br>
+                The external delivery system has been successfully implemented with all necessary components.
+            </div>
+
+            <h3>Quick Start Steps:</h3>
+            <ol>
+                <li>Register your business using the registration endpoint</li>
+                <li>Wait for approval from our team</li>
+                <li>Receive your API credentials</li>
+                <li>Start creating deliveries via our API</li>
+                <li>Track deliveries and receive webhook notifications</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h2>🔐 Authentication</h2>
+            <p>All API requests require authentication using an API key in the request header:</p>
+            
+            <div class="code-block">
+X-API-Key: ext_your_api_key_here
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Security Note:</strong> Keep your API key secure and never expose it in client-side code.
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 API Endpoints</h2>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/public/external-delivery/register/</code>
+                <p><strong>Register External Business</strong> - Submit your business for approval</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/public/external-delivery/track/{tracking_number}/</code>
+                <p><strong>Public Tracking</strong> - Track any delivery using tracking number (no auth required)</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/external/deliveries/</code>
+                <p><strong>Create Delivery</strong> - Create a new delivery request</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/external/deliveries/</code>
+                <p><strong>List Deliveries</strong> - Get all your deliveries with filtering options</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/external/deliveries/{id}/</code>
+                <p><strong>Delivery Details</strong> - Get detailed information about a specific delivery</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/external/deliveries/{id}/cancel/</code>
+                <p><strong>Cancel Delivery</strong> - Cancel a delivery (if status allows)</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/external/dashboard/</code>
+                <p><strong>Business Dashboard</strong> - Get comprehensive business statistics</p>
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/external/webhook/test/</code>
+                <p><strong>Test Webhook</strong> - Test your webhook endpoint</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📦 Sample Delivery Creation</h2>
+            <p>Example request to create a new delivery:</p>
+
+            <div class="code-block">
+POST /api/external/deliveries/
+Content-Type: application/json
+X-API-Key: ext_your_api_key_here
+
+{
+  "external_delivery_id": "ORDER_123",
+  "pickup_name": "Your Store",
+  "pickup_phone": "+977-9841234567",
+  "pickup_address": "123 Store Street",
+  "pickup_city": "Kathmandu",
+  "delivery_name": "John Doe",
+  "delivery_phone": "+977-9856789012", 
+  "delivery_address": "456 Customer Avenue",
+  "delivery_city": "Lalitpur",
+  "package_description": "Electronic Items",
+  "package_weight": 2.5,
+  "package_value": 5000.00,
+  "is_cod": true,
+  "cod_amount": 4500.00,
+  "notes": "Handle with care"
+}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Delivery Status Flow</h2>
+            <table>
+                <tr>
+                    <th>Status</th>
+                    <th>Description</th>
+                    <th>Webhook Event</th>
+                </tr>
+                <tr>
+                    <td>pending</td>
+                    <td>Delivery request submitted</td>
+                    <td>delivery.created</td>
+                </tr>
+                <tr>
+                    <td>accepted</td>
+                    <td>Transporter accepted the delivery</td>
+                    <td>delivery.updated</td>
+                </tr>
+                <tr>
+                    <td>picked_up</td>
+                    <td>Package picked up from sender</td>
+                    <td>delivery.updated</td>
+                </tr>
+                <tr>
+                    <td>in_transit</td>
+                    <td>Package in transit to destination</td>
+                    <td>delivery.updated</td>
+                </tr>
+                <tr>
+                    <td>delivered</td>
+                    <td>Package successfully delivered</td>
+                    <td>delivery.delivered</td>
+                </tr>
+                <tr>
+                    <td>failed</td>
+                    <td>Delivery failed</td>
+                    <td>delivery.failed</td>
+                </tr>
+                <tr>
+                    <td>cancelled</td>
+                    <td>Delivery cancelled</td>
+                    <td>delivery.cancelled</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🔔 Webhook Notifications</h2>
+            <p>Configure a webhook URL to receive real-time delivery updates:</p>
+
+            <div class="code-block">
+POST https://your-webhook-url.com/webhooks/delivery
+Content-Type: application/json
+X-Webhook-Signature: sha256=calculated_hmac_signature
+X-Event-Type: delivery.updated
+
+{
+  "event_type": "delivery.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "business_id": "your-business-id",
+  "data": {
+    "tracking_number": "EXT1234567890",
+    "status": "picked_up",
+    "pickup": { ... },
+    "delivery": { ... },
+    "package": { ... },
+    "tracking_url": "https://track.yourapp.com/EXT1234567890"
+  }
+}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>💰 Subscription Plans & Limits</h2>
+            <table>
+                <tr>
+                    <th>Plan</th>
+                    <th>Monthly Deliveries</th>
+                    <th>Rate Limit (per minute)</th>
+                    <th>Features</th>
+                </tr>
+                <tr>
+                    <td>Free</td>
+                    <td>100</td>
+                    <td>30</td>
+                    <td>Basic API, Email support</td>
+                </tr>
+                <tr>
+                    <td>Starter</td>
+                    <td>500</td>
+                    <td>60</td>
+                    <td>Webhooks, Priority support</td>
+                </tr>
+                <tr>
+                    <td>Business</td>
+                    <td>2,000</td>
+                    <td>120</td>
+                    <td>Advanced analytics, Dedicated support</td>
+                </tr>
+                <tr>
+                    <td>Enterprise</td>
+                    <td>Unlimited</td>
+                    <td>300</td>
+                    <td>Custom integration, SLA guarantee</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🛠️ Admin Features</h2>
+            <p>The system includes comprehensive admin features:</p>
+            <ul>
+                <li>✅ Business approval workflow</li>
+                <li>📊 Real-time analytics and reporting</li>
+                <li>🔧 API key management</li>
+                <li>📈 Usage monitoring and billing</li>
+                <li>🔄 Webhook retry mechanisms</li>
+                <li>🚨 Rate limiting and quota enforcement</li>
+                <li>📝 Comprehensive audit logging</li>
+                <li>🎯 Performance optimization</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🚀 Implementation Status</h2>
+            <div class="success">
+                <h3>✅ Completed Features:</h3>
+                <ul>
+                    <li>Complete Django app structure with models, views, serializers</li>
+                    <li>API authentication and rate limiting middleware</li>
+                    <li>Webhook system with HMAC signature validation</li>
+                    <li>Comprehensive admin interface</li>
+                    <li>Celery tasks for async processing</li>
+                    <li>Management commands for operations</li>
+                    <li>Complete test suite</li>
+                    <li>Integration with existing transport system</li>
+                    <li>Multi-tenant data isolation</li>
+                    <li>Edge case handling and validation</li>
+                </ul>
+            </div>
+
+            <div class="warning">
+                <h3>⚡ Next Steps:</h3>
+                <ol>
+                    <li>Run migrations: <code>python manage.py makemigrations external_delivery</code></li>
+                    <li>Apply migrations: <code>python manage.py migrate</code></li>
+                    <li>Create sample data: <code>python manage.py seed_external_data</code></li>
+                    <li>Start Celery workers for async tasks</li>
+                    <li>Configure webhook endpoints in your system</li>
+                    <li>Test API endpoints with provided sample data</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📞 Support & Resources</h2>
+            <p>For technical support and integration assistance:</p>
+            <ul>
+                <li>📧 Email: integration@yourcompany.com</li>
+                <li>📱 Phone: +977-XXXX-XXXX</li>
+                <li>💬 Slack: #delivery-api-support</li>
+                <li>📖 Documentation: <a href="/api/docs/" class="button">API Docs</a></li>
+                <li>🔍 Test Console: <a href="/admin/" class="button">Admin Panel</a></li>
+            </ul>
+        </div>
+
+        <footer style="text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #eee;">
+            <p>🚚 <strong>External Delivery Integration Platform</strong> | Built with Django & DRF | Version 1.0</p>
+            <p>© 2024 Your Company Name. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>

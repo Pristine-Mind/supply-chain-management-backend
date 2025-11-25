@@ -507,8 +507,10 @@ def create_transport_delivery_from_sale(sender, instance, created, **kwargs):
 
     try:
         # Import here to avoid circular imports
-        from transport.models import Delivery as TransportDelivery, TransportStatus, DeliveryPriority
         from django.utils import timezone
+
+        from transport.models import Delivery as TransportDelivery
+        from transport.models import DeliveryPriority, TransportStatus
 
         # Check if transport delivery already exists
         if TransportDelivery.objects.filter(sale=instance.sale).exists():

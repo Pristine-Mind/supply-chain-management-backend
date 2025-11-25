@@ -22,6 +22,7 @@ from market.views import (
     CartItemUpdateView,
     ChatMessageViewSet,
     DeliveryCreateView,
+    DeliveryViewSet,
     FeedbackViewSet,
     GlobalEnumView,
     MarketplaceProductReviewViewSet,
@@ -47,7 +48,6 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
-    DeliveryViewSet,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -277,6 +277,8 @@ urlpatterns = [
     # Trending Products API endpoints
     path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
+    # External Delivery Integration URLs
+    path("", include("external_delivery.urls")),
 ]
 
 # Add API documentation URLs only in DEBUG mode
