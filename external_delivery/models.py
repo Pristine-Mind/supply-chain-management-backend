@@ -57,6 +57,11 @@ class WebhookEventType(ChoicesMixin, models.TextChoices):
 class ExternalBusiness(models.Model):
     """External business entities that integrate with our platform"""
 
+    # User Account (for dashboard login)
+    user = models.OneToOneField(
+        "auth.User", on_delete=models.CASCADE, null=True, blank=True, related_name="external_business"
+    )
+
     # Basic Information
     business_name = models.CharField(max_length=255)
     business_email = models.EmailField(unique=True)
@@ -92,6 +97,7 @@ class ExternalBusiness(models.Model):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_login = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_external_businesses"
     )

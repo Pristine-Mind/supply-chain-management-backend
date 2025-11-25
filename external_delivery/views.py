@@ -5,11 +5,13 @@ from django.db.models import Avg, Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from .middleware.auth import ExternalAPIAuthentication
 
 from .models import (
     ExternalBusiness,
@@ -136,21 +138,18 @@ class ExternalBusinessViewSet(viewsets.ModelViewSet):
 
 class ExternalDeliveryViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing external deliveries
-    Uses external API authentication for external businesses
+    ViewSet for external API delivery management
+    Uses external API key authentication for external businesses
     """
 
     serializer_class = ExternalDeliverySerializer
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [ExternalAPIAuthentication]
+    permission_classes = [IsAuthenticated, IsExternalBusinessOwner]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        if hasattr(self.request, "external_business"):
-            # External API request
-            return ExternalDelivery.objects.filter(external_business=self.request.external_business).order_by("-created_at")
-        else:
-            # Internal request
-            return ExternalDelivery.objects.all().order_by("-created_at")
+        # External API request - filter by external business
+        return ExternalDelivery.objects.filter(external_business=self.request.external_business).order_by("-created_at")
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -161,32 +160,82 @@ class ExternalDeliveryViewSet(viewsets.ModelViewSet):
             return ExternalDeliveryUpdateStatusSerializer
         return ExternalDeliverySerializer
 
-    def get_permissions(self):
-        """
-        Set permissions based on request type
-        """
-        if hasattr(self.request, "external_business"):
-            # External API request
-            return [IsAuthenticated(), IsExternalBusinessOwner()]
-        else:
-            # Internal request
-            return [IsAuthenticated(), IsInternalStaff()]
-
     def create(self, request, *args, **kwargs):
         """Create new external delivery"""
         # Check if external business can create delivery
-        if hasattr(request, "external_business"):
-            can_create, message = request.external_business.can_create_delivery()
-            if not can_create:
-                return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+        can_create, message = request.external_business.can_create_delivery()
+        if not can_create:
+            return Response({"error": message}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Set external business for external API requests
-        if hasattr(request, "external_business"):
-            serializer.validated_data["external_business"] = request.external_business
+        # Set the external business
+        delivery = serializer.save(external_business=request.external_business)
 
+        # Return the created delivery
+        response_serializer = ExternalDeliverySerializer(delivery)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsExternalBusinessOwner])
+    def update_status(self, request, pk=None):
+        """Update delivery status"""
+        delivery = self.get_object()
+        serializer = ExternalDeliveryUpdateStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_status = serializer.validated_data["status"]
+        notes = serializer.validated_data.get("notes", "")
+
+        # Update delivery status
+        delivery.status = new_status
+        delivery.save()
+
+        # Create status history
+        ExternalDeliveryStatusHistory.objects.create(
+            delivery=delivery,
+            status=new_status,
+            notes=notes,
+            updated_by_business=request.external_business,
+        )
+
+        return Response({"message": "Status updated successfully"})
+
+    @action(detail=True, methods=["get"])
+    def tracking(self, request, pk=None):
+        """Get delivery tracking information"""
+        delivery = self.get_object()
+        serializer = ExternalDeliveryTrackingSerializer(delivery)
+        return Response(serializer.data)
+
+
+class InternalExternalDeliveryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for internal staff delivery management
+    Uses standard Django authentication for internal staff
+    """
+
+    serializer_class = ExternalDeliverySerializer
+    permission_classes = [IsAuthenticated, IsInternalStaff]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        # Internal request - show all deliveries
+        return ExternalDelivery.objects.all().order_by("-created_at")
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ExternalDeliveryCreateSerializer
+        elif self.action == "list":
+            return ExternalDeliveryListSerializer
+        elif self.action == "update_status":
+            return ExternalDeliveryUpdateStatusSerializer
+        return ExternalDeliverySerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create new external delivery - for internal staff"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         delivery = serializer.save()
 
         # Process delivery asynchronously
@@ -321,6 +370,7 @@ class ExternalDashboardView(APIView):
     Dashboard view for external businesses
     """
 
+    authentication_classes = [ExternalAPIAuthentication]
     permission_classes = [IsAuthenticated, IsExternalBusinessOwner]
 
     def get(self, request):
@@ -401,6 +451,7 @@ class InternalDashboardView(APIView):
 
 
 @api_view(["POST"])
+@authentication_classes([ExternalAPIAuthentication])
 @permission_classes([IsAuthenticated, IsExternalBusinessOwner])
 def test_webhook(request):
     """

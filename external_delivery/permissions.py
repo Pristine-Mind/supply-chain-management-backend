@@ -9,6 +9,8 @@ class IsExternalBusinessOwner(BasePermission):
     """
 
     def has_permission(self, request, view):
+        if request.user and request.user.is_superuser:
+            return True
         # Check if request has external_business attribute (set by middleware)
         if not hasattr(request, "external_business"):
             return False

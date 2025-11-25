@@ -3,15 +3,40 @@ import hmac
 import json
 import logging
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import requests
 from django.conf import settings
 from django.utils import timezone
 
-from .models import APIUsageLog, WebhookLog
+from .models import APIUsageLog, WebhookLog, RateLimitLog
 
 logger = logging.getLogger(__name__)
+
+
+def log_rate_limit_exceeded(external_business, request, rate_type="minute"):
+    """
+    Log rate limit exceeded events for monitoring and analysis
+    """
+    try:
+        client_ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0] or request.META.get("REMOTE_ADDR", "")
+
+        RateLimitLog.objects.create(
+            external_business=external_business,
+            request_ip=client_ip,
+            endpoint=request.path,
+            request_count=1,
+            time_window=rate_type,
+            blocked=True,
+        )
+
+        logger.warning(
+            f"Rate limit exceeded for business {external_business.business_name} "
+            f"(ID: {external_business.id}) from IP {client_ip} "
+            f"on endpoint {request.path} - {rate_type} limit"
+        )
+    except Exception as e:
+        logger.error(f"Error logging rate limit exceeded: {e}")
 
 
 def send_webhook_notification(business, event_type, data, webhook_url=None, delivery=None):
@@ -85,8 +110,33 @@ def log_api_usage(external_business, request, response, response_time):
     Log API usage for monitoring and billing
     """
     try:
-        request_size = len(request.body) if hasattr(request, "body") else 0
-        response_size = len(getattr(response, "content", b""))
+        # Safe way to get request size without reading body again
+        request_size = 0
+        try:
+            # Try to get the content length from headers first
+            request_size = int(request.META.get("CONTENT_LENGTH", 0) or 0)
+        except (ValueError, TypeError):
+            # If that fails, try to get from body if available and not consumed
+            try:
+                if hasattr(request, "body") and hasattr(request, "_body"):
+                    request_size = len(request._body) if request._body else 0
+                elif hasattr(request, "stream") and hasattr(request.stream, "read"):
+                    # For DRF requests, try to get from the stream
+                    request_size = getattr(request, "_content_length", 0)
+            except Exception:
+                # If we can't get the request size, default to 0
+                request_size = 0
+
+        # Get response size safely
+        response_size = 0
+        try:
+            if hasattr(response, "content"):
+                response_size = len(response.content)
+            elif hasattr(response, "data"):
+                # For DRF responses
+                response_size = len(str(response.data).encode("utf-8"))
+        except Exception:
+            response_size = 0
 
         # Extract client IP
         client_ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0] or request.META.get("REMOTE_ADDR", "")
@@ -180,10 +230,18 @@ def validate_delivery_data(data, business):
     """
     errors = []
 
-    # Check package value limit
+    # Check package value limit with proper type checking
     package_value = data.get("package_value", 0)
-    if package_value > business.max_delivery_value:
-        errors.append(f"Package value ({package_value}) exceeds maximum allowed value ({business.max_delivery_value})")
+    if package_value:
+        try:
+            package_value_decimal = Decimal(str(package_value))
+            # Only check limit if business has a max_delivery_value set
+            if business.max_delivery_value and package_value_decimal > business.max_delivery_value:
+                errors.append(
+                    f"Package value ({package_value}) exceeds maximum allowed value ({business.max_delivery_value})"
+                )
+        except (TypeError, ValueError, InvalidOperation):
+            errors.append("Invalid package value format")
 
     # Check allowed cities
     pickup_city = data.get("pickup_city", "")
@@ -202,8 +260,15 @@ def validate_delivery_data(data, business):
     if is_cod and not cod_amount:
         errors.append("COD amount is required for Cash on Delivery")
 
-    if is_cod and cod_amount > package_value:
-        errors.append("COD amount cannot be greater than package value")
+    # Check COD amount vs package value (only if both are provided and valid)
+    if is_cod and cod_amount is not None and package_value is not None:
+        try:
+            cod_amount_decimal = Decimal(str(cod_amount))
+            package_value_decimal = Decimal(str(package_value))
+            if cod_amount_decimal > package_value_decimal:
+                errors.append("COD amount cannot be greater than package value")
+        except (TypeError, ValueError, InvalidOperation):
+            errors.append("Invalid COD amount or package value format")
 
     return errors
 
