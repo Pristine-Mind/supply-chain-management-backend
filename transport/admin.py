@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime, timedelta
 
+from django import forms
 from django.contrib import admin, messages
 from django.db.models import Avg, Count, Q
 from django.http import HttpResponse
@@ -370,8 +371,51 @@ class TransporterAdmin(admin.ModelAdmin):
     export_transporter_data.short_description = "Export transporter data to CSV"
 
 
+class DeliveryAdminForm(forms.ModelForm):
+    """Custom form for Delivery admin to handle source validation gracefully"""
+
+    class Meta:
+        model = Delivery
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set default values for required fields
+        if not self.instance.pk:  # Only for new instances
+            from django.utils import timezone
+
+            now = timezone.now()
+
+            # Set default pickup date to tomorrow
+            self.fields["requested_pickup_date"].initial = now + timezone.timedelta(days=1)
+            # Set default delivery date to day after tomorrow
+            self.fields["requested_delivery_date"].initial = now + timezone.timedelta(days=2)
+            # Set default delivery fee
+            self.fields["delivery_fee"].initial = 10.00
+            # Set default package weight
+            self.fields["package_weight"].initial = 1.0
+            # Set default package value
+            self.fields["package_value"].initial = 100.0
+
+    def clean(self):
+        cleaned_data = super().clean()
+        marketplace_sale = cleaned_data.get("marketplace_sale")
+        sale = cleaned_data.get("sale")
+
+        # Count how many source fields are provided
+        source_count = sum([bool(marketplace_sale), bool(sale)])
+
+        if source_count == 0:
+            raise forms.ValidationError("Either Marketplace Sale or Sale must be selected.")
+        elif source_count > 1:
+            raise forms.ValidationError("Only one of Marketplace Sale or Sale can be selected, not both.")
+
+        return cleaned_data
+
+
 @admin.register(Delivery)
 class DeliveryAdmin(admin.ModelAdmin):
+    form = DeliveryAdminForm
     list_display = [
         "tracking_number_display",
         "delivery_id_short",
@@ -423,6 +467,7 @@ class DeliveryAdmin(admin.ModelAdmin):
     ]
 
     fieldsets = (
+        ("Source Information", {"fields": ("marketplace_sale", "sale")}),
         ("Basic Information", {"fields": ("delivery_id", "tracking_number", "status", "priority")}),
         (
             "Pickup Details",
@@ -497,7 +542,7 @@ class DeliveryAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .select_related("transporter__user", "marketplace_sale")
+            .select_related("transporter__user", "marketplace_sale", "sale", "sale__order", "sale__order__product")
             .prefetch_related("tracking_updates")
         )
 
@@ -514,9 +559,13 @@ class DeliveryAdmin(admin.ModelAdmin):
     delivery_id_short.admin_order_field = "delivery_id"
 
     def order_number(self, obj):
-        return obj.marketplace_sale.order_number if obj.marketplace_sale else "N/A"
+        if obj.marketplace_sale:
+            return obj.marketplace_sale.order_number
+        elif obj.sale:
+            return f"Sale #{obj.sale.id}"
+        return "N/A"
 
-    order_number.short_description = "Order Number"
+    order_number.short_description = "Order/Sale Number"
     order_number.admin_order_field = "marketplace_sale__order_number"
 
     def status_colored(self, obj):

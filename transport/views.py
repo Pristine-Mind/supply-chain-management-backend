@@ -162,7 +162,7 @@ class AvailableDeliveriesView(generics.ListAPIView):
 
         queryset = Delivery.objects.filter(
             status=TransportStatus.AVAILABLE, package_weight__lte=transporter.vehicle_capacity
-        ).select_related("marketplace_sale", "marketplace_sale__product")
+        ).select_related("marketplace_sale", "marketplace_sale__product", "sale", "sale__order", "sale__order__product")
 
         filter_serializer = DeliveryFilterSerializer(data=self.request.query_params)
         if filter_serializer.is_valid():
