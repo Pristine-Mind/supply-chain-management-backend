@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "transport",
     "payment",
     "notification.apps.NotificationConfig",
+    "external_delivery.apps.ExternalDeliveryConfig",
 ]
 
 MIDDLEWARE = [
@@ -103,6 +104,11 @@ MIDDLEWARE = [
     # "main.security_middleware.APIKeyValidationMiddleware",  # API key validation
     "main.security_middleware.FileUploadSecurityMiddleware",  # File upload security
     "main.security_middleware.DataSanitizationMiddleware",  # Input sanitization
+    "external_delivery.middleware.auth.ExternalAPIMiddleware",  # External API middleware
+    "external_delivery.middleware.rate_limit.ExternalAPIRateLimit",  # External API rate limiting
+    "external_delivery.middleware.rate_limit.APIQuotaMiddleware",  # API quota enforcement
+    "external_delivery.middleware.rate_limit.RequestSizeMiddleware",  # Request size limiting
+    "external_delivery.middleware.rate_limit.SecurityHeadersMiddleware",  # Additional security headers
     "main.middleware.EnsureSessionKeyMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -709,3 +715,41 @@ HAYSTACK_CONNECTIONS = {
 }
 
 HAYSTACK_LIMIT_TO_REGISTERED_MODELS = False
+
+
+# External Delivery API Settings
+EXTERNAL_API_MAX_REQUEST_SIZE = 1024 * 1024  # 1MB
+EXTERNAL_API_DEFAULT_RATE_LIMIT_MINUTE = 60
+EXTERNAL_API_DEFAULT_RATE_LIMIT_HOUR = 1000
+
+# Frontend base URL for tracking links
+FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="https://yourapp.com")
+
+# Webhook settings
+WEBHOOK_TIMEOUT = 30  # seconds
+WEBHOOK_MAX_RETRIES = 3
+WEBHOOK_RETRY_DELAYS = [60, 300, 900]  # 1 min, 5 min, 15 min
+
+# External business limits by plan
+EXTERNAL_PLAN_LIMITS = {
+    "free": {
+        "monthly_deliveries": 100,
+        "rate_limit_minute": 30,
+        "rate_limit_hour": 500,
+    },
+    "starter": {
+        "monthly_deliveries": 500,
+        "rate_limit_minute": 60,
+        "rate_limit_hour": 1000,
+    },
+    "business": {
+        "monthly_deliveries": 2000,
+        "rate_limit_minute": 120,
+        "rate_limit_hour": 2000,
+    },
+    "enterprise": {
+        "monthly_deliveries": float("inf"),
+        "rate_limit_minute": 300,
+        "rate_limit_hour": 5000,
+    },
+}

@@ -467,7 +467,7 @@ class DeliveryAdmin(admin.ModelAdmin):
     ]
 
     fieldsets = (
-        ("Source Information", {"fields": ("marketplace_sale", "sale")}),
+        ("Source Information", {"fields": ("marketplace_sale", "sale", "external_delivery")}),
         ("Basic Information", {"fields": ("delivery_id", "tracking_number", "status", "priority")}),
         (
             "Pickup Details",

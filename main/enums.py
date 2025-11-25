@@ -4,6 +4,26 @@ from rest_framework import serializers
 from market import enums as market_enums
 from producer import enums as producer_enums
 
+
+class ChoicesMixin:
+    """Mixin for Django TextChoices to add additional functionality"""
+
+    @classmethod
+    def get_choices_dict(cls):
+        """Return choices as a dictionary"""
+        return dict(cls.choices)
+
+    @classmethod
+    def get_values(cls):
+        """Return list of choice values"""
+        return [choice[0] for choice in cls.choices]
+
+    @classmethod
+    def get_labels(cls):
+        """Return list of choice labels"""
+        return [choice[1] for choice in cls.choices]
+
+
 apps_enum_register = [("market", market_enums.enum_register), ("product", producer_enums.enum_registe)]
 
 

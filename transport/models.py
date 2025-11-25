@@ -203,6 +203,13 @@ class Delivery(models.Model):
         null=True,
         blank=True,
     )
+    external_delivery = models.OneToOneField(
+        "external_delivery.ExternalDelivery",
+        on_delete=models.CASCADE,
+        related_name="external_transport_delivery",
+        null=True,
+        blank=True,
+    )
 
     tracking_number = models.CharField(max_length=20, unique=True, blank=True, null=True)
 
@@ -290,16 +297,16 @@ class Delivery(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        """Validate that exactly one of marketplace_sale or sale is provided."""
+        """Validate that exactly one of marketplace_sale, sale, or external_delivery is provided."""
         from django.core.exceptions import ValidationError
 
         # Count how many source fields are provided
-        source_count = sum([bool(self.marketplace_sale), bool(self.sale)])
+        source_count = sum([bool(self.marketplace_sale), bool(self.sale), bool(self.external_delivery)])
 
         if source_count == 0:
-            raise ValidationError("Either marketplace_sale or sale must be provided.")
+            raise ValidationError("One of marketplace_sale, sale, or external_delivery must be provided.")
         elif source_count > 1:
-            raise ValidationError("Only one of marketplace_sale or sale can be provided, not both.")
+            raise ValidationError("Only one of marketplace_sale, sale, or external_delivery can be provided, not both.")
 
     def save(self, *args, **kwargs):
         """Override save to call clean validation and generate tracking number."""
@@ -325,8 +332,9 @@ class Delivery(models.Model):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(marketplace_sale__isnull=False, sale__isnull=True)
-                    | models.Q(marketplace_sale__isnull=True, sale__isnull=False)
+                    models.Q(marketplace_sale__isnull=False, sale__isnull=True, external_delivery__isnull=True)
+                    | models.Q(marketplace_sale__isnull=True, sale__isnull=False, external_delivery__isnull=True)
+                    | models.Q(marketplace_sale__isnull=True, sale__isnull=True, external_delivery__isnull=False)
                 ),
                 name="transport_delivery_source_constraint",
             )
