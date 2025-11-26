@@ -3,10 +3,11 @@
 Comprehensive test runner for external delivery system
 """
 import os
-import sys
-import django
 import subprocess
+import sys
 from pathlib import Path
+
+import django
 
 # Setup Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "main.settings")

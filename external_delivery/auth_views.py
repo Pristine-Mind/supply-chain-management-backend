@@ -16,7 +16,10 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import ExternalBusiness, ExternalBusinessStatus
-from .serializers import ExternalBusinessLoginSerializer, ExternalBusinessProfileSerializer
+from .serializers import (
+    ExternalBusinessLoginSerializer,
+    ExternalBusinessProfileSerializer,
+)
 
 logger = logging.getLogger(__name__)
 

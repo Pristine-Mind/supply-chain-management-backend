@@ -3,8 +3,10 @@ import logging
 import random
 from datetime import date, datetime, timedelta
 
+import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -499,6 +501,32 @@ class ProductViewSet(viewsets.ModelViewSet):
                     "value": value,
                 }
                 for key, value in Product.ProductCategory.choices
+            ]
+        )
+
+    @action(detail=False, url_path="size-choices", methods=("get",), permission_classes=[AllowAny])
+    def get_size_choices(self, request, pk=None):
+        """Get available size choices"""
+        return Response(
+            [
+                {
+                    "key": key,
+                    "value": value,
+                }
+                for key, value in Product.SizeChoices.choices
+            ]
+        )
+
+    @action(detail=False, url_path="color-choices", methods=("get",), permission_classes=[AllowAny])
+    def get_color_choices(self, request, pk=None):
+        """Get available color choices"""
+        return Response(
+            [
+                {
+                    "key": key,
+                    "value": value,
+                }
+                for key, value in Product.ColorChoices.choices
             ]
         )
 
@@ -1030,6 +1058,42 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             pass
 
         return response
+
+    @action(detail=False, url_path="size-choices", methods=("get",), permission_classes=[AllowAny])
+    def get_size_choices(self, request, pk=None):
+        """Get available size choices for marketplace products"""
+        return Response(
+            [
+                {
+                    "key": key,
+                    "value": value,
+                }
+                for key, value in MarketplaceProduct.SizeChoices.choices
+            ]
+        )
+
+    @action(detail=False, url_path="color-choices", methods=("get",), permission_classes=[AllowAny])
+    def get_color_choices(self, request, pk=None):
+        """Get available color choices for marketplace products"""
+        return Response(
+            [
+                {
+                    "key": key,
+                    "value": value,
+                }
+                for key, value in MarketplaceProduct.ColorChoices.choices
+            ]
+        )
+
+    @action(detail=False, url_path="filter-options", methods=("get",), permission_classes=[AllowAny])
+    def get_filter_options(self, request, pk=None):
+        """Get all available filter options including sizes and colors"""
+        return Response(
+            {
+                "sizes": [{"key": key, "value": value} for key, value in MarketplaceProduct.SizeChoices.choices],
+                "colors": [{"key": key, "value": value} for key, value in MarketplaceProduct.ColorChoices.choices],
+            }
+        )
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):

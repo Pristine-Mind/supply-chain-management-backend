@@ -190,6 +190,37 @@ class Product(models.Model):
         FOOD_BEVERAGES = "FD", "Food & Beverages"
         OTHER = "OT", "Other"
 
+    class SizeChoices(models.TextChoices):
+        XS = "XS", "Extra Small"
+        S = "S", "Small"
+        M = "M", "Medium"
+        L = "L", "Large"
+        XL = "XL", "Extra Large"
+        XXL = "XXL", "Double Extra Large"
+        XXXL = "XXXL", "Triple Extra Large"
+        ONE_SIZE = "ONE_SIZE", "One Size"
+        CUSTOM = "CUSTOM", "Custom Size"
+
+    class ColorChoices(models.TextChoices):
+        RED = "RED", "Red"
+        BLUE = "BLUE", "Blue"
+        GREEN = "GREEN", "Green"
+        YELLOW = "YELLOW", "Yellow"
+        BLACK = "BLACK", "Black"
+        WHITE = "WHITE", "White"
+        GRAY = "GRAY", "Gray"
+        BROWN = "BROWN", "Brown"
+        ORANGE = "ORANGE", "Orange"
+        PURPLE = "PURPLE", "Purple"
+        PINK = "PINK", "Pink"
+        NAVY = "NAVY", "Navy"
+        BEIGE = "BEIGE", "Beige"
+        GOLD = "GOLD", "Gold"
+        SILVER = "SILVER", "Silver"
+        MULTICOLOR = "MULTICOLOR", "Multicolor"
+        TRANSPARENT = "TRANSPARENT", "Transparent"
+        CUSTOM = "CUSTOM", "Custom Color"
+
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
 
@@ -223,6 +254,28 @@ class Product(models.Model):
     user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
     location = models.ForeignKey(
         "City", on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
+    )
+    size = models.CharField(
+        max_length=20,
+        choices=SizeChoices.choices,
+        verbose_name=_("Size"),
+        null=True,
+        blank=True,
+        help_text="Size of the product",
+    )
+    color = models.CharField(
+        max_length=20,
+        choices=ColorChoices.choices,
+        verbose_name=_("Color"),
+        null=True,
+        blank=True,
+        help_text="Color of the product",
+    )
+    additional_information = models.TextField(
+        verbose_name=_("Additional Information"),
+        null=True,
+        blank=True,
+        help_text="Any additional information about the product",
     )
     avg_daily_demand = models.FloatField(
         default=0.0, verbose_name=_("Average Daily Demand"), help_text="Auto-computed from sales history"
@@ -618,6 +671,37 @@ class MarketplaceProduct(models.Model):
     Represents a product listed in the marketplace with advanced pricing, offers, shipping, variants, engagement, and ratings features.
     """
 
+    class SizeChoices(models.TextChoices):
+        XS = "XS", "Extra Small"
+        S = "S", "Small"
+        M = "M", "Medium"
+        L = "L", "Large"
+        XL = "XL", "Extra Large"
+        XXL = "XXL", "Double Extra Large"
+        XXXL = "XXXL", "Triple Extra Large"
+        ONE_SIZE = "ONE_SIZE", "One Size"
+        CUSTOM = "CUSTOM", "Custom Size"
+
+    class ColorChoices(models.TextChoices):
+        RED = "RED", "Red"
+        BLUE = "BLUE", "Blue"
+        GREEN = "GREEN", "Green"
+        YELLOW = "YELLOW", "Yellow"
+        BLACK = "BLACK", "Black"
+        WHITE = "WHITE", "White"
+        GRAY = "GRAY", "Gray"
+        BROWN = "BROWN", "Brown"
+        ORANGE = "ORANGE", "Orange"
+        PURPLE = "PURPLE", "Purple"
+        PINK = "PINK", "Pink"
+        NAVY = "NAVY", "Navy"
+        BEIGE = "BEIGE", "Beige"
+        GOLD = "GOLD", "Gold"
+        SILVER = "SILVER", "Silver"
+        MULTICOLOR = "MULTICOLOR", "Multicolor"
+        TRANSPARENT = "TRANSPARENT", "Transparent"
+        CUSTOM = "CUSTOM", "Custom Color"
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name=_("Product"))
     listed_price = models.FloatField(verbose_name=_("Listed Price"), help_text="Original price before discount.")
     discounted_price = models.FloatField(
@@ -647,6 +731,28 @@ class MarketplaceProduct(models.Model):
     is_featured = models.BooleanField(default=False, verbose_name=_("Is Featured"))
     is_made_in_nepal = models.BooleanField(
         default=False, verbose_name=_("Made in Nepal"), help_text=_("Indicates if this product is made in Nepal")
+    )
+    size = models.CharField(
+        max_length=20,
+        choices=SizeChoices.choices,
+        verbose_name=_("Size"),
+        null=True,
+        blank=True,
+        help_text="Size of the marketplace product",
+    )
+    color = models.CharField(
+        max_length=20,
+        choices=ColorChoices.choices,
+        verbose_name=_("Color"),
+        null=True,
+        blank=True,
+        help_text="Color of the marketplace product",
+    )
+    additional_information = models.TextField(
+        verbose_name=_("Additional Information"),
+        null=True,
+        blank=True,
+        help_text="Any additional information about the marketplace product",
     )
 
     def save(self, *args, **kwargs):

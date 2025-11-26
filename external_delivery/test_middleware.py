@@ -2,18 +2,24 @@
 Tests for middleware and permissions in external delivery system
 """
 
-from unittest.mock import Mock, patch
 import time
+from unittest.mock import Mock, patch
 
-from django.contrib.auth.models import User, AnonymousUser
+from django.contrib.auth.models import AnonymousUser, User
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.test import TestCase, RequestFactory
-from rest_framework.test import APITestCase, force_authenticate
+from django.test import RequestFactory, TestCase
 from rest_framework import status
+from rest_framework.test import APITestCase, force_authenticate
 
-from .models import ExternalBusiness, ExternalBusinessPlan, ExternalBusinessStatus, APIUsageLog, RateLimitLog
 from .middleware.auth import ExternalAPIAuthentication, ExternalAPIMiddleware
 from .middleware.rate_limit import ExternalAPIRateLimit
+from .models import (
+    APIUsageLog,
+    ExternalBusiness,
+    ExternalBusinessPlan,
+    ExternalBusinessStatus,
+    RateLimitLog,
+)
 from .permissions import IsExternalBusinessOwner, IsInternalStaff
 
 
