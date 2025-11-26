@@ -32,6 +32,67 @@ from .models import (
 )
 
 
+class ProductAdminForm(forms.ModelForm):
+    """
+    Custom form for Product admin with enhanced choice field handling
+    """
+
+    class Meta:
+        model = Product
+        fields = "__all__"
+        widgets = {
+            "size": forms.Select(attrs={"class": "form-control"}),
+            "color": forms.Select(attrs={"class": "form-control"}),
+            "additional_information": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add help text for choice fields
+        if "size" in self.fields:
+            self.fields["size"].help_text = "Select the size from available options or leave blank for non-sized products"
+        if "color" in self.fields:
+            self.fields["color"].help_text = "Select the color from available options or leave blank for colorless products"
+
+
+class MarketplaceProductAdminForm(forms.ModelForm):
+    """
+    Custom form for MarketplaceProduct admin with enhanced choice field handling
+    """
+
+    class Meta:
+        model = MarketplaceProduct
+        fields = "__all__"
+        widgets = {
+            "size": forms.Select(attrs={"class": "form-control"}),
+            "color": forms.Select(attrs={"class": "form-control"}),
+            "additional_information": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add help text for choice fields
+        if "size" in self.fields:
+            self.fields["size"].help_text = "Select size for this marketplace listing (overrides product size)"
+        if "color" in self.fields:
+            self.fields["color"].help_text = "Select color for this marketplace listing (overrides product color)"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        product = cleaned_data.get("product")
+        size = cleaned_data.get("size")
+        color = cleaned_data.get("color")
+
+        # If no size/color specified, inherit from product
+        if product:
+            if not size and product.size:
+                cleaned_data["size"] = product.size
+            if not color and product.color:
+                cleaned_data["color"] = product.color
+
+        return cleaned_data
+
+
 @admin.register(Producer)
 class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
@@ -107,6 +168,7 @@ class CustomerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+    form = ProductAdminForm
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
@@ -130,6 +192,29 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
         return qs.none()
 
+    def get_size_display(self, obj):
+        """Display size choice with label"""
+        if obj.size:
+            return f"{obj.get_size_display()} ({obj.size})"
+        return "-"
+
+    get_size_display.short_description = "Size"
+
+    def get_color_display(self, obj):
+        """Display color choice with label"""
+        if obj.color:
+            return f"{obj.get_color_display()} ({obj.color})"
+        return "-"
+
+    get_color_display.short_description = "Color"
+
+    def has_additional_info(self, obj):
+        """Show if product has additional information"""
+        return bool(obj.additional_information)
+
+    has_additional_info.boolean = True
+    has_additional_info.short_description = "Has Additional Info"
+
     list_display = (
         "name",
         "producer",
@@ -138,14 +223,40 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "cost_price",
         "stock",
         "reorder_level",
+        "get_size_display",
+        "get_color_display",
+        "has_additional_info",
         "is_active",
         "created_at",
         "updated_at",
     )
-    search_fields = ("name", "sku")
-    list_filter = ("is_active", "created_at", "updated_at")
+    search_fields = ("name", "sku", "size", "color")
+    list_filter = ("is_active", "size", "color", "category", "created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ["producer"]
+
+    fieldsets = (
+        ("Basic Information", {"fields": ("name", "description", "sku", "producer", "user")}),
+        ("Category", {"fields": ("category", "subcategory", "sub_subcategory", "old_category")}),
+        ("Product Attributes", {"fields": ("size", "color", "additional_information", "location")}),
+        ("Pricing & Inventory", {"fields": ("price", "cost_price", "stock", "reorder_level", "is_active")}),
+        (
+            "Supply Chain Management",
+            {
+                "fields": (
+                    "avg_daily_demand",
+                    "stddev_daily_demand",
+                    "safety_stock",
+                    "reorder_point",
+                    "reorder_quantity",
+                    "lead_time_days",
+                    "projected_stockout_date_field",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        ("Metadata", {"fields": ("is_marketplace_created", "created_at", "updated_at"), "classes": ("collapse",)}),
+    )
 
 
 @admin.register(Order)
@@ -312,6 +423,7 @@ class MarketplaceProductReviewInline(admin.TabularInline):
 @admin.register(MarketplaceProduct)
 class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
+    form = MarketplaceProductAdminForm
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
@@ -335,12 +447,42 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
         return qs.none()
 
+    def get_size_display(self, obj):
+        """Display size choice with label or inherited from product"""
+        if obj.size:
+            return f"{obj.get_size_display()} ({obj.size})"
+        elif obj.product and obj.product.size:
+            return f"[Inherited] {obj.product.get_size_display()} ({obj.product.size})"
+        return "-"
+
+    get_size_display.short_description = "Size"
+
+    def get_color_display(self, obj):
+        """Display color choice with label or inherited from product"""
+        if obj.color:
+            return f"{obj.get_color_display()} ({obj.color})"
+        elif obj.product and obj.product.color:
+            return f"[Inherited] {obj.product.get_color_display()} ({obj.product.color})"
+        return "-"
+
+    get_color_display.short_description = "Color"
+
+    def has_additional_info(self, obj):
+        """Show if marketplace product has additional information"""
+        return bool(obj.additional_information or (obj.product and obj.product.additional_information))
+
+    has_additional_info.boolean = True
+    has_additional_info.short_description = "Has Additional Info"
+
     list_display = (
         "id",
         "product",
         "listed_price",
         "discounted_price",
         "percent_off",
+        "get_size_display",
+        "get_color_display",
+        "has_additional_info",
         "is_offer_active",
         "is_featured",
         "is_made_in_nepal",
@@ -352,10 +494,20 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "min_order",
         "rank_score",
     )
-    search_fields = ("product__name",)
-    list_filter = ("is_available", "is_made_in_nepal", "is_featured", "listed_date")
+    search_fields = ("product__name", "size", "color")
+    list_filter = ("is_available", "is_made_in_nepal", "is_featured", "size", "color", "listed_date")
     autocomplete_fields = ["product"]
     readonly_fields = ("listed_date",)
+
+    fieldsets = (
+        ("Product Information", {"fields": ("product",)}),
+        ("Product Attributes", {"fields": ("size", "color", "additional_information")}),
+        ("Pricing & Offers", {"fields": ("listed_price", "discounted_price", "offer_start", "offer_end")}),
+        ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "shipping_cost")}),
+        ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score")}),
+        ("Analytics", {"fields": ("recent_purchases_count", "view_count"), "classes": ("collapse",)}),
+    )
+
     inlines = [
         MarketplaceBulkPriceTierInline,
         MarketplaceProductVariantInline,

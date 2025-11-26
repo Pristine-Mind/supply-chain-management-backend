@@ -257,10 +257,26 @@ class ProductSerializer(serializers.ModelSerializer):
     subcategory_info = SubcategoryLightSerializer(source="subcategory", read_only=True)
     sub_subcategory_info = SubSubcategoryLightSerializer(source="sub_subcategory", read_only=True)
 
+    # Choice field display methods
+    size_display = serializers.CharField(source="get_size_display", read_only=True)
+    color_display = serializers.CharField(source="get_color_display", read_only=True)
+
+    # Choice field options for frontend
+    size_choices = serializers.SerializerMethodField()
+    color_choices = serializers.SerializerMethodField()
+
     class Meta:
         model = Product
         fields = "__all__"
         extra_kwargs = {"user": {"read_only": True}}
+
+    def get_size_choices(self, obj):
+        """Return available size choices"""
+        return [{"value": choice[0], "label": choice[1]} for choice in Product.SizeChoices.choices]
+
+    def get_color_choices(self, obj):
+        """Return available color choices"""
+        return [{"value": choice[0], "label": choice[1]} for choice in Product.ColorChoices.choices]
 
     def validate_price(self, value):
         """
@@ -276,6 +292,26 @@ class ProductSerializer(serializers.ModelSerializer):
         """
         if value <= 0:
             raise serializers.ValidationError("Cost price must be greater than zero.")
+        return value
+
+    def validate_size(self, value):
+        """
+        Validate size choice if provided
+        """
+        if value and value not in [choice[0] for choice in Product.SizeChoices.choices]:
+            raise serializers.ValidationError(
+                f"Invalid size choice. Must be one of: {[choice[0] for choice in Product.SizeChoices.choices]}"
+            )
+        return value
+
+    def validate_color(self, value):
+        """
+        Validate color choice if provided
+        """
+        if value and value not in [choice[0] for choice in Product.ColorChoices.choices]:
+            raise serializers.ValidationError(
+                f"Invalid color choice. Must be one of: {[choice[0] for choice in Product.ColorChoices.choices]}"
+            )
         return value
 
     # def validate(self, data):
@@ -516,6 +552,19 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_made_in_nepal = serializers.BooleanField(read_only=False)
     # views_count = serializers.IntegerField(read_only=True)
 
+    # Choice field display methods
+    size_display = serializers.CharField(source="get_size_display", read_only=True)
+    color_display = serializers.CharField(source="get_color_display", read_only=True)
+
+    # Inherited values from product
+    effective_size = serializers.SerializerMethodField()
+    effective_color = serializers.SerializerMethodField()
+    effective_additional_information = serializers.SerializerMethodField()
+
+    # Choice field options for frontend
+    size_choices = serializers.SerializerMethodField()
+    color_choices = serializers.SerializerMethodField()
+
     class Meta:
         model = MarketplaceProduct
         fields = [
@@ -549,13 +598,79 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "total_reviews",
             "view_count",
             "rank_score",
+            "size",
+            "color",
+            "additional_information",
+            "size_display",
+            "color_display",
+            "effective_size",
+            "effective_color",
+            "effective_additional_information",
+            "size_choices",
+            "color_choices",
         ]
+
+    def get_effective_size(self, obj):
+        """Return marketplace size or inherited product size"""
+        return obj.size or (obj.product.size if obj.product else None)
+
+    def get_effective_color(self, obj):
+        """Return marketplace color or inherited product color"""
+        return obj.color or (obj.product.color if obj.product else None)
+
+    def get_effective_additional_information(self, obj):
+        """Return marketplace additional_information or inherited product additional_information"""
+        return obj.additional_information or (obj.product.additional_information if obj.product else None)
+
+    def get_size_choices(self, obj):
+        """Return available size choices"""
+        return [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.SizeChoices.choices]
+
+    def get_color_choices(self, obj):
+        """Return available color choices"""
+        return [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.ColorChoices.choices]
 
     def get_ratings_breakdown(self, obj):
         return obj.ratings_breakdown
 
     def get_offer_countdown(self, obj):
         return obj.offer_countdown
+
+    def validate_size(self, value):
+        """
+        Validate size choice if provided
+        """
+        if value and value not in [choice[0] for choice in MarketplaceProduct.SizeChoices.choices]:
+            raise serializers.ValidationError(
+                f"Invalid size choice. Must be one of: {[choice[0] for choice in MarketplaceProduct.SizeChoices.choices]}"
+            )
+        return value
+
+    def validate_color(self, value):
+        """
+        Validate color choice if provided
+        """
+        if value and value not in [choice[0] for choice in MarketplaceProduct.ColorChoices.choices]:
+            raise serializers.ValidationError(
+                f"Invalid color choice. Must be one of: {[choice[0] for choice in MarketplaceProduct.ColorChoices.choices]}"
+            )
+        return value
+
+    def validate(self, data):
+        """
+        Custom validation for marketplace product
+        """
+        # Auto-inherit size and color from product if not provided
+        product = data.get("product")
+        if product:
+            if not data.get("size") and product.size:
+                data["size"] = product.size
+            if not data.get("color") and product.color:
+                data["color"] = product.color
+            if not data.get("additional_information") and product.additional_information:
+                data["additional_information"] = product.additional_information
+
+        return super().validate(data)
 
 
 class CitySerializer(serializers.ModelSerializer):

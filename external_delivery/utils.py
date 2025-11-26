@@ -9,7 +9,7 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
-from .models import APIUsageLog, WebhookLog, RateLimitLog
+from .models import APIUsageLog, RateLimitLog, WebhookLog
 
 logger = logging.getLogger(__name__)
 

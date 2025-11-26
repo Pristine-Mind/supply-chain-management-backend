@@ -79,13 +79,25 @@ class ProductFilter(django_filters.FilterSet):
         choices=Product.ProductCategory.choices,
         field_name="category",
     )
+    size = django_filters.MultipleChoiceFilter(choices=Product.SizeChoices.choices, field_name="size", label="Size")
+    color = django_filters.MultipleChoiceFilter(choices=Product.ColorChoices.choices, field_name="color", label="Color")
+    has_additional_info = django_filters.BooleanFilter(
+        method="filter_has_additional_info", label="Has Additional Information"
+    )
 
     class Meta:
         model = Product
-        fields = ["search", "category"]
+        fields = ["search", "category", "size", "color", "has_additional_info"]
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(name__icontains=value).distinct()
+
+    def filter_has_additional_info(self, queryset, name, value):
+        if value is True:
+            return queryset.exclude(additional_information__isnull=True).exclude(additional_information__exact="")
+        elif value is False:
+            return queryset.filter(Q(additional_information__isnull=True) | Q(additional_information__exact=""))
+        return queryset
 
 
 class MarketplaceProductFilter(django_filters.FilterSet):
@@ -108,6 +120,17 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         label="Made in Nepal",
     )
 
+    # Size and color filters with effective value support
+    size = django_filters.MultipleChoiceFilter(
+        choices=MarketplaceProduct.SizeChoices.choices, method="filter_size", label="Size"
+    )
+    color = django_filters.MultipleChoiceFilter(
+        choices=MarketplaceProduct.ColorChoices.choices, method="filter_color", label="Color"
+    )
+    has_additional_info = django_filters.BooleanFilter(
+        method="filter_has_additional_info", label="Has Additional Information"
+    )
+
     class Meta:
         model = MarketplaceProduct
         fields = [
@@ -119,6 +142,9 @@ class MarketplaceProductFilter(django_filters.FilterSet):
             "city",
             "profile_type",
             "is_made_in_nepal",
+            "size",
+            "color",
+            "has_additional_info",
         ]
 
     def filter_search(self, queryset, name, value):
@@ -173,6 +199,51 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         if not value:
             return queryset
         return queryset.filter(product__sub_subcategory_id=value)
+
+    def filter_size(self, queryset, name, value):
+        """Filter by size - checks both marketplace and product size"""
+        if not value:
+            return queryset
+        # Filter by marketplace size or inherited product size
+        size_q = Q()
+        for size in value:
+            size_q |= Q(size=size) | Q(size__isnull=True, product__size=size)
+        return queryset.filter(size_q)
+
+    def filter_color(self, queryset, name, value):
+        """Filter by color - checks both marketplace and product color"""
+        if not value:
+            return queryset
+        # Filter by marketplace color or inherited product color
+        color_q = Q()
+        for color in value:
+            color_q |= Q(color=color) | Q(color__isnull=True, product__color=color)
+        return queryset.filter(color_q)
+
+    def filter_has_additional_info(self, queryset, name, value):
+        """Filter by presence of additional information"""
+        if value is True:
+            return queryset.filter(
+                Q(additional_information__isnull=False, additional_information__gt="")
+                | Q(
+                    additional_information__isnull=True,
+                    product__additional_information__isnull=False,
+                    product__additional_information__gt="",
+                )
+                | Q(
+                    additional_information="",
+                    product__additional_information__isnull=False,
+                    product__additional_information__gt="",
+                )
+            )
+        elif value is False:
+            return queryset.filter(
+                Q(additional_information__isnull=True, product__additional_information__isnull=True)
+                | Q(additional_information="", product__additional_information__isnull=True)
+                | Q(additional_information__isnull=True, product__additional_information="")
+                | Q(additional_information="", product__additional_information="")
+            )
+        return queryset
 
 
 class OrderFilter(django_filters.FilterSet):
