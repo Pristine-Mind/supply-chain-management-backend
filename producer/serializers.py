@@ -261,22 +261,10 @@ class ProductSerializer(serializers.ModelSerializer):
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
 
-    # Choice field options for frontend
-    size_choices = serializers.SerializerMethodField()
-    color_choices = serializers.SerializerMethodField()
-
     class Meta:
         model = Product
         fields = "__all__"
         extra_kwargs = {"user": {"read_only": True}}
-
-    def get_size_choices(self, obj):
-        """Return available size choices"""
-        return [{"value": choice[0], "label": choice[1]} for choice in Product.SizeChoices.choices]
-
-    def get_color_choices(self, obj):
-        """Return available color choices"""
-        return [{"value": choice[0], "label": choice[1]} for choice in Product.ColorChoices.choices]
 
     def validate_price(self, value):
         """
@@ -561,10 +549,6 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     effective_color = serializers.SerializerMethodField()
     effective_additional_information = serializers.SerializerMethodField()
 
-    # Choice field options for frontend
-    size_choices = serializers.SerializerMethodField()
-    color_choices = serializers.SerializerMethodField()
-
     class Meta:
         model = MarketplaceProduct
         fields = [
@@ -606,8 +590,6 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "effective_size",
             "effective_color",
             "effective_additional_information",
-            "size_choices",
-            "color_choices",
         ]
 
     def get_effective_size(self, obj):
@@ -621,14 +603,6 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     def get_effective_additional_information(self, obj):
         """Return marketplace additional_information or inherited product additional_information"""
         return obj.additional_information or (obj.product.additional_information if obj.product else None)
-
-    def get_size_choices(self, obj):
-        """Return available size choices"""
-        return [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.SizeChoices.choices]
-
-    def get_color_choices(self, obj):
-        """Return available color choices"""
-        return [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.ColorChoices.choices]
 
     def get_ratings_breakdown(self, obj):
         return obj.ratings_breakdown
@@ -677,6 +651,93 @@ class CitySerializer(serializers.ModelSerializer):
     class Meta:
         model = City
         fields = ["id", "name"]
+
+
+class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
+    """
+    Serializer for creating a MarketplaceProduct from an existing Product
+    """
+    product_id = serializers.IntegerField()
+    listed_price = serializers.FloatField(required=False, help_text="Override the product price if needed")
+    discounted_price = serializers.FloatField(required=False, allow_null=True, help_text="Optional discounted price")
+    size = serializers.ChoiceField(choices=MarketplaceProduct.SizeChoices.choices, required=False, allow_null=True)
+    color = serializers.ChoiceField(choices=MarketplaceProduct.ColorChoices.choices, required=False, allow_null=True)
+    additional_information = serializers.CharField(required=False, allow_blank=True, help_text="Additional marketplace-specific information")
+    min_order = serializers.IntegerField(required=False, allow_null=True, help_text="Minimum order quantity")
+    offer_start = serializers.DateTimeField(required=False, allow_null=True)
+    offer_end = serializers.DateTimeField(required=False, allow_null=True)
+    estimated_delivery_days = serializers.IntegerField(required=False, allow_null=True)
+    shipping_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
+    is_featured = serializers.BooleanField(required=False, default=False)
+    is_made_in_nepal = serializers.BooleanField(required=False, default=False)
+    
+    def validate_product_id(self, value):
+        """
+        Validate that the product exists and can be used to create a marketplace product
+        """
+        try:
+            product = Product.objects.get(id=value)
+        except Product.DoesNotExist:
+            raise serializers.ValidationError("Product with this ID does not exist.")
+        
+        # Check if marketplace product already exists
+        if MarketplaceProduct.objects.filter(product_id=value).exists():
+            raise serializers.ValidationError("A marketplace product already exists for this product.")
+        
+        # Check if product is active
+        if not product.is_active:
+            raise serializers.ValidationError("Cannot create marketplace product from inactive product.")
+        
+        return value
+    
+    def validate(self, data):
+        """
+        Cross-field validation
+        """
+        # Validate offer dates
+        offer_start = data.get('offer_start')
+        offer_end = data.get('offer_end')
+        
+        if offer_start and offer_end and offer_start >= offer_end:
+            raise serializers.ValidationError("Offer end date must be after offer start date.")
+        
+        # Validate pricing
+        listed_price = data.get('listed_price')
+        discounted_price = data.get('discounted_price')
+        
+        if discounted_price and listed_price and discounted_price >= listed_price:
+            raise serializers.ValidationError("Discounted price must be less than listed price.")
+        
+        return data
+    
+    def create(self, validated_data):
+        """
+        Create MarketplaceProduct from Product data
+        """
+        product_id = validated_data.pop('product_id')
+        product = Product.objects.get(id=product_id)
+        
+        # Set default listed_price from product if not provided
+        if 'listed_price' not in validated_data:
+            validated_data['listed_price'] = product.price
+        
+        # Inherit size, color, and additional_information from product if not provided
+        if 'size' not in validated_data and product.size:
+            validated_data['size'] = product.size
+        
+        if 'color' not in validated_data and product.color:
+            validated_data['color'] = product.color
+        
+        if 'additional_information' not in validated_data and product.additional_information:
+            validated_data['additional_information'] = product.additional_information
+        
+        # Set the product reference
+        validated_data['product'] = product
+        
+        # Create the marketplace product
+        marketplace_product = MarketplaceProduct.objects.create(**validated_data)
+        
+        return marketplace_product
 
 
 class LedgerEntrySerializer(serializers.ModelSerializer):

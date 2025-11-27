@@ -549,6 +549,69 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.updated_at = timezone.now()
         product.save(update_fields=["stock", "updated_at"])
         return Response(ProductSerializer(product).data)
+    
+    @action(detail=True, methods=["post"], url_path="push-to-marketplace", permission_classes=[IsAuthenticated])
+    def push_to_marketplace(self, request, pk=None):
+        """
+        Push a product to the marketplace with optional custom settings
+        
+        Request body can contain:
+        {
+            "listed_price": 99.99,  // optional, defaults to product price
+            "size": "M",            // optional, inherits from product if not provided
+            "color": "RED",          // optional, inherits from product if not provided
+            "additional_information": "Special marketplace info",  // optional
+            // ... other marketplace-specific fields
+        }
+        """
+        try:
+            product = self.get_object()
+        except Product.DoesNotExist:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if marketplace product already exists
+        if MarketplaceProduct.objects.filter(product=product).exists():
+            return Response(
+                {"error": f"Product '{product.name}' is already listed in the marketplace"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if product is active
+        if not product.is_active:
+            return Response(
+                {"error": "Cannot push inactive product to marketplace"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prepare data for marketplace product creation
+        marketplace_data = request.data.copy()
+        marketplace_data['product_id'] = product.id
+        
+        # Use the same serializer as the create_from_product endpoint
+        from .serializers import CreateMarketplaceProductFromProductSerializer
+        
+        serializer = CreateMarketplaceProductFromProductSerializer(data=marketplace_data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            marketplace_product = serializer.save()
+            
+            # Serialize the created marketplace product for response
+            response_serializer = MarketplaceProductSerializer(marketplace_product, context={'request': request})
+            
+            return Response(
+                {
+                    "message": f"Product '{product.name}' has been successfully pushed to the marketplace",
+                    "data": response_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to push product to marketplace: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -1094,6 +1157,76 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 "colors": [{"key": key, "value": value} for key, value in MarketplaceProduct.ColorChoices.choices],
             }
         )
+    
+    @action(detail=False, url_path="create-from-product", methods=["post"], permission_classes=[IsAuthenticated])
+    def create_from_product(self, request):
+        """
+        Create a marketplace product from an existing product
+        
+        Request body should contain:
+        {
+            "product_id": 123,
+            "listed_price": 99.99,  // optional, defaults to product price
+            "size": "M",            // optional, inherits from product if not provided
+            "color": "RED",          // optional, inherits from product if not provided
+            "additional_information": "Special marketplace info",  // optional
+            // ... other marketplace-specific fields
+        }
+        """
+        from .serializers import CreateMarketplaceProductFromProductSerializer
+        
+        serializer = CreateMarketplaceProductFromProductSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Get the product to verify user permissions
+        product_id = serializer.validated_data['product_id']
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response(
+                {"error": "Product not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if user has permission to create marketplace product for this product
+        user = request.user
+        user_profile = getattr(user, "user_profile", None)
+        
+        if not user.is_staff and not user.is_superuser:
+            # Regular users can only create marketplace products for their own products
+            if user_profile:
+                if product.user.user_profile.shop_id != user_profile.shop_id:
+                    return Response(
+                        {"error": "You don't have permission to create marketplace product for this product"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                if product.user != user:
+                    return Response(
+                        {"error": "You can only create marketplace products for your own products"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+        
+        # Create the marketplace product
+        try:
+            marketplace_product = serializer.save()
+            
+            # Serialize the created marketplace product for response
+            response_serializer = MarketplaceProductSerializer(marketplace_product, context={'request': request})
+            
+            return Response(
+                {
+                    "message": f"Marketplace product created successfully for '{product.name}'",
+                    "data": response_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to create marketplace product: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
