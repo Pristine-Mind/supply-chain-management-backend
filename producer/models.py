@@ -242,7 +242,7 @@ class Product(models.Model):
         help_text=_("This field is kept for backward compatibility and will be removed in future versions"),
     )
     description = RichTextField(verbose_name=_("Product Description"))
-    sku = models.CharField(max_length=100, unique=True, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
+    sku = models.CharField(max_length=100, verbose_name=_("Stock Keeping Unit (SKU)"), null=True, blank=True)
     price = models.FloatField(verbose_name=_("Price"))
     cost_price = models.FloatField(verbose_name=_("Cost Price"))
     stock = models.IntegerField(verbose_name=_("Stock Quantity"))
