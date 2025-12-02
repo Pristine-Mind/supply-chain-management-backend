@@ -6,3 +6,4 @@ enum_registe = {
     "order_status": models.Order.Status,
     "payment_status": models.Sale.Status,
 }
+
