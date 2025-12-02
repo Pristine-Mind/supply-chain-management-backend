@@ -75,10 +75,7 @@ class SaleFilter(django_filters.FilterSet):
 
 class ProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    category = django_filters.MultipleChoiceFilter(
-        choices=Product.ProductCategory.choices,
-        field_name="category",
-    )
+    category = django_filters.CharFilter(method="filter_category", label="Category")
     size = django_filters.MultipleChoiceFilter(choices=Product.SizeChoices.choices, field_name="size", label="Size")
     color = django_filters.MultipleChoiceFilter(choices=Product.ColorChoices.choices, field_name="color", label="Color")
     has_additional_info = django_filters.BooleanFilter(
@@ -92,6 +89,32 @@ class ProductFilter(django_filters.FilterSet):
     def filter_search(self, queryset, name, value):
         return queryset.filter(name__icontains=value).distinct()
 
+    def filter_category(self, queryset, name, value):
+        """Filter by category - supports both old codes (HL, FA, etc.) and new category IDs"""
+        if not value:
+            return queryset
+
+        try:
+            # Try to parse as integer (new category ID)
+            category_id = int(value)
+            return queryset.filter(
+                Q(category_id=category_id)
+                | Q(subcategory__category_id=category_id)
+                | Q(sub_subcategory__subcategory__category_id=category_id)
+            )
+        except ValueError:
+            # Not an integer, treat as category code
+            if len(value) == 2 and value.isalpha() and value.isupper():
+                # New category code (HL, FA, etc.) - filter by category code
+                return queryset.filter(
+                    Q(category__code=value)
+                    | Q(subcategory__category__code=value)
+                    | Q(sub_subcategory__subcategory__category__code=value)
+                )
+            else:
+                # Old 2-letter legacy category code - filter by old_category field
+                return queryset.filter(old_category=value)
+
     def filter_has_additional_info(self, queryset, name, value):
         if value is True:
             return queryset.exclude(additional_information__isnull=True).exclude(additional_information__exact="")
@@ -102,7 +125,6 @@ class ProductFilter(django_filters.FilterSet):
 
 class MarketplaceProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
-    category = django_filters.CharFilter(method="filter_category", label="Category")
     category = django_filters.CharFilter(method="filter_category", label="Category")
 
     # New hierarchy filters
@@ -166,16 +188,21 @@ class MarketplaceProductFilter(django_filters.FilterSet):
                 | Q(product__sub_subcategory__subcategory__category_id=category_id)
             )
         except ValueError:
-            # Not an integer, treat as old category code or name
+            # Not an integer, treat as category code or name
             if len(value) == 2 and value.isalpha() and value.isupper():
-                # Old 2-letter category code (FA, EG, etc.)
-                return queryset.filter(product__category__icontains=value)
+                # New category code (HL, FA, etc.) - filter by category code
+                return queryset.filter(
+                    Q(product__category__code=value)
+                    | Q(product__subcategory__category__code=value) 
+                    | Q(product__sub_subcategory__subcategory__category__code=value)
+                )
             else:
-                # Category name search
+                # Category name search or old legacy codes
                 return queryset.filter(
                     Q(product__category__name__icontains=value)
                     | Q(product__subcategory__name__icontains=value)
                     | Q(product__sub_subcategory__name__icontains=value)
+                    | Q(product__old_category=value)  # Support for old legacy category codes
                 )
 
     def filter_category_id(self, queryset, name, value):
