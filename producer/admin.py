@@ -11,6 +11,7 @@ from user.admin_mixins import RoleBasedAdminMixin
 
 from .models import (
     AuditLog,
+    B2BPriceTier,
     Brand,
     Category,
     Customer,
@@ -460,6 +461,14 @@ class MarketplaceBulkPriceTierInline(admin.TabularInline):
     extra = 1
 
 
+class B2BPriceTierInline(admin.TabularInline):
+    model = B2BPriceTier
+    extra = 1
+    fields = ["customer_type", "min_quantity", "price_per_unit", "discount_percentage", "is_active"]
+    verbose_name = "B2B Price Tier"
+    verbose_name_plural = "B2B Price Tiers"
+
+
 class MarketplaceProductVariantInline(admin.TabularInline):
     model = MarketplaceProductVariant
     extra = 1
@@ -564,6 +573,14 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         ("Product Information", {"fields": ("product",)}),
         ("Product Attributes", {"fields": ("size", "color", "additional_information")}),
         ("Pricing & Offers", {"fields": ("listed_price", "discounted_price", "offer_start", "offer_end")}),
+        (
+            "B2B Sales",
+            {
+                "fields": ("enable_b2b_sales", "b2b_price", "b2b_min_quantity"),
+                "classes": ("collapse",),
+                "description": "Configure business-to-business pricing and requirements",
+            },
+        ),
         ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "shipping_cost")}),
         ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score")}),
         ("Analytics", {"fields": ("recent_purchases_count", "view_count"), "classes": ("collapse",)}),
@@ -571,6 +588,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
     inlines = [
         MarketplaceBulkPriceTierInline,
+        B2BPriceTierInline,
         MarketplaceProductVariantInline,
         MarketplaceProductReviewInline,
     ]
@@ -582,6 +600,23 @@ class MarketplaceBulkPriceTierAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_display = ("product", "min_quantity", "discount_percent", "price_per_unit")
     search_fields = ("product__product__name",)
     list_filter = ("product",)
+
+
+@admin.register(B2BPriceTier)
+class B2BPriceTierAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    required_role = "business_owner"  # Business owners and above can view and edit
+    list_display = ("product", "customer_type", "min_quantity", "price_per_unit", "discount_percentage", "is_active")
+    search_fields = ("product__product__name",)
+    list_filter = ("customer_type", "is_active", "product")
+    readonly_fields = ("created_at", "updated_at")
+
+    fieldsets = (
+        (
+            None,
+            {"fields": ("product", "customer_type", "min_quantity", "price_per_unit", "discount_percentage", "is_active")},
+        ),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
+    )
 
 
 @admin.register(MarketplaceProductVariant)

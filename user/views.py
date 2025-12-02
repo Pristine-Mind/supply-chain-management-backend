@@ -608,3 +608,72 @@ class DeleteAccountView(APIView):
         request.user.delete()
 
         return Response({"success": True, "message": "Account deleted successfully"})
+
+
+class B2BCreditManagementView(APIView):
+    """API view for B2B credit management and information"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get B2B credit and payment terms summary"""
+        from producer.services import B2BPricingService
+
+        credit_info = B2BPricingService.get_credit_terms_summary(request.user)
+        return Response(credit_info)
+
+    def post(self, request):
+        """Apply for B2B verification or update credit terms"""
+        try:
+            profile = getattr(request.user, "user_profile", None)
+            if not profile:
+                return Response({"error": "User profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            action = request.data.get("action")
+
+            if action == "apply_verification":
+                # Handle B2B verification application
+                if not profile.business_type:
+                    return Response(
+                        {"error": "Business type required for B2B verification"}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # In a real implementation, this would trigger a verification workflow
+                # For now, we'll just set a flag that admin needs to review
+                profile.b2b_verified = False  # Requires admin approval
+                profile.save(update_fields=["b2b_verified"])
+
+                return Response(
+                    {
+                        "message": "B2B verification application submitted. Please wait for admin approval.",
+                        "status": "pending_review",
+                    }
+                )
+
+            elif action == "request_credit_increase":
+                requested_limit = request.data.get("requested_limit", 0)
+                current_limit = profile.credit_limit
+
+                if requested_limit <= current_limit:
+                    return Response(
+                        {"error": "Requested limit must be higher than current limit"}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # In a real implementation, this would create a credit increase request
+                return Response(
+                    {
+                        "message": f"Credit increase request submitted. Current: {current_limit}, Requested: {requested_limit}",
+                        "status": "pending_review",
+                        "current_limit": float(current_limit),
+                        "requested_limit": float(requested_limit),
+                    }
+                )
+
+            else:
+                return Response(
+                    {"error": 'Invalid action. Use "apply_verification" or "request_credit_increase"'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except Exception as e:
+            return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

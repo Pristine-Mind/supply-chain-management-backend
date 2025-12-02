@@ -89,6 +89,7 @@ from producer.views import (
 )
 from transport import views as transport_views
 from user.views import (
+    B2BCreditManagementView,
     BusinessRegisterView,
     ChangePasswordView,
     ContactCreateView,
@@ -176,6 +177,7 @@ urlpatterns = [
         "api/v1/user/notification-preferences/", UpdateNotificationPreferencesView.as_view(), name="notification-preferences"
     ),
     path("api/v1/user/delete-account/", DeleteAccountView.as_view(), name="delete-account"),
+    path("api/v1/user/b2b-credit/", B2BCreditManagementView.as_view(), name="b2b-credit-management"),
     path("api/log-interaction/", log_interaction, name="log_interaction"),
     path("api/v1/procurement/", procurement_view, name="procurement"),
     path("api/v1/sales/", sales_view, name="sales"),

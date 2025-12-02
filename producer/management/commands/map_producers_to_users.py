@@ -16,22 +16,22 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
-        
+
         # Show debugging information
         self.stdout.write("=== DEBUGGING INFO ===")
-        
+
         # Show all available users
         all_users = User.objects.all()[:15]
         self.stdout.write(f"Available users (first 15):")
         for user in all_users:
             self.stdout.write(f"  - {user.username}")
-        
+
         # Show all available producers
         all_producers = Producer.objects.all()[:15]
         self.stdout.write(f"\nAvailable producers (first 15):")
         for producer in all_producers:
             self.stdout.write(f"  - {producer.name}")
-        
+
         self.stdout.write("\n=== STARTING UPDATES ===\n")
 
         # Define producer name to username mappings
@@ -65,12 +65,12 @@ class Command(BaseCommand):
                 if not producer:
                     # Try exact match as fallback
                     producer = Producer.objects.filter(name=producer_name).first()
-                
+
                 if not producer:
                     error_msg = f"Producer with name containing '{producer_name}' not found"
                     errors.append(error_msg)
                     self.stdout.write(self.style.WARNING(error_msg))
-                    
+
                     # Show similar producer names that might match
                     producer_parts = producer_name.split()
                     if producer_parts:
@@ -80,7 +80,7 @@ class Command(BaseCommand):
                             for similar_producer in similar_producers:
                                 self.stdout.write(f"    - {similar_producer.name}")
                     continue
-                
+
                 self.stdout.write(f"Found producer: {producer.name}")
 
                 # Get the user (using icontains for flexible matching)
@@ -88,14 +88,14 @@ class Command(BaseCommand):
                 if not user:
                     # Try exact match as fallback
                     user = User.objects.filter(username=username).first()
-                
+
                 if not user:
                     error_msg = f"User with username containing '{username}' not found"
                     errors.append(error_msg)
                     self.stdout.write(self.style.WARNING(error_msg))
-                    
+
                     # Show available usernames that might match
-                    username_parts = username.split('_')
+                    username_parts = username.split("_")
                     if username_parts:
                         similar_users = User.objects.filter(username__icontains=username_parts[0])[:5]
                         if similar_users:
@@ -103,7 +103,7 @@ class Command(BaseCommand):
                             for similar_user in similar_users:
                                 self.stdout.write(f"    - {similar_user.username}")
                     continue
-                
+
                 self.stdout.write(f"Found user: {user.username}")
 
                 # Check if producer already has this user
@@ -124,9 +124,7 @@ class Command(BaseCommand):
                     producer.save()
                     updated_count += 1
                     self.stdout.write(
-                        self.style.SUCCESS(
-                            f"Updated producer '{producer.name}' from user '{old_user}' to '{user.username}'"
-                        )
+                        self.style.SUCCESS(f"Updated producer '{producer.name}' from user '{old_user}' to '{user.username}'")
                     )
 
             except Exception as e:

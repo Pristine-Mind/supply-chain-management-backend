@@ -8,6 +8,7 @@ from user.models import UserProfile
 
 from .models import (
     AuditLog,
+    B2BPriceTier,
     Brand,
     Category,
     City,
@@ -567,6 +568,25 @@ class MarketplaceBulkPriceTierSerializer(serializers.ModelSerializer):
         fields = ["min_quantity", "discount_percent", "price_per_unit"]
 
 
+class B2BPriceTierSerializer(serializers.ModelSerializer):
+    customer_type_display = serializers.CharField(source="get_customer_type_display", read_only=True)
+
+    class Meta:
+        model = B2BPriceTier
+        fields = [
+            "id",
+            "customer_type",
+            "customer_type_display",
+            "min_quantity",
+            "price_per_unit",
+            "discount_percentage",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "customer_type_display"]
+
+
 class MarketplaceProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketplaceProductVariant
@@ -605,6 +625,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     longitude = serializers.FloatField(source="product.user.user_profile.longitude", read_only=True)
     min_order = serializers.IntegerField(required=False, allow_null=True)
     bulk_price_tiers = MarketplaceBulkPriceTierSerializer(many=True, read_only=True)
+    b2b_price_tiers = serializers.SerializerMethodField()
     variants = MarketplaceProductVariantSerializer(many=True, read_only=True)
     reviews = MarketplaceProductReviewSerializer(many=True, read_only=True)
     average_rating = serializers.FloatField(read_only=True)
@@ -617,6 +638,10 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_free_shipping = serializers.BooleanField(read_only=True)
     is_featured = serializers.BooleanField(read_only=False)
     is_made_in_nepal = serializers.BooleanField(read_only=False)
+
+    # B2B Fields
+    effective_price = serializers.SerializerMethodField()
+    is_b2b_eligible = serializers.SerializerMethodField()
 
     # Brand information from product
     brand_name = serializers.CharField(read_only=True)
@@ -658,6 +683,12 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "bulk_price_tiers",
+            "b2b_price_tiers",
+            "enable_b2b_sales",
+            "b2b_price",
+            "b2b_min_quantity",
+            "effective_price",
+            "is_b2b_eligible",
             "variants",
             "reviews",
             "average_rating",
@@ -677,6 +708,39 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "brand_info",
             "is_branded_product",
         ]
+
+    def get_b2b_price_tiers(self, obj):
+        """Get B2B price tiers for eligible users"""
+        user = self.context.get("request", {}).user if self.context.get("request") else None
+        if user and user.is_authenticated:
+            try:
+                profile = getattr(user, "user_profile", None)
+                if profile and getattr(profile, "is_b2b_eligible", False):
+                    tiers = obj.b2b_price_tiers.filter(customer_type=profile.business_type, is_active=True)
+                    return B2BPriceTierSerializer(tiers, many=True).data
+            except (AttributeError, TypeError):
+                pass
+        return []
+
+    def get_effective_price(self, obj):
+        """Get effective price for the current user"""
+        user = self.context.get("request", {}).user if self.context.get("request") else None
+        quantity = self.context.get("quantity", 1)
+        try:
+            return float(obj.get_effective_price_for_user(user, quantity))
+        except (AttributeError, TypeError):
+            return float(obj.price)
+
+    def get_is_b2b_eligible(self, obj):
+        """Check if current user is eligible for B2B pricing"""
+        user = self.context.get("request", {}).user if self.context.get("request") else None
+        if user and user.is_authenticated:
+            try:
+                profile = getattr(user, "user_profile", None)
+                return profile and getattr(profile, "is_b2b_eligible", False) and obj.enable_b2b_sales
+            except AttributeError:
+                pass
+        return False
 
     def get_brand_info(self, obj):
         """Get brand information from the associated product"""

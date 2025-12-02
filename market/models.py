@@ -1171,6 +1171,35 @@ class MarketplaceOrder(models.Model):
     tracking_number = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Tracking Number"))
     notes = models.TextField(blank=True, null=True, verbose_name=_("Order Notes"))
 
+    # B2B Order Fields
+    is_b2b_order = models.BooleanField(
+        default=False,
+        verbose_name=_("Is B2B Order"),
+        help_text=_("Indicates if this is a business-to-business order with special pricing"),
+    )
+    payment_terms_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Payment Terms (Days)"),
+        help_text=_("Number of days allowed for payment for B2B orders"),
+    )
+    credit_applied = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name=_("Credit Applied"),
+        help_text=_("Amount of business credit applied to this order"),
+    )
+    requires_invoice = models.BooleanField(
+        default=False, verbose_name=_("Requires Invoice"), help_text=_("B2B order that requires formal invoice generation")
+    )
+    net_payment_due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Net Payment Due Date"),
+        help_text=_("Due date for payment based on payment terms"),
+    )
+
     # Soft delete functionality
     is_deleted = models.BooleanField(default=False, verbose_name=_("Is Deleted"))
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Deleted At"))
@@ -1230,6 +1259,10 @@ class MarketplaceOrder(models.Model):
         if self.order_status == OrderStatus.DELIVERED and not self.delivered_at:
             self.delivered_at = timezone.now()
 
+        # Set payment due date for B2B orders with payment terms
+        if self.is_b2b_order and self.payment_terms_days and not self.net_payment_due_date:
+            self.net_payment_due_date = timezone.now() + timedelta(days=self.payment_terms_days)
+
         super().save(*args, **kwargs)
 
     # Status Properties
@@ -1252,6 +1285,31 @@ class MarketplaceOrder(models.Model):
     def can_refund(self):
         """Check if the order can be refunded."""
         return self.payment_status == PaymentStatus.PAID and self.order_status != OrderStatus.CANCELLED
+
+    # B2B Properties
+    @property
+    def is_payment_overdue(self):
+        """Check if B2B payment is overdue."""
+        if not self.is_b2b_order or not self.net_payment_due_date:
+            return False
+        return timezone.now() > self.net_payment_due_date and not self.is_paid
+
+    @property
+    def days_until_payment_due(self):
+        """Calculate days until payment is due for B2B orders."""
+        if not self.is_b2b_order or not self.net_payment_due_date or self.is_paid:
+            return None
+        delta = self.net_payment_due_date - timezone.now()
+        return delta.days if delta.days >= 0 else 0
+
+    @property
+    def available_credit_amount(self):
+        """Get remaining available credit amount."""
+        try:
+            profile = self.customer.user_profile
+            return profile.get_available_credit()
+        except AttributeError:
+            return Decimal("0")
 
     # Display Properties
     @property

@@ -817,6 +817,22 @@ class MarketplaceProduct(models.Model):
         help_text="Any additional information about the marketplace product",
     )
 
+    # B2B Sales Fields
+    enable_b2b_sales = models.BooleanField(
+        default=False,
+        verbose_name=_("Enable B2B Sales"),
+        help_text=_("Allow verified businesses to purchase this product at special B2B rates"),
+    )
+    b2b_price = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name=_("B2B Price"),
+        help_text=_("Special pricing for B2B customers (distributors/retailers)"),
+    )
+    b2b_min_quantity = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name=_("B2B Minimum Quantity"), help_text=_("Minimum order quantity for B2B pricing")
+    )
+
     def save(self, *args, **kwargs):
         user_profile = None
         try:
@@ -835,6 +851,20 @@ class MarketplaceProduct(models.Model):
                 raise ValidationError({"discounted_price": "Discounted price must be less than listed price."})
             if self.discounted_price <= 0:
                 raise ValidationError({"discounted_price": "Discounted price must be greater than zero."})
+
+        # B2B pricing validation
+        if self.b2b_price is not None:
+            if self.b2b_price <= 0:
+                raise ValidationError({"b2b_price": "B2B price must be greater than zero."})
+            if not self.enable_b2b_sales:
+                raise ValidationError({"enable_b2b_sales": "B2B sales must be enabled to set B2B price."})
+
+        if self.b2b_min_quantity is not None:
+            if self.b2b_min_quantity <= 0:
+                raise ValidationError({"b2b_min_quantity": "B2B minimum quantity must be greater than zero."})
+            if not self.enable_b2b_sales:
+                raise ValidationError({"enable_b2b_sales": "B2B sales must be enabled to set B2B minimum quantity."})
+
         if self.offer_start and self.offer_end and self.offer_start >= self.offer_end:
             raise ValidationError({"offer_end": "Offer end must be after offer start."})
         super().save(*args, **kwargs)
@@ -871,6 +901,58 @@ class MarketplaceProduct(models.Model):
     @property
     def is_free_shipping(self):
         return self.shipping_cost == 0
+
+    def get_effective_price_for_user(self, user, quantity=1):
+        """Get the effective price for a user based on their business type and quantity"""
+        if not user or not user.is_authenticated:
+            return self.price  # Regular customer price
+
+        try:
+            profile = getattr(user, "user_profile", None)
+            if not profile:
+                return self.price
+
+            # Check if B2B sales are enabled and user is verified business
+            if self.enable_b2b_sales and getattr(profile, "b2b_verified", False) and profile.business_type:
+
+                # Check B2B pricing tiers first
+                try:
+                    b2b_tier = (
+                        self.b2b_price_tiers.filter(
+                            customer_type=profile.business_type, min_quantity__lte=quantity, is_active=True
+                        )
+                        .order_by("-min_quantity")
+                        .first()
+                    )
+
+                    if b2b_tier:
+                        return Decimal(str(b2b_tier.price_per_unit))
+                except AttributeError:
+                    # b2b_price_tiers relation doesn't exist yet
+                    pass
+
+                # Fallback to general B2B price if no specific tier
+                if self.b2b_price and quantity >= (self.b2b_min_quantity or 1):
+                    return Decimal(str(self.b2b_price))
+        except AttributeError:
+            # Handle cases where user_profile doesn't have b2b fields yet
+            pass
+
+        # Check regular bulk pricing
+        try:
+            bulk_tier = self.bulk_price_tiers.filter(min_quantity__lte=quantity).order_by("-min_quantity").first()
+
+            if bulk_tier:
+                if bulk_tier.price_per_unit:
+                    return Decimal(str(bulk_tier.price_per_unit))
+                elif bulk_tier.discount_percent:
+                    discount = self.listed_price * (bulk_tier.discount_percent / 100)
+                    return Decimal(str(self.listed_price - discount))
+        except AttributeError:
+            # Handle cases where bulk_price_tiers relation doesn't exist
+            pass
+
+        return self.price
 
     @property
     def average_rating(self):
@@ -943,6 +1025,51 @@ class MarketplaceBulkPriceTier(models.Model):
 
     def __str__(self):
         return f"{self.min_quantity}+ units: {self.discount_percent or ''}% off, {self.price_per_unit or ''} per unit"
+
+
+class B2BPriceTier(models.Model):
+    """
+    B2B-specific pricing tiers based on business type and quantity.
+    Allows different pricing for distributors, retailers, and other business types.
+    """
+
+    class BusinessCustomerType(models.TextChoices):
+        DISTRIBUTOR = "distributor", _("Distributor")
+        RETAILER = "retailer", _("Retailer")
+        WHOLESALER = "wholesaler", _("Wholesaler")
+
+    product = models.ForeignKey(
+        MarketplaceProduct, related_name="b2b_price_tiers", on_delete=models.CASCADE, verbose_name=_("Product")
+    )
+    customer_type = models.CharField(max_length=20, choices=BusinessCustomerType.choices, verbose_name=_("Customer Type"))
+    min_quantity = models.PositiveIntegerField(verbose_name=_("Minimum Quantity"))
+    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Price Per Unit"))
+    discount_percentage = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name=_("Discount Percentage"),
+        help_text=_("Optional additional discount percentage on top of the price per unit"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+
+    class Meta:
+        unique_together = ("product", "customer_type", "min_quantity")
+        ordering = ["customer_type", "min_quantity"]
+        verbose_name = _("B2B Price Tier")
+        verbose_name_plural = _("B2B Price Tiers")
+
+    def clean(self):
+        if self.price_per_unit <= 0:
+            raise ValidationError({"price_per_unit": "Price per unit must be greater than zero."})
+        if self.discount_percentage is not None and (self.discount_percentage < 0 or self.discount_percentage > 100):
+            raise ValidationError({"discount_percentage": "Discount percentage must be between 0 and 100."})
+        if self.min_quantity <= 0:
+            raise ValidationError({"min_quantity": "Minimum quantity must be greater than zero."})
+
+    def __str__(self):
+        return f"{self.product} - {self.get_customer_type_display()}: {self.min_quantity}+ @ {self.price_per_unit}"
 
 
 class MarketplaceProductVariant(models.Model):

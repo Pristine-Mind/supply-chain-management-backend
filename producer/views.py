@@ -1273,6 +1273,85 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": f"Failed to create marketplace product: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
+    def b2b_pricing(self, request, pk=None):
+        """Get B2B pricing information for authenticated business users"""
+        product = self.get_object()
+        user = request.user
+        quantity = int(request.query_params.get("quantity", 1))
+
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            profile = getattr(user, "user_profile", None)
+            if not profile or not getattr(profile, "is_b2b_eligible", False):
+                return Response({"detail": "B2B verification required"}, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({"detail": "B2B verification required"}, status=status.HTTP_403_FORBIDDEN)
+
+        from .services import B2BPricingService
+
+        pricing_info = B2BPricingService.get_b2b_pricing_for_product(product, user, quantity)
+
+        return Response(pricing_info)
+
+    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
+    def bulk_pricing_breakdown(self, request, pk=None):
+        """Get pricing breakdown for different quantities to show bulk discounts"""
+        product = self.get_object()
+        user = request.user
+        max_quantity = int(request.query_params.get("max_quantity", 100))
+
+        from .services import B2BPricingService
+
+        breakdown = B2BPricingService.calculate_bulk_discount_breakdown(product, user, max_quantity)
+
+        return Response({"product_id": product.id, "max_quantity": max_quantity, "pricing_tiers": breakdown})
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+    def calculate_order_pricing(self, request):
+        """Calculate pricing for multiple items in an order"""
+        user = request.user
+        items_data = request.data.get("items", [])
+
+        if not items_data:
+            return Response({"error": "No items provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        items = []
+        for item_data in items_data:
+            try:
+                product = MarketplaceProduct.objects.get(id=item_data["product_id"])
+                items.append({"product": product, "quantity": item_data["quantity"]})
+            except (MarketplaceProduct.DoesNotExist, KeyError):
+                return Response({"error": f"Invalid product or quantity data"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .services import B2BPricingService
+
+        order_pricing = B2BPricingService.calculate_order_pricing(user, items)
+
+        # Convert line items for serialization
+        order_pricing["line_items"] = [
+            {
+                "product_id": item["product"].id,
+                "product_name": item["product"].product.name,
+                "quantity": item["quantity"],
+                "unit_price": float(item["unit_price"]),
+                "regular_price": float(item["regular_price"]),
+                "line_total": float(item["line_total"]),
+                "additional_discount": float(item["additional_discount"]),
+                "is_b2b_price": item["is_b2b_price"],
+                "savings": float(item["savings"]),
+            }
+            for item in order_pricing["line_items"]
+        ]
+
+        # Convert decimal fields
+        order_pricing["subtotal"] = float(order_pricing["subtotal"])
+        order_pricing["total_savings"] = float(order_pricing["total_savings"])
+
+        return Response(order_pricing)
+
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer

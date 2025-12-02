@@ -16,30 +16,30 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
-        
+
         # Show debugging information
         self.stdout.write("=== DEBUGGING INFO ===")
-        
+
         # Show all available users
         all_users = User.objects.all()[:15]
         self.stdout.write(f"Available users (first 15):")
         for user in all_users:
             self.stdout.write(f"  - {user.username}")
-        
+
         # Show all available producers
         all_producers = Producer.objects.all()[:15]
         self.stdout.write(f"\nAvailable producers (first 15):")
         for producer in all_producers:
             self.stdout.write(f"  - {producer.name}")
-        
+
         # Show products count by producer
-        products_by_producer = Product.objects.select_related('producer').values('producer__name').distinct()[:10]
+        products_by_producer = Product.objects.select_related("producer").values("producer__name").distinct()[:10]
         self.stdout.write(f"\nProducts grouped by producer (first 10):")
         for item in products_by_producer:
-            if item['producer__name']:
-                product_count = Product.objects.filter(producer__name=item['producer__name']).count()
+            if item["producer__name"]:
+                product_count = Product.objects.filter(producer__name=item["producer__name"]).count()
                 self.stdout.write(f"  - {item['producer__name']}: {product_count} products")
-        
+
         self.stdout.write("\n=== STARTING UPDATES ===\n")
 
         # Define producer name to username mappings
@@ -73,13 +73,13 @@ class Command(BaseCommand):
                 if not producer:
                     # Try exact match as fallback
                     producer = Producer.objects.filter(name=producer_name).first()
-                
+
                 if not producer:
                     error_msg = f"Producer with name containing '{producer_name}' not found"
                     errors.append(error_msg)
                     self.stdout.write(self.style.WARNING(error_msg))
                     continue
-                
+
                 self.stdout.write(f"Found producer: {producer.name}")
 
                 # Get the user (using icontains for flexible matching)
@@ -87,13 +87,13 @@ class Command(BaseCommand):
                 if not user:
                     # Try exact match as fallback
                     user = User.objects.filter(username=username).first()
-                
+
                 if not user:
                     error_msg = f"User with username containing '{username}' not found"
                     errors.append(error_msg)
                     self.stdout.write(self.style.WARNING(error_msg))
                     continue
-                
+
                 self.stdout.write(f"Found user: {user.username}")
 
                 # Get products for this producer
@@ -131,7 +131,7 @@ class Command(BaseCommand):
                             f"Updated {updated} products for producer '{producer.name}' to user '{user.username}'"
                         )
                     )
-                    
+
                     # Show some examples of updated products
                     example_products = Product.objects.filter(producer=producer, user=user)[:3]
                     for product in example_products:

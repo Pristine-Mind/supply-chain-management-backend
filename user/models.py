@@ -1,5 +1,6 @@
 import random
 import uuid
+from decimal import Decimal
 
 from django.contrib.auth.models import Permission, User
 from django.db import models
@@ -179,6 +180,38 @@ class UserProfile(models.Model):
         blank=True,
         verbose_name=_("Registered Business Name"),
     )
+
+    # B2B Business Fields
+    b2b_verified = models.BooleanField(
+        default=False,
+        verbose_name=_("B2B Verified"),
+        help_text=_("Business is verified for B2B purchases with special pricing"),
+    )
+    credit_limit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name=_("Credit Limit"),
+        help_text=_("Maximum credit limit allowed for this business"),
+    )
+    payment_terms_days = models.PositiveIntegerField(
+        default=30, verbose_name=_("Payment Terms (Days)"), help_text=_("Number of days allowed for payment (Net terms)")
+    )
+    tax_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_("Tax ID/VAT Number"),
+        help_text=_("Business tax identification number"),
+    )
+    credit_used = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name=_("Credit Used"),
+        help_text=_("Current amount of credit being used"),
+    )
+
     payment_qr_payload = models.TextField(blank=True)
     payment_qr_image = models.ImageField(upload_to="user_qr_codes/", blank=True, null=True)
 
@@ -287,6 +320,22 @@ class UserProfile(models.Model):
     def is_retailer(self):
         """Check if user is a retailer"""
         return self.is_business_user() and self.business_type == self.BusinessType.RETAILER
+
+    def get_available_credit(self):
+        """Get available credit amount"""
+        return self.credit_limit - self.credit_used
+
+    def has_sufficient_credit(self, amount):
+        """Check if user has sufficient credit for a given amount"""
+        return self.get_available_credit() >= amount
+
+    def is_b2b_eligible(self):
+        """Check if user is eligible for B2B pricing"""
+        return self.b2b_verified and self.business_type is not None and self.is_business_user()
+
+    def can_use_credit(self, amount):
+        """Check if user can use credit for purchase"""
+        return self.is_b2b_eligible() and self.has_sufficient_credit(amount) and self.credit_limit > 0
 
     class Meta:
         verbose_name = _("User Profile")
