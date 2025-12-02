@@ -11,6 +11,7 @@ from user.admin_mixins import RoleBasedAdminMixin
 
 from .models import (
     AuditLog,
+    Brand,
     Category,
     Customer,
     DirectSale,
@@ -124,6 +125,46 @@ class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         return qs.none()
 
 
+@admin.register(Brand)
+class BrandAdmin(admin.ModelAdmin):
+    """Admin interface for Brand model"""
+
+    list_display = (
+        "name",
+        "country_of_origin",
+        "is_active",
+        "is_verified",
+        "website",
+        "get_products_count",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = ("name", "description", "country_of_origin", "contact_email")
+    list_filter = ("is_active", "is_verified", "country_of_origin", "created_at")
+    readonly_fields = ("created_at", "updated_at")
+
+    fieldsets = (
+        ("Basic Information", {"fields": ("name", "description", "logo", "website")}),
+        ("Contact Information", {"fields": ("contact_email", "contact_phone", "country_of_origin")}),
+        ("Additional Information", {"fields": ("manufacturer_info",)}),
+        ("Status", {"fields": ("is_active", "is_verified")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
+    )
+
+    def get_products_count(self, obj):
+        """Get the number of active products for this brand"""
+        return obj.products.filter(is_active=True).count()
+
+    get_products_count.short_description = "Active Products"
+    get_products_count.admin_order_field = "products__count"
+
+    def get_queryset(self, request):
+        """Override to add product count annotation for sorting"""
+        qs = super().get_queryset(request)
+        qs = qs.prefetch_related("products")
+        return qs
+
+
 @admin.register(Customer)
 class CustomerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     required_role = "business_staff"  # Business staff and above can view and edit
@@ -215,9 +256,19 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     has_additional_info.boolean = True
     has_additional_info.short_description = "Has Additional Info"
 
+    def get_brand_display(self, obj):
+        """Display brand name with verification status"""
+        if obj.brand:
+            verified = " ✓" if obj.brand.is_verified else " ✗"
+            return f"{obj.brand.name}{verified}"
+        return "Unbranded"
+
+    get_brand_display.short_description = "Brand"
+
     list_display = (
         "name",
         "producer",
+        "get_brand_display",
         "sku",
         "price",
         "cost_price",
@@ -230,13 +281,13 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    search_fields = ("name", "sku", "size", "color")
-    list_filter = ("is_active", "size", "color", "category", "created_at", "updated_at")
+    search_fields = ("name", "sku", "size", "color", "brand__name")
+    list_filter = ("is_active", "brand", "size", "color", "category", "created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ["producer"]
+    autocomplete_fields = ["producer", "brand"]
 
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "description", "sku", "producer", "user")}),
+        ("Basic Information", {"fields": ("name", "description", "sku", "producer", "brand", "user")}),
         ("Category", {"fields": ("category", "subcategory", "sub_subcategory", "old_category")}),
         ("Product Attributes", {"fields": ("size", "color", "additional_information", "location")}),
         ("Pricing & Inventory", {"fields": ("price", "cost_price", "stock", "reorder_level", "is_active")}),
@@ -474,9 +525,19 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     has_additional_info.boolean = True
     has_additional_info.short_description = "Has Additional Info"
 
+    def get_brand_display(self, obj):
+        """Display brand name from associated product"""
+        if obj.product and obj.product.brand:
+            verified = " ✓" if obj.product.brand.is_verified else " ✗"
+            return f"{obj.product.brand.name}{verified}"
+        return "Unbranded"
+
+    get_brand_display.short_description = "Brand"
+
     list_display = (
         "id",
         "product",
+        "get_brand_display",
         "listed_price",
         "discounted_price",
         "percent_off",
@@ -494,8 +555,8 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "min_order",
         "rank_score",
     )
-    search_fields = ("product__name", "size", "color")
-    list_filter = ("is_available", "is_made_in_nepal", "is_featured", "size", "color", "listed_date")
+    search_fields = ("product__name", "product__brand__name", "size", "color")
+    list_filter = ("is_available", "is_made_in_nepal", "is_featured", "product__brand", "size", "color", "listed_date")
     autocomplete_fields = ["product"]
     readonly_fields = ("listed_date",)
 

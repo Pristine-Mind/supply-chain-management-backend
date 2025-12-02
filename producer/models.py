@@ -154,6 +154,46 @@ class SubSubcategory(models.Model):
         ordering = ["subcategory__category__name", "subcategory__name", "name"]
 
 
+class Brand(models.Model):
+    """
+    Represents a brand/manufacturer that can be associated with products.
+
+    Fields:
+    - name: The brand name (e.g., Nike, Samsung, Apple)
+    - description: A description of the brand
+    - logo: Brand logo image
+    - website: Official website URL
+    - country_of_origin: Country where the brand originates
+    - is_active: Whether the brand is active
+    - is_verified: Whether the brand is verified by admin
+    - created_at: Timestamp of brand creation
+    - updated_at: Timestamp of last update
+    """
+
+    name = models.CharField(max_length=100, unique=True, verbose_name=_("Brand Name"))
+    description = models.TextField(blank=True, verbose_name=_("Brand Description"))
+    logo = models.ImageField(upload_to="brand_logos/", blank=True, null=True, verbose_name=_("Brand Logo"))
+    website = models.URLField(blank=True, null=True, verbose_name=_("Website"))
+    country_of_origin = models.CharField(max_length=100, blank=True, verbose_name=_("Country of Origin"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Active Status"))
+    is_verified = models.BooleanField(default=False, verbose_name=_("Verified Brand"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creation Time"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
+
+    # Meta information
+    manufacturer_info = models.TextField(blank=True, verbose_name=_("Manufacturer Information"))
+    contact_email = models.EmailField(blank=True, null=True, verbose_name=_("Contact Email"))
+    contact_phone = models.CharField(max_length=20, blank=True, verbose_name=_("Contact Phone"))
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = _("Brand")
+        verbose_name_plural = _("Brands")
+        ordering = ["name"]
+
+
 class Product(models.Model):
     """
     Represents a product produced by the producer and sold to customers.
@@ -223,6 +263,11 @@ class Product(models.Model):
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name=_("Product Name"))
+
+    # Brand relationship
+    brand = models.ForeignKey(
+        Brand, on_delete=models.SET_NULL, null=True, blank=True, related_name="products", verbose_name=_("Brand")
+    )
 
     # New hierarchical category fields
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("Category"))
@@ -313,6 +358,23 @@ class Product(models.Model):
         elif self.category:
             return self.category.name
         return "Uncategorized"
+
+    def get_brand_name(self):
+        """Get the brand name if available"""
+        return self.brand.name if self.brand else "Unbranded"
+
+    @property
+    def brand_info(self):
+        """Get brand information dictionary"""
+        if self.brand:
+            return {
+                "id": self.brand.id,
+                "name": self.brand.name,
+                "is_verified": self.brand.is_verified,
+                "logo": self.brand.logo.url if self.brand.logo else None,
+                "country_of_origin": self.brand.country_of_origin,
+            }
+        return None
 
     def __str__(self):
         return self.name
@@ -827,6 +889,21 @@ class MarketplaceProduct(models.Model):
     @property
     def total_reviews(self):
         return self.reviews.count()
+
+    @property
+    def brand_name(self):
+        """Get brand name from the associated product"""
+        return self.product.get_brand_name() if self.product else "Unbranded"
+
+    @property
+    def brand_info(self):
+        """Get brand information from the associated product"""
+        return self.product.brand_info if self.product else None
+
+    @property
+    def is_branded_product(self):
+        """Check if the product has a brand"""
+        return self.product.brand is not None if self.product else False
 
     def __str__(self):
         return f"{self.product.name} listed for {self.listed_price}"
