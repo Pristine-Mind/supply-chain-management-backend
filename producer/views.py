@@ -40,6 +40,7 @@ from .filters import (
 )
 from .models import (
     AuditLog,
+    Brand,
     Category,
     City,
     Customer,
@@ -59,6 +60,7 @@ from .models import (
 )
 from .serializers import (
     AuditLogSerializer,
+    BrandSerializer,
     CategoryHierarchySerializer,
     CategorySerializer,
     CitySerializer,
@@ -162,7 +164,9 @@ class DailyProductStatsView(APIView):
         if end_date < start_date:
             return Response({"error": "end_date cannot be before start_date."}, status=400)
         # Filter products
-        products = Product.objects.filter(user=user)
+        products = Product.objects.select_related(
+            "brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location"
+        ).filter(user=user)
         if product_id:
             products = products.filter(id=product_id)
         export_type = request.query_params.get("export")
@@ -426,7 +430,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing producer instances.
     """
 
-    queryset = Producer.objects.all().order_by("-created_at")
+    queryset = Producer.objects.select_related("user").all().order_by("-created_at")
     serializer_class = ProducerSerializer
     filterset_class = ProducerFilter
     permission_classes = [IsAuthenticated]
@@ -438,7 +442,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Producer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+            return Producer.objects.select_related("user").filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Producer.objects.none()
 
@@ -454,7 +458,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing customer instances.
     """
 
-    queryset = Customer.objects.all().order_by("-created_at")
+    queryset = Customer.objects.select_related("user").all().order_by("-created_at")
     serializer_class = CustomerSerializer
     filterset_class = CustomerFilter
     permission_classes = [IsAuthenticated]
@@ -466,7 +470,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Customer.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+            return Customer.objects.select_related("user").filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Customer.objects.none()
 
@@ -476,7 +480,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing product instances.
     """
 
-    queryset = Product.objects.all().order_by("-created_at")
+    queryset = (
+        Product.objects.select_related("brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location")
+        .prefetch_related("images")
+        .all()
+        .order_by("-created_at")
+    )
     serializer_class = ProductSerializer
     filterset_class = ProductFilter
     permission_classes = [IsAuthenticated]
@@ -488,7 +497,13 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Product.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+            return (
+                Product.objects.select_related(
+                    "brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location"
+                )
+                .prefetch_related("images")
+                .filter(user__user_profile__shop_id=user_profile.shop_id)
+            )
         else:
             return Product.objects.none()
 
@@ -549,12 +564,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.updated_at = timezone.now()
         product.save(update_fields=["stock", "updated_at"])
         return Response(ProductSerializer(product).data)
-    
+
     @action(detail=True, methods=["post"], url_path="push-to-marketplace", permission_classes=[IsAuthenticated])
     def push_to_marketplace(self, request, pk=None):
         """
         Push a product to the marketplace with optional custom settings
-        
+
         Request body can contain:
         {
             "listed_price": 99.99,  // optional, defaults to product price
@@ -568,49 +583,45 @@ class ProductViewSet(viewsets.ModelViewSet):
             product = self.get_object()
         except Product.DoesNotExist:
             return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
-        
+
         # Check if marketplace product already exists
         if MarketplaceProduct.objects.filter(product=product).exists():
             return Response(
                 {"error": f"Product '{product.name}' is already listed in the marketplace"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Check if product is active
         if not product.is_active:
-            return Response(
-                {"error": "Cannot push inactive product to marketplace"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"error": "Cannot push inactive product to marketplace"}, status=status.HTTP_400_BAD_REQUEST)
+
         # Prepare data for marketplace product creation
         marketplace_data = request.data.copy()
-        marketplace_data['product_id'] = product.id
-        
+        marketplace_data["product_id"] = product.id
+
         # Use the same serializer as the create_from_product endpoint
         from .serializers import CreateMarketplaceProductFromProductSerializer
-        
+
         serializer = CreateMarketplaceProductFromProductSerializer(data=marketplace_data)
         serializer.is_valid(raise_exception=True)
-        
+
         try:
             marketplace_product = serializer.save()
-            
+
             # Serialize the created marketplace product for response
-            response_serializer = MarketplaceProductSerializer(marketplace_product, context={'request': request})
-            
+            response_serializer = MarketplaceProductSerializer(marketplace_product, context={"request": request})
+
             return Response(
                 {
                     "message": f"Product '{product.name}' has been successfully pushed to the marketplace",
-                    "data": response_serializer.data
+                    "data": response_serializer.data,
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
-            
+
         except Exception as e:
             return Response(
-                {"error": f"Failed to push product to marketplace: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": f"Failed to push product to marketplace: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST
             )
 
 
@@ -619,7 +630,13 @@ class OrderViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing order instances.
     """
 
-    queryset = Order.objects.all().order_by("-created_at")
+    queryset = (
+        Order.objects.select_related(
+            "customer", "product", "product__brand", "product__category", "product__producer", "user"
+        )
+        .all()
+        .order_by("-created_at")
+    )
     serializer_class = OrderSerializer
     filterset_class = OrderFilter
     permission_classes = [IsAuthenticated]
@@ -631,7 +648,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Order.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+            return Order.objects.select_related(
+                "customer", "product", "product__brand", "product__category", "product__producer", "user"
+            ).filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Order.objects.none()
 
@@ -686,7 +705,20 @@ class SaleViewSet(viewsets.ModelViewSet):
     A viewset for viewing and editing sale instances.
     """
 
-    queryset = Sale.objects.all().order_by("-created_at")
+    queryset = (
+        Sale.objects.select_related(
+            "order",
+            "order__customer",
+            "order__product",
+            "order__product__brand",
+            "order__product__category",
+            "order__product__producer",
+            "user",
+            "payment",
+        )
+        .all()
+        .order_by("-created_at")
+    )
     serializer_class = SaleSerializer
     filterset_class = SaleFilter
     permission_classes = [IsAuthenticated]
@@ -698,7 +730,16 @@ class SaleViewSet(viewsets.ModelViewSet):
 
         user_profile = getattr(user, "user_profile", None)
         if user_profile:
-            return Sale.objects.filter(user__user_profile__shop_id=user_profile.shop_id)
+            return Sale.objects.select_related(
+                "order",
+                "order__customer",
+                "order__product",
+                "order__product__brand",
+                "order__product__category",
+                "order__product__producer",
+                "user",
+                "payment",
+            ).filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Sale.objects.none()
 
@@ -879,8 +920,18 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             MarketplaceProduct.objects.filter(is_available=True)
-            .select_related("product", "product__user", "product__user__user_profile")
-            .prefetch_related("bulk_price_tiers", "variants", "reviews")
+            .select_related(
+                "product",
+                "product__user",
+                "product__user__user_profile",
+                "product__brand",
+                "product__category",
+                "product__subcategory",
+                "product__sub_subcategory",
+                "product__producer",
+                "product__location",
+            )
+            .prefetch_related("bulk_price_tiers", "variants", "reviews", "product__images")
             .order_by("-listed_date")
             .distinct()
         )
@@ -1157,12 +1208,12 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 "colors": [{"key": key, "value": value} for key, value in MarketplaceProduct.ColorChoices.choices],
             }
         )
-    
+
     @action(detail=False, url_path="create-from-product", methods=["post"], permission_classes=[IsAuthenticated])
     def create_from_product(self, request):
         """
         Create a marketplace product from an existing product
-        
+
         Request body should contain:
         {
             "product_id": 123,
@@ -1174,59 +1225,53 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         }
         """
         from .serializers import CreateMarketplaceProductFromProductSerializer
-        
+
         serializer = CreateMarketplaceProductFromProductSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         # Get the product to verify user permissions
-        product_id = serializer.validated_data['product_id']
+        product_id = serializer.validated_data["product_id"]
         try:
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
-            return Response(
-                {"error": "Product not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
         # Check if user has permission to create marketplace product for this product
         user = request.user
         user_profile = getattr(user, "user_profile", None)
-        
+
         if not user.is_staff and not user.is_superuser:
             # Regular users can only create marketplace products for their own products
             if user_profile:
                 if product.user.user_profile.shop_id != user_profile.shop_id:
                     return Response(
                         {"error": "You don't have permission to create marketplace product for this product"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
             else:
                 if product.user != user:
                     return Response(
                         {"error": "You can only create marketplace products for your own products"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-        
+
         # Create the marketplace product
         try:
             marketplace_product = serializer.save()
-            
+
             # Serialize the created marketplace product for response
-            response_serializer = MarketplaceProductSerializer(marketplace_product, context={'request': request})
-            
+            response_serializer = MarketplaceProductSerializer(marketplace_product, context={"request": request})
+
             return Response(
                 {
                     "message": f"Marketplace product created successfully for '{product.name}'",
-                    "data": response_serializer.data
+                    "data": response_serializer.data,
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
-            
+
         except Exception as e:
-            return Response(
-                {"error": f"Failed to create marketplace product: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": f"Failed to create marketplace product: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
@@ -1998,7 +2043,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ViewSet for managing product categories
     """
 
-    queryset = Category.objects.filter(is_active=True)
+    queryset = Category.objects.filter(is_active=True).prefetch_related("subcategories", "subcategories__sub_subcategories")
     serializer_class = CategorySerializer
 
     @action(detail=False, methods=["get"])
@@ -2025,12 +2070,84 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class BrandViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product brands
+    """
+
+    queryset = Brand.objects.filter(is_active=True).prefetch_related("products").order_by("name")
+    serializer_class = BrandSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Override to add filtering options"""
+        queryset = super().get_queryset()
+
+        # Filter by verification status
+        is_verified = self.request.query_params.get("is_verified", None)
+        if is_verified is not None:
+            queryset = queryset.filter(is_verified=is_verified.lower() == "true")
+
+        # Filter by country
+        country = self.request.query_params.get("country", None)
+        if country:
+            queryset = queryset.filter(country_of_origin__icontains=country)
+
+        # Search by name
+        search = self.request.query_params.get("search", None)
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        return queryset
+
+    @action(detail=False, methods=["get"])
+    def verified(self, request):
+        """Get only verified brands"""
+        verified_brands = self.get_queryset().filter(is_verified=True)
+        serializer = self.get_serializer(verified_brands, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def popular(self, request):
+        """Get brands with the most products"""
+        from django.db.models import Count, Q
+
+        popular_brands = (
+            self.get_queryset()
+            .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
+            .filter(product_count__gt=0)
+            .order_by("-product_count")[:10]
+        )
+
+        serializer = self.get_serializer(popular_brands, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def products(self, request, pk=None):
+        """Get all products for a specific brand"""
+        brand = self.get_object()
+        products = (
+            brand.products.filter(is_active=True)
+            .select_related("category", "subcategory", "sub_subcategory", "producer", "user", "location")
+            .prefetch_related("images")
+        )
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        page = paginator.paginate_queryset(products, request)
+
+        from .serializers import ProductSerializer
+
+        serializer = ProductSerializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
+
+
 class SubcategoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing product subcategories
     """
 
-    queryset = Subcategory.objects.filter(is_active=True)
+    queryset = Subcategory.objects.filter(is_active=True).select_related("category").prefetch_related("sub_subcategories")
 
     def get_serializer_class(self):
         """Return light serializer by default, full serializer for detail views"""
@@ -2059,7 +2176,7 @@ class SubSubcategoryViewSet(viewsets.ModelViewSet):
     ViewSet for managing product sub-subcategories
     """
 
-    queryset = SubSubcategory.objects.filter(is_active=True)
+    queryset = SubSubcategory.objects.filter(is_active=True).select_related("subcategory", "subcategory__category")
     serializer_class = SubSubcategorySerializer
 
     def get_queryset(self):

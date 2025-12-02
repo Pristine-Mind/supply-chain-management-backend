@@ -51,6 +51,7 @@ from market.views import (
 )
 from producer.views import (
     AuditLogViewSet,
+    BrandViewSet,
     CategoryViewSet,
     CityListView,
     CustomerViewSet,
@@ -104,6 +105,7 @@ from user.views import (
 )
 
 router = DefaultRouter()
+router.register(r"brands", BrandViewSet, basename="brands")
 router.register(r"categories", CategoryViewSet, basename="categories")
 router.register(r"subcategories", SubcategoryViewSet, basename="subcategories")
 router.register(r"sub-subcategories", SubSubcategoryViewSet, basename="sub-subcategories")

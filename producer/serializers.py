@@ -8,6 +8,7 @@ from user.models import UserProfile
 
 from .models import (
     AuditLog,
+    Brand,
     Category,
     City,
     Customer,
@@ -149,6 +150,75 @@ class CategoryHierarchySerializer(serializers.ModelSerializer):
         fields = ["id", "code", "name", "description", "is_active", "subcategories"]
 
 
+class BrandSerializer(serializers.ModelSerializer):
+    """Serializer for Brand model"""
+
+    logo_url = serializers.SerializerMethodField()
+    products_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Brand
+        fields = [
+            "id",
+            "name",
+            "description",
+            "logo",
+            "logo_url",
+            "website",
+            "country_of_origin",
+            "is_active",
+            "is_verified",
+            "created_at",
+            "updated_at",
+            "manufacturer_info",
+            "contact_email",
+            "contact_phone",
+            "products_count",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def get_logo_url(self, obj):
+        """Get full URL for brand logo"""
+        request = self.context.get("request")
+        if obj.logo and request:
+            try:
+                return request.build_absolute_uri(obj.logo.url)
+            except Exception:
+                return obj.logo.url if obj.logo else None
+        return None
+
+    def get_products_count(self, obj):
+        """Get total count of products for this brand"""
+        return obj.products.filter(is_active=True).count()
+
+    def validate_name(self, value):
+        """Validate brand name is unique"""
+        if Brand.objects.filter(name__iexact=value).exists():
+            if not self.instance or self.instance.name.lower() != value.lower():
+                raise serializers.ValidationError("A brand with this name already exists.")
+        return value
+
+
+class BrandLightSerializer(serializers.ModelSerializer):
+    """Light version of Brand serializer for nested usage"""
+
+    logo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Brand
+        fields = ["id", "name", "logo_url", "is_verified", "country_of_origin"]
+
+    def get_logo_url(self, obj):
+        """Get full URL for brand logo"""
+        request = self.context.get("request")
+        if obj.logo and request:
+            try:
+                return request.build_absolute_uri(obj.logo.url)
+            except Exception:
+                return obj.logo.url if obj.logo else None
+        return None
+
+
 class ProducerCreateUpdateSerializer(serializers.ModelSerializer):
     location_details = serializers.SerializerMethodField()
 
@@ -257,6 +327,11 @@ class ProductSerializer(serializers.ModelSerializer):
     subcategory_info = SubcategoryLightSerializer(source="subcategory", read_only=True)
     sub_subcategory_info = SubSubcategoryLightSerializer(source="sub_subcategory", read_only=True)
 
+    # Brand information
+    brand_info = BrandLightSerializer(source="brand", read_only=True)
+    brand_name = serializers.CharField(source="get_brand_name", read_only=True)
+    brand_details = serializers.SerializerMethodField()
+
     # Choice field display methods
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
@@ -265,6 +340,10 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = "__all__"
         extra_kwargs = {"user": {"read_only": True}}
+
+    def get_brand_details(self, obj):
+        """Get brand information from the brand_info property"""
+        return obj.brand_info
 
     def validate_price(self, value):
         """
@@ -538,7 +617,11 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_free_shipping = serializers.BooleanField(read_only=True)
     is_featured = serializers.BooleanField(read_only=False)
     is_made_in_nepal = serializers.BooleanField(read_only=False)
-    # views_count = serializers.IntegerField(read_only=True)
+
+    # Brand information from product
+    brand_name = serializers.CharField(read_only=True)
+    brand_info = serializers.SerializerMethodField()
+    is_branded_product = serializers.BooleanField(read_only=True)
 
     # Choice field display methods
     size_display = serializers.CharField(source="get_size_display", read_only=True)
@@ -590,7 +673,14 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "effective_size",
             "effective_color",
             "effective_additional_information",
+            "brand_name",
+            "brand_info",
+            "is_branded_product",
         ]
+
+    def get_brand_info(self, obj):
+        """Get brand information from the associated product"""
+        return obj.brand_info
 
     def get_effective_size(self, obj):
         """Return marketplace size or inherited product size"""
@@ -655,14 +745,18 @@ class CitySerializer(serializers.ModelSerializer):
 
 class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
     """
-    Serializer for creating a MarketplaceProduct from an existing Product
+    Serializer for creating a MarketplaceProduct from an existing Product.
+    Inherits brand information automatically from the source product.
     """
+
     product_id = serializers.IntegerField()
     listed_price = serializers.FloatField(required=False, help_text="Override the product price if needed")
     discounted_price = serializers.FloatField(required=False, allow_null=True, help_text="Optional discounted price")
     size = serializers.ChoiceField(choices=MarketplaceProduct.SizeChoices.choices, required=False, allow_null=True)
     color = serializers.ChoiceField(choices=MarketplaceProduct.ColorChoices.choices, required=False, allow_null=True)
-    additional_information = serializers.CharField(required=False, allow_blank=True, help_text="Additional marketplace-specific information")
+    additional_information = serializers.CharField(
+        required=False, allow_blank=True, help_text="Additional marketplace-specific information"
+    )
     min_order = serializers.IntegerField(required=False, allow_null=True, help_text="Minimum order quantity")
     offer_start = serializers.DateTimeField(required=False, allow_null=True)
     offer_end = serializers.DateTimeField(required=False, allow_null=True)
@@ -670,7 +764,33 @@ class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
     shipping_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     is_featured = serializers.BooleanField(required=False, default=False)
     is_made_in_nepal = serializers.BooleanField(required=False, default=False)
-    
+
+    # Read-only fields for confirmation
+    source_brand_name = serializers.SerializerMethodField(read_only=True)
+    source_brand_verified = serializers.SerializerMethodField(read_only=True)
+
+    def get_source_brand_name(self, obj):
+        """Get brand name from source product"""
+        product_id = obj.get("product_id")
+        if product_id:
+            try:
+                product = Product.objects.get(id=product_id)
+                return product.get_brand_name()
+            except Product.DoesNotExist:
+                pass
+        return "Unbranded"
+
+    def get_source_brand_verified(self, obj):
+        """Get brand verification status from source product"""
+        product_id = obj.get("product_id")
+        if product_id:
+            try:
+                product = Product.objects.get(id=product_id)
+                return product.brand.is_verified if product.brand else False
+            except Product.DoesNotExist:
+                pass
+        return False
+
     def validate_product_id(self, value):
         """
         Validate that the product exists and can be used to create a marketplace product
@@ -679,64 +799,64 @@ class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
             product = Product.objects.get(id=value)
         except Product.DoesNotExist:
             raise serializers.ValidationError("Product with this ID does not exist.")
-        
+
         # Check if marketplace product already exists
         if MarketplaceProduct.objects.filter(product_id=value).exists():
             raise serializers.ValidationError("A marketplace product already exists for this product.")
-        
+
         # Check if product is active
         if not product.is_active:
             raise serializers.ValidationError("Cannot create marketplace product from inactive product.")
-        
+
         return value
-    
+
     def validate(self, data):
         """
         Cross-field validation
         """
         # Validate offer dates
-        offer_start = data.get('offer_start')
-        offer_end = data.get('offer_end')
-        
+        offer_start = data.get("offer_start")
+        offer_end = data.get("offer_end")
+
         if offer_start and offer_end and offer_start >= offer_end:
             raise serializers.ValidationError("Offer end date must be after offer start date.")
-        
+
         # Validate pricing
-        listed_price = data.get('listed_price')
-        discounted_price = data.get('discounted_price')
-        
+        listed_price = data.get("listed_price")
+        discounted_price = data.get("discounted_price")
+
         if discounted_price and listed_price and discounted_price >= listed_price:
             raise serializers.ValidationError("Discounted price must be less than listed price.")
-        
+
         return data
-    
+
     def create(self, validated_data):
         """
         Create MarketplaceProduct from Product data
         """
-        product_id = validated_data.pop('product_id')
+        product_id = validated_data.pop("product_id")
         product = Product.objects.get(id=product_id)
-        
+
         # Set default listed_price from product if not provided
-        if 'listed_price' not in validated_data:
-            validated_data['listed_price'] = product.price
-        
+        if "listed_price" not in validated_data:
+            validated_data["listed_price"] = product.price
+
         # Inherit size, color, and additional_information from product if not provided
-        if 'size' not in validated_data and product.size:
-            validated_data['size'] = product.size
-        
-        if 'color' not in validated_data and product.color:
-            validated_data['color'] = product.color
-        
-        if 'additional_information' not in validated_data and product.additional_information:
-            validated_data['additional_information'] = product.additional_information
-        
+        if "size" not in validated_data and product.size:
+            validated_data["size"] = product.size
+
+        if "color" not in validated_data and product.color:
+            validated_data["color"] = product.color
+
+        if "additional_information" not in validated_data and product.additional_information:
+            validated_data["additional_information"] = product.additional_information
+
         # Set the product reference
-        validated_data['product'] = product
-        
+        validated_data["product"] = product
+
         # Create the marketplace product
         marketplace_product = MarketplaceProduct.objects.create(**validated_data)
-        
+
         return marketplace_product
 
 
