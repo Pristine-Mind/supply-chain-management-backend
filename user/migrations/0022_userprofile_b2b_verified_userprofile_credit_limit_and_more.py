@@ -12,53 +12,42 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="userprofile",
-            name="b2b_verified",
-            field=models.BooleanField(
-                default=False,
-                help_text="Business is verified for B2B purchases with special pricing",
-                verbose_name="B2B Verified",
-            ),
-        ),
-        migrations.AddField(
-            model_name="userprofile",
-            name="credit_limit",
-            field=models.DecimalField(
-                decimal_places=2,
-                default=Decimal("0"),
-                help_text="Maximum credit limit allowed for this business",
-                max_digits=12,
-                verbose_name="Credit Limit",
-            ),
-        ),
-        migrations.AddField(
-            model_name="userprofile",
-            name="credit_used",
-            field=models.DecimalField(
-                decimal_places=2,
-                default=Decimal("0"),
-                help_text="Current amount of credit being used",
-                max_digits=12,
-                verbose_name="Credit Used",
-            ),
-        ),
-        migrations.AddField(
-            model_name="userprofile",
-            name="payment_terms_days",
-            field=models.PositiveIntegerField(
-                default=30, help_text="Number of days allowed for payment (Net terms)", verbose_name="Payment Terms (Days)"
-            ),
-        ),
-        migrations.AddField(
-            model_name="userprofile",
-            name="tax_id",
-            field=models.CharField(
-                blank=True,
-                help_text="Business tax identification number",
-                max_length=50,
-                null=True,
-                verbose_name="Tax ID/VAT Number",
-            ),
+        # Add all B2B fields in single SQL operation for speed
+        migrations.RunSQL(
+            sql="""
+                ALTER TABLE user_userprofile 
+                ADD COLUMN b2b_verified BOOLEAN DEFAULT FALSE,
+                ADD COLUMN credit_limit DECIMAL(12,2) DEFAULT 0,
+                ADD COLUMN credit_used DECIMAL(12,2) DEFAULT 0,
+                ADD COLUMN payment_terms_days INTEGER DEFAULT 30,
+                ADD COLUMN tax_id VARCHAR(50);
+                
+                -- Set NOT NULL constraints where needed
+                UPDATE user_userprofile SET 
+                    b2b_verified = FALSE WHERE b2b_verified IS NULL,
+                    credit_limit = 0 WHERE credit_limit IS NULL,
+                    credit_used = 0 WHERE credit_used IS NULL,
+                    payment_terms_days = 30 WHERE payment_terms_days IS NULL;
+                
+                ALTER TABLE user_userprofile 
+                ALTER COLUMN b2b_verified SET NOT NULL,
+                ALTER COLUMN credit_limit SET NOT NULL,
+                ALTER COLUMN credit_used SET NOT NULL,
+                ALTER COLUMN payment_terms_days SET NOT NULL,
+                ADD CONSTRAINT chk_credit_limit_positive CHECK (credit_limit >= 0),
+                ADD CONSTRAINT chk_credit_used_positive CHECK (credit_used >= 0),
+                ADD CONSTRAINT chk_payment_terms_positive CHECK (payment_terms_days > 0);
+            """,
+            reverse_sql="""
+                ALTER TABLE user_userprofile 
+                DROP CONSTRAINT IF EXISTS chk_credit_limit_positive,
+                DROP CONSTRAINT IF EXISTS chk_credit_used_positive,
+                DROP CONSTRAINT IF EXISTS chk_payment_terms_positive,
+                DROP COLUMN b2b_verified,
+                DROP COLUMN credit_limit,
+                DROP COLUMN credit_used,
+                DROP COLUMN payment_terms_days,
+                DROP COLUMN tax_id;
+            """
         ),
     ]
