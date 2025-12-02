@@ -215,8 +215,8 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
         # Staff and superusers can see everything
-        # if request.user.is_staff or request.user.is_superuser:
-        #     return qs
+        if request.user.is_superuser:
+            return qs
 
         if not hasattr(request.user, "user_profile"):
             return qs.none()
@@ -488,8 +488,8 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
         # # Staff and superusers can see everything
-        # if request.user.is_staff or request.user.is_superuser:
-        #     return qs
+        if request.user.is_superuser:
+            return qs
 
         if not hasattr(request.user, "user_profile"):
             return qs.none()

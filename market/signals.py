@@ -272,66 +272,66 @@ def stocklist_notifications(sender, instance, created, **kwargs):
         )
 
 
-@receiver(post_save, sender=Product)
-def low_stock_alert(sender, instance, **kwargs):
-    if instance.stock <= 10:
-        # avoid duplicates
-        recent = Notification.objects.filter(
-            user=instance.user, notification_type=Notification.Type.STOCK, message__icontains=instance.name
-        )
-        if not recent.exists():
-            msg = f"⚠️ Low stock: {instance.name} only {instance.stock} left."
-            notify_event(
-                user=instance.user,
-                notif_type=Notification.Type.STOCK,
-                message=msg,
-                via_in_app=True,
-                via_email=True,
-                email_addr=instance.user.email,
-                email_tpl="stock_alert.html",
-                email_ctx={"product_id": instance.id},
-                via_sms=True,
-                sms_number=instance.user.user_profile.phone_number,
-                sms_body=msg,
-            )
+# @receiver(post_save, sender=Product)
+# def low_stock_alert(sender, instance, **kwargs):
+#     if instance.stock <= 10:
+#         # avoid duplicates
+#         recent = Notification.objects.filter(
+#             user=instance.user, notification_type=Notification.Type.STOCK, message__icontains=instance.name
+#         )
+#         if not recent.exists():
+#             msg = f"⚠️ Low stock: {instance.name} only {instance.stock} left."
+#             notify_event(
+#                 user=instance.user,
+#                 notif_type=Notification.Type.STOCK,
+#                 message=msg,
+#                 via_in_app=True,
+#                 via_email=True,
+#                 email_addr=instance.user.email,
+#                 email_tpl="stock_alert.html",
+#                 email_ctx={"product_id": instance.id},
+#                 via_sms=True,
+#                 sms_number=instance.user.user_profile.phone_number,
+#                 sms_body=msg,
+#             )
 
-    # Invalidate caches when marketplace products or underlying product data change
-    @receiver(post_save, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_save")
-    @receiver(post_delete, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_delete")
-    @receiver(post_save, sender=Product, dispatch_uid="invalidate_cache_product_save")
-    @receiver(post_delete, sender=Product, dispatch_uid="invalidate_cache_product_delete")
-    @receiver(post_save, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_save")
-    @receiver(post_delete, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_delete")
-    def invalidate_product_cache(sender, instance, **kwargs):
-        # Determine category name (string) if available to perform targeted invalidation
-        category_name = None
-        featured = False
-        try:
-            if hasattr(instance, "product") and getattr(instance, "product") is not None:
-                prod = instance.product
-            else:
-                prod = instance
+#     # Invalidate caches when marketplace products or underlying product data change
+#     @receiver(post_save, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_save")
+#     @receiver(post_delete, sender=MarketplaceProduct, dispatch_uid="invalidate_cache_marketplaceproduct_delete")
+#     @receiver(post_save, sender=Product, dispatch_uid="invalidate_cache_product_save")
+#     @receiver(post_delete, sender=Product, dispatch_uid="invalidate_cache_product_delete")
+#     @receiver(post_save, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_save")
+#     @receiver(post_delete, sender=ProductImage, dispatch_uid="invalidate_cache_productimage_delete")
+#     def invalidate_product_cache(sender, instance, **kwargs):
+#         # Determine category name (string) if available to perform targeted invalidation
+#         category_name = None
+#         featured = False
+#         try:
+#             if hasattr(instance, "product") and getattr(instance, "product") is not None:
+#                 prod = instance.product
+#             else:
+#                 prod = instance
 
-            # product may have category attribute as FK or as simple value
-            cat = getattr(prod, "category", None)
-            if cat is not None:
-                # If it's a model, try to get name; else use string form
-                category_name = getattr(cat, "name", str(cat))
+#             # product may have category attribute as FK or as simple value
+#             cat = getattr(prod, "category", None)
+#             if cat is not None:
+#                 # If it's a model, try to get name; else use string form
+#                 category_name = getattr(cat, "name", str(cat))
 
-            # If this is a MarketplaceProduct or Product, check featured flag if present
-            featured = bool(getattr(instance, "is_featured", False) or getattr(prod, "is_featured", False))
-        except Exception:
-            category_name = None
-            featured = False
+#             # If this is a MarketplaceProduct or Product, check featured flag if present
+#             featured = bool(getattr(instance, "is_featured", False) or getattr(prod, "is_featured", False))
+#         except Exception:
+#             category_name = None
+#             featured = False
 
-        try:
-            _clear_trending_and_producer_cache(category_name=category_name, featured=featured)
-        except Exception:
-            # last resort: clear whole cache
-            try:
-                cache.clear()
-            except Exception:
-                pass
+#         try:
+#             _clear_trending_and_producer_cache(category_name=category_name, featured=featured)
+#         except Exception:
+#             # last resort: clear whole cache
+#             try:
+#                 cache.clear()
+#             except Exception:
+#                 pass
 
 
 @receiver(post_save, sender=MarketplaceOrder, dispatch_uid="marketplace_order_created_notification")
