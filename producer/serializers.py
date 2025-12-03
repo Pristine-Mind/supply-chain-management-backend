@@ -800,31 +800,49 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
         return super().validate(data)
 
-    def to_representation(self, instance):
-        """
-        Override to conditionally include B2B fields based on user eligibility
-        """
-        data = super().to_representation(instance)
+    # def to_representation(self, instance):
+    #     """
+    #     Override to conditionally include B2B fields based on user eligibility
+    #     """
+    #     data = super().to_representation(instance)
 
-        # Check if user is eligible for B2B pricing
-        user = self.context.get("request", {}).user if self.context.get("request") else None
-        show_b2b_fields = False
+    #     # Check if user is eligible for B2B pricing
+    #     user = self.context.get("request", {}).user if self.context.get("request") else None
+    #     show_b2b_fields = False
+        
+    #     # Debug information (remove in production)
+    #     debug_info = {
+    #         "user_authenticated": False,
+    #         "user_has_profile": False,
+    #         "user_b2b_verified": False,
+    #         "product_enable_b2b": instance.enable_b2b_sales,
+    #     }
 
-        if user and user.is_authenticated:
-            try:
-                profile = getattr(user, "user_profile", None)
-                if profile and getattr(profile, "b2b_verified", False) and instance.enable_b2b_sales:
-                    show_b2b_fields = True
-            except AttributeError:
-                pass
+    #     if user and user.is_authenticated:
+    #         debug_info["user_authenticated"] = True
+    #         try:
+    #             profile = getattr(user, "user_profile", None)
+    #             if profile:
+    #                 debug_info["user_has_profile"] = True
+    #                 b2b_verified = getattr(profile, "b2b_verified", False)
+    #                 debug_info["user_b2b_verified"] = b2b_verified
+                    
+    #                 if b2b_verified and instance.enable_b2b_sales:
+    #                     show_b2b_fields = True
+    #         except AttributeError:
+    #             pass
 
-        # Remove B2B fields if user is not eligible
-        if not show_b2b_fields:
-            data.pop("b2b_price", None)
-            data.pop("b2b_min_quantity", None)
-            data.pop("b2b_price_tiers", None)
+    #     # Add debug info to response (remove in production)
+    #     data["_debug_b2b"] = debug_info
+    #     data["_show_b2b_fields"] = show_b2b_fields
 
-        return data
+    #     # Remove B2B fields if user is not eligible
+    #     if not show_b2b_fields:
+    #         data.pop("b2b_price", None)
+    #         data.pop("b2b_min_quantity", None)
+    #         data.pop("b2b_price_tiers", None)
+
+    #     return data
 
 
 class CitySerializer(serializers.ModelSerializer):
