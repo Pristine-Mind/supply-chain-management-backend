@@ -331,7 +331,7 @@ class UserProfile(models.Model):
 
     def is_b2b_eligible(self):
         """Check if user is eligible for B2B pricing"""
-        return self.b2b_verified and self.business_type is not None and self.is_business_user()
+        return self.b2b_verified
 
     def can_use_credit(self, amount):
         """Check if user can use credit for purchase"""

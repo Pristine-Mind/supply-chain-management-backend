@@ -733,14 +733,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
     def get_is_b2b_eligible(self, obj):
         """Check if current user is eligible for B2B pricing"""
-        user = self.context.get("request", {}).user if self.context.get("request") else None
-        if user and user.is_authenticated:
-            try:
-                profile = getattr(user, "user_profile", None)
-                return profile and getattr(profile, "is_b2b_eligible", False) and obj.enable_b2b_sales
-            except AttributeError:
-                pass
-        return False
+        return obj.enable_b2b_sales
 
     def get_brand_info(self, obj):
         """Get brand information from the associated product"""
