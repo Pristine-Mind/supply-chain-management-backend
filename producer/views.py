@@ -2156,7 +2156,6 @@ class BrandViewSet(viewsets.ModelViewSet):
 
     queryset = Brand.objects.filter(is_active=True).prefetch_related("products").order_by("name")
     serializer_class = BrandSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """Override to add filtering options"""

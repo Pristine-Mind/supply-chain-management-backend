@@ -193,7 +193,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
                 # New category code (HL, FA, etc.) - filter by category code
                 return queryset.filter(
                     Q(product__category__code=value)
-                    | Q(product__subcategory__category__code=value) 
+                    | Q(product__subcategory__category__code=value)
                     | Q(product__sub_subcategory__subcategory__category__code=value)
                 )
             else:

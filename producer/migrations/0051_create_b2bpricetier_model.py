@@ -17,12 +17,7 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID"
-                    ),
+                    models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID"),
                 ),
                 (
                     "customer_type",
@@ -42,11 +37,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "price_per_unit",
-                    models.DecimalField(
-                        decimal_places=2,
-                        max_digits=10,
-                        verbose_name="Price Per Unit"
-                    ),
+                    models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Price Per Unit"),
                 ),
                 (
                     "discount_percentage",
@@ -63,9 +54,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "created_at",
-                    models.DateTimeField(
-                        auto_now_add=True, verbose_name="Created At"
-                    ),
+                    models.DateTimeField(auto_now_add=True, verbose_name="Created At"),
                 ),
                 (
                     "updated_at",
