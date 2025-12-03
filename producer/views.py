@@ -7,11 +7,12 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Sum
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -31,6 +32,7 @@ SEARCH_CACHE_TTL = getattr(settings, "PRODUCER_SEARCH_CACHE_TTL", 30)
 LIST_CACHE_TTL = getattr(settings, "PRODUCER_LIST_CACHE_TTL", 15)
 
 from .filters import (
+    BrandFilter,
     CustomerFilter,
     MarketplaceProductFilter,
     OrderFilter,
@@ -2156,27 +2158,14 @@ class BrandViewSet(viewsets.ModelViewSet):
 
     queryset = Brand.objects.filter(is_active=True).prefetch_related("products").order_by("name")
     serializer_class = BrandSerializer
+    filterset_class = BrandFilter
 
     def get_queryset(self):
-        """Override to add filtering options"""
-        queryset = super().get_queryset()
-
-        # Filter by verification status
-        is_verified = self.request.query_params.get("is_verified", None)
-        if is_verified is not None:
-            queryset = queryset.filter(is_verified=is_verified.lower() == "true")
-
-        # Filter by country
-        country = self.request.query_params.get("country", None)
-        if country:
-            queryset = queryset.filter(country_of_origin__icontains=country)
-
-        # Search by name
-        search = self.request.query_params.get("search", None)
-        if search:
-            queryset = queryset.filter(name__icontains=search)
-
-        return queryset
+        """Override to bypass is_active filtering for products action"""
+        if self.action == "products":
+            # For products action, we need all brands to avoid get_object() failures
+            return Brand.objects.prefetch_related("products").order_by("name")
+        return super().get_queryset()
 
     @action(detail=False, methods=["get"])
     def verified(self, request):
@@ -2202,44 +2191,36 @@ class BrandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def products(self, request, pk=None):
-        """Get all products for a specific brand with search, filtering, and ordering"""
-        brand = self.get_object()
+        """Get all products for a specific brand"""
+        # Get brand without applying filterset filters
+        try:
+            brand = Brand.objects.get(pk=pk)
+        except Brand.DoesNotExist:
+            return Response({"error": f"Brand with ID {pk} not found"}, status=404)
+
+        # Get products for this brand
         products = (
             brand.products.filter(is_active=True)
             .select_related("category", "subcategory", "sub_subcategory", "producer", "user", "location")
             .prefetch_related("images")
         )
 
-        # Search functionality
-        search = request.query_params.get("search", None)
-        if search:
-            products = products.filter(name__icontains=search)
+        print(f"Total products for brand: {products.count()}")
 
-        # Ordering functionality
+        # Apply product-level filters from query params
+        search = request.query_params.get("search", None)
+        print(f"Search parameter: {search}")
+        if search:
+            products = products.filter(Q(name__icontains=search) | Q(description__icontains=search))
+            print(f"Products after search filter: {products.count()}")
+
+        # Apply ordering if specified
         ordering = request.query_params.get("ordering", None)
         if ordering:
-            # Validate ordering fields to prevent SQL injection
-            allowed_ordering_fields = [
-                'name', '-name', 'price', '-price', 'created_at', '-created_at',
-                'updated_at', '-updated_at', 'stock', '-stock'
-            ]
-            if ordering in allowed_ordering_fields:
-                products = products.order_by(ordering)
-        else:
-            # Default ordering
-            products = products.order_by('-created_at')
+            products = products.order_by(ordering)
 
-        # Pagination
         paginator = PageNumberPagination()
-        page_size = request.query_params.get('page_size', 20)
-        try:
-            page_size = int(page_size)
-            # Limit page size to prevent excessive load
-            page_size = min(max(page_size, 1), 100)
-        except (ValueError, TypeError):
-            page_size = 20
-        
-        paginator.page_size = page_size
+        paginator.page_size = 20
         page = paginator.paginate_queryset(products, request)
 
         from .serializers import ProductSerializer

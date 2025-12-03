@@ -1,9 +1,10 @@
 import django_filters
-from django.db.models import Q
+from django.db.models import Q, Count
 
 from user.models import UserProfile
 
 from .models import (
+    Brand,
     Category,
     Customer,
     MarketplaceProduct,
@@ -299,3 +300,70 @@ class OrderFilter(django_filters.FilterSet):
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(order_number__icontains=value).distinct()
+
+
+class BrandFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(method="filter_search", label="Search")
+    is_verified = django_filters.BooleanFilter(field_name="is_verified", label="Is Verified")
+    country = django_filters.CharFilter(field_name="country_of_origin", lookup_expr="icontains", label="Country")
+    has_products = django_filters.BooleanFilter(method="filter_has_products", label="Has Products")
+    category = django_filters.CharFilter(method="filter_category", label="Category")
+    min_product_count = django_filters.NumberFilter(method="filter_min_product_count", label="Minimum Product Count")
+
+    class Meta:
+        model = Brand
+        fields = ["search", "is_verified", "country", "has_products", "category", "min_product_count"]
+
+    def filter_search(self, queryset, name, value):
+        """Search brands by name or product names"""
+        if not value:
+            return queryset
+
+        return queryset.filter(Q(products__name__icontains=value) | Q(products__description__icontains=value)).distinct()
+
+    def filter_has_products(self, queryset, name, value):
+        """Filter brands that have or don't have products"""
+        if value is True:
+            return queryset.filter(products__isnull=False).distinct()
+        elif value is False:
+            return queryset.filter(products__isnull=True)
+        return queryset
+
+    def filter_category(self, queryset, name, value):
+        """Filter brands by product category"""
+        if not value:
+            return queryset
+
+        try:
+            # Try to parse as integer (category ID)
+            category_id = int(value)
+            return queryset.filter(
+                Q(products__category_id=category_id)
+                | Q(products__subcategory__category_id=category_id)
+                | Q(products__sub_subcategory__subcategory__category_id=category_id)
+            ).distinct()
+        except ValueError:
+            # Not an integer, treat as category code or name
+            if len(value) == 2 and value.isalpha() and value.isupper():
+                # Category code (HL, FA, etc.)
+                return queryset.filter(
+                    Q(products__category__code=value)
+                    | Q(products__subcategory__category__code=value)
+                    | Q(products__sub_subcategory__subcategory__category__code=value)
+                ).distinct()
+            else:
+                # Category name search
+                return queryset.filter(
+                    Q(products__category__name__icontains=value)
+                    | Q(products__subcategory__name__icontains=value)
+                    | Q(products__sub_subcategory__name__icontains=value)
+                ).distinct()
+
+    def filter_min_product_count(self, queryset, name, value):
+        """Filter brands with minimum number of products"""
+        if not value:
+            return queryset
+
+        return queryset.annotate(product_count=Count("products", filter=Q(products__is_active=True))).filter(
+            product_count__gte=value
+        )
