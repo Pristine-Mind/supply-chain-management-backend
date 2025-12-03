@@ -30,7 +30,7 @@ class UserProfileInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = "User Profile"
     fk_name = "user"
-    readonly_fields = ("shop_id",)
+    readonly_fields = ("shop_id", "credit_used")
     fieldsets = (
         (None, {"fields": ("role", "phone_number", "business_type")}),
         (
@@ -43,6 +43,19 @@ class UserProfileInline(admin.StackedInline):
                     "latitude",
                     "longitude",
                     "registered_business_name",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "B2B Business Settings",
+            {
+                "fields": (
+                    "b2b_verified",
+                    "credit_limit",
+                    "credit_used",
+                    "payment_terms_days",
+                    "tax_id",
                 ),
                 "classes": ("collapse",),
             },
