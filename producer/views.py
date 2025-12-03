@@ -801,20 +801,24 @@ class UserInfoView(APIView):
 
     def get(self, request):
         user = request.user
+        user_profile = None
         try:
             user_profile = UserProfile.objects.get(user=user)
             has_access_to_marketplace = user_profile.has_access_to_marketplace
+            b2b_verified = getattr(user_profile, 'b2b_verified', False)
         except UserProfile.DoesNotExist:
             has_access_to_marketplace = False
+            b2b_verified = False
 
         return Response(
             {
                 "username": user.username,
                 "id": user.id,
                 "has_access_to_marketplace": has_access_to_marketplace,
-                "business_type": user_profile.business_type,
-                "role": user_profile.role.code,
+                "business_type": user_profile.business_type if user_profile else None,
+                "role": user_profile.role.code if user_profile and user_profile.role else None,
                 "email": user.email,
+                "b2b_verified": b2b_verified,
             }
         )
 
