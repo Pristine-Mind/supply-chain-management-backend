@@ -2202,7 +2202,7 @@ class BrandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def products(self, request, pk=None):
-        """Get all products for a specific brand"""
+        """Get all products for a specific brand with search, filtering, and ordering"""
         brand = self.get_object()
         products = (
             brand.products.filter(is_active=True)
@@ -2210,8 +2210,36 @@ class BrandViewSet(viewsets.ModelViewSet):
             .prefetch_related("images")
         )
 
+        # Search functionality
+        search = request.query_params.get("search", None)
+        if search:
+            products = products.filter(name__icontains=search)
+
+        # Ordering functionality
+        ordering = request.query_params.get("ordering", None)
+        if ordering:
+            # Validate ordering fields to prevent SQL injection
+            allowed_ordering_fields = [
+                'name', '-name', 'price', '-price', 'created_at', '-created_at',
+                'updated_at', '-updated_at', 'stock', '-stock'
+            ]
+            if ordering in allowed_ordering_fields:
+                products = products.order_by(ordering)
+        else:
+            # Default ordering
+            products = products.order_by('-created_at')
+
+        # Pagination
         paginator = PageNumberPagination()
-        paginator.page_size = 20
+        page_size = request.query_params.get('page_size', 20)
+        try:
+            page_size = int(page_size)
+            # Limit page size to prevent excessive load
+            page_size = min(max(page_size, 1), 100)
+        except (ValueError, TypeError):
+            page_size = 20
+        
+        paginator.page_size = page_size
         page = paginator.paginate_queryset(products, request)
 
         from .serializers import ProductSerializer
