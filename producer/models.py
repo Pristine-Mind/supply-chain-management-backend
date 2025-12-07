@@ -817,6 +817,13 @@ class MarketplaceProduct(models.Model):
         help_text="Any additional information about the marketplace product",
     )
 
+    search_tags = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Search Tags"),
+        help_text=_("Keywords or tags for search optimization"),
+    )
+
     # B2B Sales Fields
     enable_b2b_sales = models.BooleanField(
         default=False,

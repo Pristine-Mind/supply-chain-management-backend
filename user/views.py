@@ -124,7 +124,7 @@ class LoginAPIView(APIView):
             try:
                 user_profile = user.user_profile
                 has_access_to_marketplace = user_profile.has_access_to_marketplace
-                b2b_verified = getattr(user_profile, 'b2b_verified', False)
+                b2b_verified = getattr(user_profile, "b2b_verified", False)
             except UserProfile.DoesNotExist:
                 has_access_to_marketplace = False
                 b2b_verified = False
@@ -393,7 +393,7 @@ class PhoneLoginView(APIView):
                     "has_access_to_marketplace": user_profile.has_access_to_marketplace,
                     "business_type": user_profile.business_type if hasattr(user_profile, "business_type") else None,
                     "shop_id": user_profile.shop_id if hasattr(user_profile, "shop_id") else None,
-                    "b2b_verified": getattr(user_profile, 'b2b_verified', False),
+                    "b2b_verified": getattr(user_profile, "b2b_verified", False),
                 }
             )
 

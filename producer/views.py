@@ -12,8 +12,8 @@ from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from rest_framework import status, viewsets
@@ -805,7 +805,7 @@ class UserInfoView(APIView):
         try:
             user_profile = UserProfile.objects.get(user=user)
             has_access_to_marketplace = user_profile.has_access_to_marketplace
-            b2b_verified = getattr(user_profile, 'b2b_verified', False)
+            b2b_verified = getattr(user_profile, "b2b_verified", False)
         except UserProfile.DoesNotExist:
             has_access_to_marketplace = False
             b2b_verified = False
@@ -1067,6 +1067,14 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         sub_category = request.query_params.get("sub_category") or request.query_params.get("subcategory")
         sub_subcategory = request.query_params.get("sub_subcategory")
 
+        # New filters
+        brand = request.query_params.get("brand")
+        sku = request.query_params.get("sku")
+        size = request.query_params.get("size")
+        color = request.query_params.get("color")
+        min_price = request.query_params.get("min_price")
+        max_price = request.query_params.get("max_price")
+
         # Cache search results for identical queries for a short TTL
         try:
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
@@ -1089,6 +1097,9 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 | SQ(subcategory__contains=phrase)
                 | SQ(sub_subcategory__contains=phrase)
                 | SQ(text__contains=phrase)
+                | SQ(search_tags__contains=phrase)
+                | SQ(brand__contains=phrase)
+                | SQ(sku__contains=phrase)
             )
             sqs = sqs.filter(combined).order_by("-_score")
         except Exception:
@@ -1163,12 +1174,39 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             sqs = _apply_field_filter(sqs, "subcategory", sub_category)
             sqs = _apply_field_filter(sqs, "sub_subcategory", sub_subcategory)
 
-        results = [r.object for r in sqs if getattr(r, "object", None) is not None]
+        # Apply additional filters
+        if brand:
+            sqs = sqs.filter(brand__icontains=brand)
+        if sku:
+            sqs = sqs.filter(sku__icontains=sku)
+        if size:
+            sqs = sqs.filter(size__iexact=size)
+        if color:
+            sqs = sqs.filter(color__iexact=color)
 
+        if min_price:
+            try:
+                sqs = sqs.filter(listed_price__gte=float(min_price))
+            except ValueError:
+                pass
+
+        if max_price:
+            try:
+                sqs = sqs.filter(listed_price__lte=float(max_price))
+            except ValueError:
+                pass
+
+        # Optimize: Paginate the SearchQuerySet directly to avoid fetching all objects from DB
         paginator = PageNumberPagination()
         paginator.page_size = int(request.query_params.get("page_size", 20))
-        page = paginator.paginate_queryset(results, request, view=self)
-        serializer = self.get_serializer(page, many=True, context={"request": request})
+
+        # This returns a list of SearchResult objects for the current page
+        page_results = paginator.paginate_queryset(sqs, request, view=self)
+
+        # Resolve objects only for the current page
+        results = [r.object for r in page_results if getattr(r, "object", None) is not None]
+
+        serializer = self.get_serializer(results, many=True, context={"request": request})
         response = paginator.get_paginated_response(serializer.data)
 
         # Cache the response payload for a short TTL
