@@ -5,6 +5,7 @@ from decimal import Decimal
 from io import BytesIO
 
 import requests
+import speech_recognition as sr
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
@@ -825,3 +826,23 @@ class InvoiceGenerationService:
         except Exception as e:
             logger.warning(f"Error formatting product description: {str(e)}")
             return marketplace_product.product.name if marketplace_product.product else "Product"
+
+
+class VoiceRecognitionService:
+    @staticmethod
+    def transcribe_audio(audio_file) -> str:
+        """
+        Transcribes the given audio file to text using Google Speech Recognition.
+        """
+        recognizer = sr.Recognizer()
+        try:
+            with sr.AudioFile(audio_file) as source:
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data)
+                return text
+        except sr.UnknownValueError:
+            raise ValueError("Could not understand audio.")
+        except sr.RequestError as e:
+            raise ConnectionError(f"Speech service unavailable: {e}")
+        except Exception as e:
+            raise ValueError(f"Error processing audio file: {e}")

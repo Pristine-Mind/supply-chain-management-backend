@@ -47,6 +47,7 @@ from market.views import (
     verify_khalti_payment,
     verify_payment,
 )
+from market.voice_search import VoiceSearchView
 from producer.views import (
     AuditLogViewSet,
     CityListView,
@@ -142,6 +143,8 @@ urlpatterns = [
         MarketplaceProductViewSet.as_view({"get": "made_in_nepal"}),
         name="marketplace-made-in-nepal",
     ),
+    # Voice Search
+    path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),
