@@ -50,6 +50,7 @@ django-haystack = "*"
 # Pin elasticsearch client to 7.x to satisfy django-haystack's elasticsearch7 backend
 elasticsearch = ">=7.0.0,<8.0.0"
 djangorestframework-simplejwt = "*"
+SpeechRecognition = "*"
 
 
 [tool.poetry.dev-dependencies]

@@ -927,3 +927,13 @@ class CreateOrderSerializer(serializers.Serializer):
         cart.items.all().delete()
 
         return order
+
+
+class VoiceSearchInputSerializer(serializers.Serializer):
+    audio_file = serializers.FileField(required=False)
+    query = serializers.CharField(required=False, max_length=255)
+
+    def validate(self, data):
+        if not data.get("audio_file") and not data.get("query"):
+            raise serializers.ValidationError("Either 'audio_file' or 'query' must be provided.")
+        return data
