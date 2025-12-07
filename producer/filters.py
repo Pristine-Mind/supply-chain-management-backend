@@ -1,5 +1,5 @@
 import django_filters
-from django.db.models import Q, Count
+from django.db.models import Count, Q
 
 from user.models import UserProfile
 

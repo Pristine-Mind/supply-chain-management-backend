@@ -5,3 +5,8 @@
 {% if object.product.sub_subcategory %}{{ object.product.sub_subcategory.name }}{% endif %}
 {{ object.listed_price }}
 {{ object.discounted_price }}
+{% if object.product.brand %}{{ object.product.brand.name }}{% endif %}
+{{ object.product.sku }}
+{{ object.size }}
+{{ object.color }}
+{% for tag in object.search_tags %}{{ tag }} {% endfor %}

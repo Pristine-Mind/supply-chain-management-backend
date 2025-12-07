@@ -1,12 +1,14 @@
+import logging
 import os
 from decimal import Decimal
-from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
-from django.db import transaction
-from producer.models import Producer, Product, Category
-from user.models import UserProfile, Role
+
 import pandas as pd
-import logging
+from django.contrib.auth.models import User
+from django.core.management.base import BaseCommand
+from django.db import transaction
+
+from producer.models import Category, Producer, Product
+from user.models import Role, UserProfile
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

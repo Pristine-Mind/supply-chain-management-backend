@@ -802,7 +802,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     #     # Check if user is eligible for B2B pricing
     #     user = self.context.get("request", {}).user if self.context.get("request") else None
     #     show_b2b_fields = False
-        
+
     #     # Debug information (remove in production)
     #     debug_info = {
     #         "user_authenticated": False,
@@ -819,7 +819,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     #                 debug_info["user_has_profile"] = True
     #                 b2b_verified = getattr(profile, "b2b_verified", False)
     #                 debug_info["user_b2b_verified"] = b2b_verified
-                    
+
     #                 if b2b_verified and instance.enable_b2b_sales:
     #                     show_b2b_fields = True
     #         except AttributeError:
