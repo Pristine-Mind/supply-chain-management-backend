@@ -20,7 +20,7 @@ class VideoRecommendationService:
         """
         interests = {"categories": set(), "tags": set()}
 
-        if not user.is_authenticated:
+        if not user or not user.is_authenticated:
             return interests
 
         # 1. From Liked Videos
@@ -66,7 +66,7 @@ class VideoRecommendationService:
         """
         all_videos = ShoppableVideo.objects.filter(is_active=True).select_related("product")
 
-        if not user.is_authenticated:
+        if not user or not user.is_authenticated:
             # For anonymous users, return trending videos
             return list(all_videos.order_by("-trend_score")[:50])
 
