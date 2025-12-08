@@ -24,18 +24,18 @@ class VideoRecommendationService:
             return interests
 
         # 1. From Liked Videos
-        liked_videos = ShoppableVideo.objects.filter(likes__user=user).select_related("product")
+        liked_videos = ShoppableVideo.objects.filter(likes__user=user).select_related("product__product")
         for video in liked_videos:
-            if video.product.category:
-                interests["categories"].add(video.product.category)
+            if video.product.product.category:
+                interests["categories"].add(video.product.product.category)
             if video.tags:
                 interests["tags"].update(video.tags)
 
         # 2. From Saved Videos
-        saved_videos = ShoppableVideo.objects.filter(saves__user=user).select_related("product")
+        saved_videos = ShoppableVideo.objects.filter(saves__user=user).select_related("product__product")
         for video in saved_videos:
-            if video.product.category:
-                interests["categories"].add(video.product.category)
+            if video.product.product.category:
+                interests["categories"].add(video.product.product.category)
             if video.tags:
                 interests["tags"].update(video.tags)
 
@@ -51,10 +51,10 @@ class VideoRecommendationService:
                 product_ids.append(interaction.data["product_id"])
 
         if product_ids:
-            products = MarketplaceProduct.objects.filter(id__in=product_ids)
+            products = MarketplaceProduct.objects.filter(id__in=product_ids).select_related("product")
             for product in products:
-                if product.category:
-                    interests["categories"].add(product.category)
+                if product.product.category:
+                    interests["categories"].add(product.product.category)
                 # Assuming product might have tags, if not we skip
                 # if product.tags: interests["tags"].update(product.tags)
 
@@ -64,7 +64,7 @@ class VideoRecommendationService:
         """
         Generate candidate videos based on user interests and trends.
         """
-        all_videos = ShoppableVideo.objects.filter(is_active=True).select_related("product")
+        all_videos = ShoppableVideo.objects.filter(is_active=True).select_related("product__product")
 
         if not user or not user.is_authenticated:
             # For anonymous users, return trending videos
@@ -75,7 +75,7 @@ class VideoRecommendationService:
 
         # 1. Interest-based (Category)
         if interests["categories"]:
-            cat_videos = all_videos.filter(product__category__in=interests["categories"])
+            cat_videos = all_videos.filter(product__product__category__in=interests["categories"])
             candidates.update(cat_videos)
 
         # 2. Interest-based (Tags)
@@ -104,7 +104,7 @@ class VideoRecommendationService:
         score = 0.0
 
         # 1. Category Match
-        if video.product.category in interests["categories"]:
+        if video.product.product.category in interests["categories"]:
             score += 2.0
 
         # 2. Tag Match
