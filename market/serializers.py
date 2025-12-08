@@ -32,6 +32,7 @@ from .models import (
     ShoppableVideo,
     UserProductImage,
     VideoLike,
+    VideoSave,
 )
 
 
@@ -948,6 +949,7 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
         queryset=MarketplaceProduct.objects.all(), source="product", write_only=True
     )
     is_liked = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
 
     class Meta:
         model = ShoppableVideo
@@ -961,18 +963,27 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
             "description",
             "product",
             "product_id",
+            "tags",
+            "trend_score",
             "views_count",
             "likes_count",
             "shares_count",
             "created_at",
             "is_liked",
+            "is_saved",
         ]
-        read_only_fields = ["uploader", "views_count", "likes_count", "shares_count", "created_at"]
+        read_only_fields = ["uploader", "views_count", "likes_count", "shares_count", "created_at", "trend_score"]
 
     def get_is_liked(self, obj):
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             return VideoLike.objects.filter(user=request.user, video=obj).exists()
+        return False
+
+    def get_is_saved(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return VideoSave.objects.filter(user=request.user, video=obj).exists()
         return False
 
     def create(self, validated_data):

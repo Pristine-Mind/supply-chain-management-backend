@@ -1799,6 +1799,10 @@ class ShoppableVideo(models.Model):
     likes_count = models.PositiveIntegerField(default=0, verbose_name=_("Likes"))
     shares_count = models.PositiveIntegerField(default=0, verbose_name=_("Shares"))
 
+    # Recommendation fields
+    tags = models.JSONField(default=list, blank=True, verbose_name=_("Tags"))
+    trend_score = models.FloatField(default=0.0, verbose_name=_("Trend Score"))
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
     is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
 
@@ -1827,3 +1831,21 @@ class VideoLike(models.Model):
 
     def __str__(self):
         return f"{self.user.username} liked Video {self.video.id}"
+
+
+class VideoSave(models.Model):
+    """
+    Represents a user 'saving' a shoppable video.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="saved_videos")
+    video = models.ForeignKey(ShoppableVideo, on_delete=models.CASCADE, related_name="saves")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "video")
+        verbose_name = _("Video Save")
+        verbose_name_plural = _("Video Saves")
+
+    def __str__(self):
+        return f"{self.user.username} saved Video {self.video.id}"
