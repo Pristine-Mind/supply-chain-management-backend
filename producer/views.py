@@ -966,6 +966,9 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         candidate_size = min(max_candidate_cap, max(first_n * candidate_factor, first_n))
         candidates = list(qs[:candidate_size])
 
+        # Shuffle candidates to ensure randomness within categories too
+        random.shuffle(candidates)
+
         # Group candidates by category (use category id or name where available)
         from collections import defaultdict
 
@@ -1418,6 +1421,25 @@ class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
             # bid_end_date__gte=timezone.now(),
             # product__location=location,
         ).order_by("-listed_date")
+
+    def list(self, request, *args, **kwargs):
+        """
+        List recommended products with random shuffling.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Limit to top 100 recent items then shuffle
+        # This ensures we show fresh items but in random order
+        candidates = list(queryset[:100])
+        random.shuffle(candidates)
+
+        page = self.paginate_queryset(candidates)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(candidates, many=True)
+        return Response(serializer.data)
 
 
 class StatsAPIView(APIView):
