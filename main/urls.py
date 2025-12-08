@@ -37,6 +37,9 @@ from market.views import (
     UserBidViewSet,
     UserCartView,
     UserFeedbackView,
+    UserFollowViewSet,
+    VideoCommentViewSet,
+    VideoReportViewSet,
     cancel_marketplace_order,
     create_order,
     create_purchase,
@@ -132,6 +135,9 @@ router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"shoppable-videos", ShoppableVideoViewSet, basename="shoppable-videos")
+router.register(r"video-comments", VideoCommentViewSet, basename="video-comments")
+router.register(r"video-reports", VideoReportViewSet, basename="video-reports")
+router.register(r"user-follows", UserFollowViewSet, basename="user-follows")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")

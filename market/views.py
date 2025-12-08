@@ -2,6 +2,7 @@ import logging
 
 import requests
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import models, transaction
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import HttpResponse
@@ -50,7 +51,10 @@ from .models import (
     Payment,
     ProductView,
     ShoppableVideo,
+    UserFollow,
+    VideoComment,
     VideoLike,
+    VideoReport,
     VideoSave,
 )
 from .recommendation import VideoRecommendationService
@@ -74,7 +78,10 @@ from .serializers import (
     SellerBidSerializer,
     SellerProductSerializer,
     ShoppableVideoSerializer,
+    UserFollowSerializer,
+    VideoCommentSerializer,
     VideoLikeSerializer,
+    VideoReportSerializer,
 )
 from .utils import sms_service
 
@@ -1550,6 +1557,130 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
 
         return Response({"status": "success", "shares_count": video.shares_count})
 
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def add_to_cart(self, request, pk=None):
+        """
+        Directly add the video's product (or an additional product) to the user's cart.
+        """
+        video = self.get_object()
+        user = request.user
+
+        # Determine which product to add
+        product_id = request.data.get("product_id")
+        if product_id:
+            # Verify the product is associated with the video
+            if int(product_id) == video.product.id:
+                product = video.product
+            elif video.additional_products.filter(id=product_id).exists():
+                product = video.additional_products.get(id=product_id)
+            else:
+                return Response({"error": "Product not found in this video"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Default to the main product
+            product = video.product
+
+        quantity = int(request.data.get("quantity", 1))
+        if quantity < 1:
+            return Response({"error": "Quantity must be at least 1"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get or create cart
+        cart, _ = Cart.objects.get_or_create(user=user)
+
+        # Add to cart logic (similar to CartItemCreateView)
+        cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product, defaults={"quantity": quantity})
+
+        if not created:
+            cart_item.quantity += quantity
+            cart_item.save()
+
+        # Log interaction
+        UserInteraction.objects.create(
+            user=user,
+            event_type="add_to_cart_from_video",
+            data={"video_id": video.id, "product_id": product.id, "quantity": quantity},
+        )
+
+        return Response(
+            {"status": "success", "message": f"Added {product.product.name} to cart", "cart_item_count": cart.items.count()}
+        )
+
+
+class VideoCommentViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Video Comments.
+    """
+
+    queryset = VideoComment.objects.all().order_by("-created_at")
+    serializer_class = VideoCommentSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        video_id = self.request.query_params.get("video_id")
+        if video_id:
+            queryset = queryset.filter(video_id=video_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class VideoReportViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Video Reports.
+    """
+
+    queryset = VideoReport.objects.all().order_by("-created_at")
+    serializer_class = VideoReportSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(reporter=self.request.user)
+
+
+class UserFollowViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for User Follows.
+    """
+
+    queryset = UserFollow.objects.all().order_by("-created_at")
+    serializer_class = UserFollowSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user_id = self.request.query_params.get("user_id")
+        if user_id:
+            # Return followers of a specific user
+            queryset = queryset.filter(following_id=user_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(follower=self.request.user)
+
+    @action(detail=False, methods=["post"])
+    def toggle_follow(self, request):
+        """
+        Toggle follow status for a user.
+        """
+        following_id = request.data.get("following_id")
+        if not following_id:
+            return Response({"error": "following_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        following_user = get_object_or_404(User, id=following_id)
+
+        if following_user == request.user:
+            return Response({"error": "You cannot follow yourself"}, status=status.HTTP_400_BAD_REQUEST)
+
+        follow, created = UserFollow.objects.get_or_create(follower=request.user, following=following_user)
+
+        if not created:
+            follow.delete()
+            return Response({"status": "unfollowed"})
+
+        return Response({"status": "followed"})
+
+        return Response({"status": "success", "shares_count": video.shares_count})
+
     @action(detail=True, methods=["post"], permission_classes=[AllowAny])
     def view(self, request, pk=None):
         video = self.get_object()
@@ -1557,7 +1688,3 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         video.save()
         video.refresh_from_db()
         return Response({"status": "success", "views_count": video.views_count})
-
-        reviews = MarketplaceProductReview.objects.filter(product=product)
-        serializer = self.get_serializer(reviews, many=True)
-        return Response(serializer.data)

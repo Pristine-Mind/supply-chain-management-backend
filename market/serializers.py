@@ -30,8 +30,11 @@ from .models import (
     Payment,
     Purchase,
     ShoppableVideo,
+    UserFollow,
     UserProductImage,
+    VideoComment,
     VideoLike,
+    VideoReport,
     VideoSave,
 )
 
@@ -996,3 +999,47 @@ class VideoLikeSerializer(serializers.ModelSerializer):
         model = VideoLike
         fields = ["id", "user", "video", "created_at"]
         read_only_fields = ["user", "created_at"]
+
+
+class VideoCommentSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.username", read_only=True)
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VideoComment
+        fields = ["id", "user", "user_name", "video", "text", "created_at", "parent", "replies"]
+        read_only_fields = ["user", "created_at", "replies"]
+
+    def get_replies(self, obj):
+        if obj.replies.exists():
+            return VideoCommentSerializer(obj.replies.all(), many=True).data
+        return []
+
+    def create(self, validated_data):
+        validated_data["user"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class VideoReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VideoReport
+        fields = ["id", "reporter", "video", "reason", "description", "status", "created_at"]
+        read_only_fields = ["reporter", "status", "created_at"]
+
+    def create(self, validated_data):
+        validated_data["reporter"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class UserFollowSerializer(serializers.ModelSerializer):
+    follower_name = serializers.CharField(source="follower.username", read_only=True)
+    following_name = serializers.CharField(source="following.username", read_only=True)
+
+    class Meta:
+        model = UserFollow
+        fields = ["id", "follower", "follower_name", "following", "following_name", "created_at"]
+        read_only_fields = ["follower", "created_at"]
+
+    def create(self, validated_data):
+        validated_data["follower"] = self.context["request"].user
+        return super().create(validated_data)
