@@ -30,9 +30,27 @@ from .models import (
     OrderTrackingEvent,
     Payment,
     Purchase,
+    ShoppableVideo,
     UserInteraction,
     UserProductImage,
+    VideoLike,
 )
+
+
+@admin.register(ShoppableVideo)
+class ShoppableVideoAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "uploader", "product", "created_at", "views_count", "likes_count", "is_active")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("title", "uploader__username", "description", "product__name")
+    readonly_fields = ("views_count", "likes_count", "shares_count", "created_at")
+
+
+@admin.register(VideoLike)
+class VideoLikeAdmin(admin.ModelAdmin):
+    list_display = ("user", "video", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("user__username", "video__description")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(Purchase)

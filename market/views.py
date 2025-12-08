@@ -49,6 +49,8 @@ from .models import (
     OrderStatus,
     Payment,
     ProductView,
+    ShoppableVideo,
+    VideoLike,
 )
 from .serializers import (
     BidSerializer,
@@ -69,6 +71,8 @@ from .serializers import (
     PurchaseSerializer,
     SellerBidSerializer,
     SellerProductSerializer,
+    ShoppableVideoSerializer,
+    VideoLikeSerializer,
 )
 from .utils import sms_service
 
@@ -1458,6 +1462,54 @@ class MarketplaceProductReviewViewSet(viewsets.ModelViewSet):
             product = MarketplaceProduct.objects.get(id=product_id)
         except MarketplaceProduct.DoesNotExist:
             return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        reviews = MarketplaceProductReview.objects.filter(product=product)
+        serializer = self.get_serializer(reviews, many=True)
+        return Response(serializer.data)
+
+
+class ShoppableVideoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Shoppable Videos (TikTok-style).
+    """
+
+    queryset = ShoppableVideo.objects.all().order_by("-created_at")
+    serializer_class = ShoppableVideoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve", "view"]:
+            return [AllowAny()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def like(self, request, pk=None):
+        video = self.get_object()
+        user = request.user
+
+        like, created = VideoLike.objects.get_or_create(user=user, video=video)
+
+        if not created:
+            # If already liked, unlike it
+            like.delete()
+            video.likes_count = models.F("likes_count") - 1
+            liked = False
+        else:
+            video.likes_count = models.F("likes_count") + 1
+            liked = True
+
+        video.save()
+        video.refresh_from_db()
+
+        return Response({"status": "success", "liked": liked, "likes_count": video.likes_count})
+
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    def view(self, request, pk=None):
+        video = self.get_object()
+        video.views_count = models.F("views_count") + 1
+        video.save()
+        video.refresh_from_db()
+        return Response({"status": "success", "views_count": video.views_count})
 
         reviews = MarketplaceProductReview.objects.filter(product=product)
         serializer = self.get_serializer(reviews, many=True)
