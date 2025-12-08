@@ -6,17 +6,23 @@ The Shoppable Videos feature allows users to browse a TikTok-style feed of short
 ## Data Models
 
 ### ShoppableVideo
-- **product**: Link to `MarketplaceProduct`.
+- **product**: Link to `MarketplaceProduct` (Primary product).
+- **additional_products**: Many-to-Many link to `MarketplaceProduct` (Other featured items).
 - **video_file**: The video media file.
 - **title**: Title of the video.
 - **tags**: List of tags (e.g., ["tech", "gadgets"]).
 - **trend_score**: A float score indicating current popularity.
 - **metrics**: `views_count`, `likes_count`, `shares_count`.
 
+### Social & Moderation Models
+- **VideoComment**: User comments on videos, supports threaded replies.
+- **VideoReport**: User reports for inappropriate content (spam, harassment, etc.).
+- **UserFollow**: Follow relationship between users (buyers following creators/sellers).
+
 ### User Interactions
 - **VideoLike**: Records when a user likes a video.
 - **VideoSave**: Records when a user saves a video for later.
-- **UserInteraction**: Logs generic events like `product_view` which feed into the recommendation engine.
+- **UserInteraction**: Logs generic events like `product_view` and `add_to_cart_from_video` which feed into the recommendation engine.
 
 ## Recommendation Algorithm
 
@@ -24,13 +30,14 @@ The personalized feed is generated via a 4-stage process:
 
 ### 1. User Profiling
 We derive a user's interest profile based on:
-- **Explicit Signals**: Liked videos, Saved videos.
-- **Implicit Signals**: Product views (from `UserInteraction`).
+- **Explicit Signals**: Liked videos, Saved videos, Followed creators.
+- **Implicit Signals**: Product views, Add to cart actions.
 - **Output**: A set of preferred `categories` and `tags`.
 
 ### 2. Candidate Generation
 We select a pool of potential videos (~50-100) from:
 - **Interest-based**: Videos matching the user's preferred categories.
+- **Following**: Videos from creators the user follows.
 - **Trending**: High `trend_score` videos (for discovery).
 - **Recency**: New uploads (to solve the cold-start problem).
 
@@ -49,11 +56,12 @@ Candidates are sorted by score in descending order, and the top N results are re
 
 ## API Endpoints
 
-Base URL: `/api/v1/shoppable-videos/`
+Base URL: `/api/v1/`
 
-### 1. Get Video Feed
+### 1. Shoppable Videos (`/shoppable-videos/`)
+
+#### Get Video Feed
 **GET** `/`
-
 Returns a personalized list of videos.
 
 **Response:**
@@ -61,13 +69,12 @@ Returns a personalized list of videos.
 [
   {
     "id": 1,
-    "title": "Amazing Gadget Review",
+    "title": "Summer Outfit Haul",
     "video_file": "http://.../video.mp4",
-    "product": {
-      "id": 101,
-      "name": "Smart Watch",
-      "price": 199.99
-    },
+    "product": { "id": 101, "name": "Summer Dress", "price": 199.99 },
+    "additional_products": [
+        { "id": 102, "name": "Sun Hat", "price": 49.99 }
+    ],
     "likes_count": 150,
     "is_liked": true,
     "is_saved": false,
@@ -77,62 +84,91 @@ Returns a personalized list of videos.
 ]
 ```
 
-### 2. Upload Video
+#### Upload Video
 **POST** `/`
 - **file**: Video file (max 50MB, .mp4).
-- **product_id**: ID of the product.
+- **product_id**: ID of the primary product.
+- **additional_product_ids**: List of IDs for other featured products (e.g., `[102, 103]`).
 - **title**: Video title.
 - **tags**: JSON list of tags.
 
-### 3. Like / Unlike
+#### Like / Unlike
 **POST** `/{id}/like/`
-
 Toggles the like status.
 
-**Response:**
-```json
-{
-  "status": "success",
-  "liked": true,
-  "likes_count": 151
-}
-```
-
-### 4. Save / Unsave
+#### Save / Unsave
 **POST** `/{id}/save_video/`
-
 Toggles the save status.
 
-**Response:**
-```json
-{
-  "status": "success",
-  "saved": true
-}
-```
-
-### 5. Share
+#### Share
 **POST** `/{id}/share/`
-
 Increments the share counter.
 
-**Response:**
+#### Add to Cart (Directly from Video)
+**POST** `/{id}/add_to_cart/`
+Adds the video's product to the user's cart.
+
+**Payload:**
 ```json
 {
-  "status": "success",
-  "shares_count": 45
+  "product_id": 102, // Optional. If omitted, adds the primary product.
+  "quantity": 1
 }
 ```
 
-### 6. View
-**POST** `/{id}/view/`
-
-Increments the view counter. Call this when a video loops or is watched for a significant duration.
-
 **Response:**
 ```json
 {
   "status": "success",
-  "views_count": 1205
+  "message": "Added Sun Hat to cart",
+  "cart_item_count": 5
+}
+```
+
+### 2. Comments (`/video-comments/`)
+
+#### List Comments
+**GET** `/?video_id={id}`
+Get comments for a specific video.
+
+#### Add Comment
+**POST** `/`
+```json
+{
+  "video": 1,
+  "text": "Where can I get this?",
+  "parent": null // Optional parent comment ID for replies
+}
+```
+
+### 3. User Follows (`/user-follows/`)
+
+#### Toggle Follow
+**POST** `/toggle_follow/`
+Follow or unfollow a user (creator/seller).
+
+**Payload:**
+```json
+{
+  "following_id": 42
+}
+```
+
+#### List Followers
+**GET** `/?user_id={id}`
+List users following the specified user.
+
+### 4. Moderation (`/video-reports/`)
+
+#### Report Video
+**POST** `/`
+Report a video for inappropriate content.
+
+**Payload:**
+```json
+{
+  "video": 1,
+  "reason": "spam", // Options: spam, inappropriate, harassment, misleading, other
+  "description": "Bot account posting spam links"
 }
 ```

@@ -1791,7 +1791,10 @@ class ShoppableVideo(models.Model):
 
     # Product featured in the video
     product = models.ForeignKey(
-        MarketplaceProduct, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Product")
+        MarketplaceProduct, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Primary Product")
+    )
+    additional_products = models.ManyToManyField(
+        MarketplaceProduct, related_name="featured_in_videos", blank=True, verbose_name=_("Additional Products")
     )
 
     # Engagement metrics
@@ -1849,3 +1852,79 @@ class VideoSave(models.Model):
 
     def __str__(self):
         return f"{self.user.username} saved Video {self.video.id}"
+
+
+class VideoComment(models.Model):
+    """
+    Represents a comment on a shoppable video.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="video_comments")
+    video = models.ForeignKey(ShoppableVideo, on_delete=models.CASCADE, related_name="comments")
+    text = models.TextField(verbose_name=_("Comment Text"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="replies", verbose_name=_("Parent Comment")
+    )
+
+    class Meta:
+        verbose_name = _("Video Comment")
+        verbose_name_plural = _("Video Comments")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Comment by {self.user.username} on Video {self.video.id}"
+
+
+class VideoReport(models.Model):
+    """
+    Represents a report filed against a shoppable video for moderation.
+    """
+
+    REPORT_REASONS = [
+        ("spam", _("Spam")),
+        ("inappropriate", _("Inappropriate Content")),
+        ("harassment", _("Harassment")),
+        ("misleading", _("Misleading Information")),
+        ("other", _("Other")),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", _("Pending")),
+        ("reviewed", _("Reviewed")),
+        ("resolved", _("Resolved")),
+        ("dismissed", _("Dismissed")),
+    ]
+
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="filed_reports")
+    video = models.ForeignKey(ShoppableVideo, on_delete=models.CASCADE, related_name="reports")
+    reason = models.CharField(max_length=50, choices=REPORT_REASONS, verbose_name=_("Reason"))
+    description = models.TextField(blank=True, verbose_name=_("Description"))
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name=_("Status"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Video Report")
+        verbose_name_plural = _("Video Reports")
+
+    def __str__(self):
+        return f"Report {self.id} on Video {self.video.id} ({self.status})"
+
+
+class UserFollow(models.Model):
+    """
+    Represents a user following another user (e.g., a buyer following a seller/creator).
+    """
+
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
+    following = models.ForeignKey(User, on_delete=models.CASCADE, related_name="followers")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("follower", "following")
+        verbose_name = _("User Follow")
+        verbose_name_plural = _("User Follows")
+
+    def __str__(self):
+        return f"{self.follower.username} follows {self.following.username}"
