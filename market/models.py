@@ -6,7 +6,11 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, validate_email
+from django.core.validators import (
+    FileExtensionValidator,
+    MinValueValidator,
+    validate_email,
+)
 from django.db import models, transaction
 from django.db.models import Q
 from django.urls import reverse
@@ -1765,3 +1769,61 @@ class InvoiceLineItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name} x {self.quantity} = {self.total_price}"
+
+
+class ShoppableVideo(models.Model):
+    """
+    Represents a short, shoppable video (TikTok-style) uploaded by sellers or influencers.
+    Allows tagging products for instant purchase.
+    """
+
+    uploader = models.ForeignKey(User, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Uploader"))
+    video_file = models.FileField(
+        upload_to="shoppable_videos/",
+        verbose_name=_("Video File"),
+        validators=[FileExtensionValidator(allowed_extensions=["mp4", "avi", "mov"])],
+    )
+    thumbnail = models.ImageField(
+        upload_to="shoppable_videos/thumbnails/", null=True, blank=True, verbose_name=_("Thumbnail")
+    )
+    title = models.CharField(max_length=255, verbose_name=_("Video Title"), default="")
+    description = models.TextField(blank=True, verbose_name=_("Description"))
+
+    # Product featured in the video
+    product = models.ForeignKey(
+        MarketplaceProduct, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Product")
+    )
+
+    # Engagement metrics
+    views_count = models.PositiveIntegerField(default=0, verbose_name=_("Views"))
+    likes_count = models.PositiveIntegerField(default=0, verbose_name=_("Likes"))
+    shares_count = models.PositiveIntegerField(default=0, verbose_name=_("Shares"))
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+
+    def __str__(self):
+        return f"Video {self.id} by {self.uploader.username}"
+
+    class Meta:
+        verbose_name = _("Shoppable Video")
+        verbose_name_plural = _("Shoppable Videos")
+        ordering = ["-created_at"]
+
+
+class VideoLike(models.Model):
+    """
+    Represents a user 'liking' a shoppable video.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="liked_videos")
+    video = models.ForeignKey(ShoppableVideo, on_delete=models.CASCADE, related_name="likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "video")
+        verbose_name = _("Video Like")
+        verbose_name_plural = _("Video Likes")
+
+    def __str__(self):
+        return f"{self.user.username} liked Video {self.video.id}"

@@ -120,10 +120,11 @@ class FileUploadSecurityMiddleware(MiddlewareMixin):
         "images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".avif"],
         "documents": [".pdf", ".doc", ".docx", ".txt"],
         "data": [".csv", ".xlsx", ".xls"],
+        "videos": [".mp4", ".avi", ".mov"],
     }
 
     # Maximum file size (in bytes)
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
     def process_request(self, request):
         """Validate file uploads"""

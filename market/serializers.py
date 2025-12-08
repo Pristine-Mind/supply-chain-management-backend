@@ -29,7 +29,9 @@ from .models import (
     OrderTrackingEvent,
     Payment,
     Purchase,
+    ShoppableVideo,
     UserProductImage,
+    VideoLike,
 )
 
 
@@ -937,3 +939,49 @@ class VoiceSearchInputSerializer(serializers.Serializer):
         if not data.get("audio_file") and not data.get("query"):
             raise serializers.ValidationError("Either 'audio_file' or 'query' must be provided.")
         return data
+
+
+class ShoppableVideoSerializer(serializers.ModelSerializer):
+    uploader_name = serializers.CharField(source="uploader.username", read_only=True)
+    product = MarketplaceProductSerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=MarketplaceProduct.objects.all(), source="product", write_only=True
+    )
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShoppableVideo
+        fields = [
+            "id",
+            "uploader",
+            "uploader_name",
+            "video_file",
+            "thumbnail",
+            "title",
+            "description",
+            "product",
+            "product_id",
+            "views_count",
+            "likes_count",
+            "shares_count",
+            "created_at",
+            "is_liked",
+        ]
+        read_only_fields = ["uploader", "views_count", "likes_count", "shares_count", "created_at"]
+
+    def get_is_liked(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return VideoLike.objects.filter(user=request.user, video=obj).exists()
+        return False
+
+    def create(self, validated_data):
+        validated_data["uploader"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class VideoLikeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VideoLike
+        fields = ["id", "user", "video", "created_at"]
+        read_only_fields = ["user", "created_at"]
