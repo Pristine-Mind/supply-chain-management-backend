@@ -1604,8 +1604,19 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
             {"status": "success", "message": f"Added {product.product.name} to cart", "cart_item_count": cart.items.count()}
         )
 
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    def view(self, request, pk=None):
+        """
+        Increment the view count for a video.
+        """
+        video = self.get_object()
+        video.views_count = models.F("views_count") + 1
+        video.save()
+        video.refresh_from_db()
+        return Response({"status": "success", "views_count": video.views_count})
 
-class VideoCommentViewSet(viewsets.ReadOnlyModelViewSet):
+
+class VideoCommentViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Video Comments.
     """
@@ -1624,7 +1635,7 @@ class VideoCommentViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class VideoReportViewSet(viewsets.ReadOnlyModelViewSet):
+class VideoReportViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Video Reports.
     """
@@ -1678,13 +1689,3 @@ class UserFollowViewSet(viewsets.ModelViewSet):
             return Response({"status": "unfollowed"})
 
         return Response({"status": "followed"})
-
-        return Response({"status": "success", "shares_count": video.shares_count})
-
-    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
-    def view(self, request, pk=None):
-        video = self.get_object()
-        video.views_count = models.F("views_count") + 1
-        video.save()
-        video.refresh_from_db()
-        return Response({"status": "success", "views_count": video.views_count})
