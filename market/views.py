@@ -51,7 +51,9 @@ from .models import (
     ProductView,
     ShoppableVideo,
     VideoLike,
+    VideoSave,
 )
+from .recommendation import VideoRecommendationService
 from .serializers import (
     BidSerializer,
     BidUserSerializer,
@@ -1482,6 +1484,20 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return super().get_permissions()
 
+    def list(self, request, *args, **kwargs):
+        """
+        Get a personalized feed of videos using the recommendation engine.
+        """
+        user = request.user if request.user.is_authenticated else None
+
+        # Get recommended videos
+        service = VideoRecommendationService()
+        videos = service.generate_feed(user, feed_size=10)
+
+        # Serialize and return
+        serializer = self.get_serializer(videos, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def like(self, request, pk=None):
         video = self.get_object()
@@ -1502,6 +1518,37 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         video.refresh_from_db()
 
         return Response({"status": "success", "liked": liked, "likes_count": video.likes_count})
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def save_video(self, request, pk=None):
+        """
+        Save or unsave a video.
+        """
+        video = self.get_object()
+        user = request.user
+
+        saved_video, created = VideoSave.objects.get_or_create(user=user, video=video)
+
+        if not created:
+            # If already saved, unsave it
+            saved_video.delete()
+            saved = False
+        else:
+            saved = True
+
+        return Response({"status": "success", "saved": saved})
+
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    def share(self, request, pk=None):
+        """
+        Track video shares.
+        """
+        video = self.get_object()
+        video.shares_count = models.F("shares_count") + 1
+        video.save()
+        video.refresh_from_db()
+
+        return Response({"status": "success", "shares_count": video.shares_count})
 
     @action(detail=True, methods=["post"], permission_classes=[AllowAny])
     def view(self, request, pk=None):
