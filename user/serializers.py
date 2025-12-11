@@ -14,7 +14,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
     first_name = serializers.CharField(required=True)
     last_name = serializers.CharField(required=True)
-    phone_number = serializers.CharField(required=False)
+    phone_number = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
     location = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=False)
     latitude = serializers.FloatField(required=False, allow_null=True)

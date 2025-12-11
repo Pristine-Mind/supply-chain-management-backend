@@ -379,28 +379,33 @@ class PhoneLoginView(APIView):
                         {"error": message, "attempts_remaining": 3 - failed_attempts}, status=status.HTTP_400_BAD_REQUEST
                     )
 
-        try:
-            # Get the user profile with this phone number
-            user_profile = UserProfile.objects.get(phone_number=phone_number)
-            user = user_profile.user
+            try:
+                # Get the user profile with this phone number
+                user_profile = UserProfile.objects.get(phone_number=phone_number)
+                user = user_profile.user
 
-            # Get or create auth token
-            token, created = Token.objects.get_or_create(user=user)
+                # Get or create auth token
+                token, created = Token.objects.get_or_create(user=user)
 
-            return Response(
-                {
-                    "token": token.key,
-                    "has_access_to_marketplace": user_profile.has_access_to_marketplace,
-                    "business_type": user_profile.business_type if hasattr(user_profile, "business_type") else None,
-                    "shop_id": user_profile.shop_id if hasattr(user_profile, "shop_id") else None,
-                    "b2b_verified": getattr(user_profile, "b2b_verified", False),
-                }
-            )
+                return Response(
+                    {
+                        "token": token.key,
+                        "has_access_to_marketplace": user_profile.has_access_to_marketplace,
+                        "business_type": user_profile.business_type if hasattr(user_profile, "business_type") else None,
+                        "shop_id": user_profile.shop_id if hasattr(user_profile, "shop_id") else None,
+                        "b2b_verified": getattr(user_profile, "b2b_verified", False),
+                    }
+                )
 
-        except UserProfile.DoesNotExist:
-            # Record failed attempt for non-existent user
-            LoginAttempt.record_failed_attempt(ip_address=ip_address, username=phone_number, user_agent=user_agent)
-            return Response({"error": "No user found with this phone number."}, status=status.HTTP_404_NOT_FOUND)
+            except UserProfile.DoesNotExist:
+                # Record failed attempt for non-existent user
+                LoginAttempt.record_failed_attempt(ip_address=ip_address, username=phone_number, user_agent=user_agent)
+                return Response({"error": "No user found with this phone number."}, status=status.HTTP_404_NOT_FOUND)
+
+        else:
+            # Generate and send OTP
+            phone_otp = PhoneOTP.generate_otp_for_phone(phone_number)
+            return Response({"message": "OTP sent successfully", "otp": phone_otp.otp})
 
     def get_client_ip(self, request):
         """Get the client's IP address from the request."""
