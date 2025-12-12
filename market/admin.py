@@ -44,6 +44,9 @@ class ShoppableVideoAdmin(admin.ModelAdmin):
     search_fields = ("title", "uploader__username", "description", "product__name")
     readonly_fields = ("views_count", "likes_count", "shares_count", "created_at")
 
+    # Enable admin autocomplete widgets for related fields
+    autocomplete_fields = ("uploader", "product", "additional_products")
+
 
 @admin.register(VideoLike)
 class VideoLikeAdmin(admin.ModelAdmin):
