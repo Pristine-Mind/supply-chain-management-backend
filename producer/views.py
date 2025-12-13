@@ -1122,7 +1122,8 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     filterset_class = MarketplaceProductFilter
 
     def get_queryset(self):
-        return (
+        # Base queryset
+        qs = (
             MarketplaceProduct.objects.filter(is_available=True)
             .select_related(
                 "product",
@@ -1139,6 +1140,22 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             .order_by("-listed_date")
             .distinct()
         )
+
+        # Optional filter: restrict to products belonging to a specific seller/user
+        user_id = None
+        try:
+            user_id = self.request.query_params.get("user_id") or self.request.query_params.get("seller_id")
+        except Exception:
+            user_id = None
+
+        if user_id:
+            try:
+                uid = int(user_id)
+                qs = qs.filter(product__user__id=uid)
+            except (ValueError, TypeError):
+                pass
+
+        return qs
 
     def list(self, request, *args, **kwargs):
         """List marketplace products but randomize order within the first N results.
