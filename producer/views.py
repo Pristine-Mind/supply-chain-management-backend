@@ -230,8 +230,6 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
             cp = getattr(u, "creator_profile", None)
             if cp is not None:
                 data = CreatorProfileSerializer(cp, context={"request": request}).data
-            else:
-                data = {"user": u.id, "username": getattr(u, "username", None)}
             results.append(data)
 
         return Response({"count": len(results), "results": results})
