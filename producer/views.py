@@ -7,6 +7,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.db import models
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -26,6 +27,7 @@ from rest_framework.views import APIView
 from market.models import MarketplaceProduct, ShoppableVideo, UserFollow
 from market.serializers import MarketplaceProductSerializer, ShoppableVideoSerializer
 from user.models import UserProfile
+from notification.models import Notification
 
 # Cache TTLs (seconds) - can be overridden in Django settings
 SEARCH_CACHE_TTL = getattr(settings, "PRODUCER_SEARCH_CACHE_TTL", 30)
@@ -233,6 +235,50 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
             results.append(data)
 
         return Response({"count": len(results), "results": results})
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def follow(self, request, pk=None):
+        """Toggle follow/unfollow for the authenticated user on this creator."""
+        creator = self.get_object()
+        target_user = creator.user
+
+        if request.user == target_user:
+            return Response({"error": "You cannot follow yourself"}, status=400)
+
+        follow, created = UserFollow.objects.get_or_create(follower=request.user, following=target_user)
+
+        if not created:
+            # unfollow
+            follow.delete()
+            try:
+                creator.follower_count = models.F("follower_count") - 1
+                creator.save(update_fields=["follower_count"])
+                creator.refresh_from_db()
+                count = creator.follower_count
+            except Exception:
+                count = UserFollow.objects.filter(following=target_user).count()
+            return Response({"following": False, "follower_count": count})
+
+        # created follow
+        try:
+            creator.follower_count = models.F("follower_count") + 1
+            creator.save(update_fields=["follower_count"])
+            creator.refresh_from_db()
+            count = creator.follower_count
+        except Exception:
+            count = UserFollow.objects.filter(following=target_user).count()
+
+        # create notification for the target user
+        try:
+            Notification.objects.create(
+                user=target_user,
+                notification_type="new_follower",
+                message=f"{request.user.username} started following you",
+            )
+        except Exception:
+            pass
+
+        return Response({"following": True, "follower_count": count})
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def videos(self, request, pk=None):
