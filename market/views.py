@@ -1505,7 +1505,7 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
 
         # Get recommended videos
         service = VideoRecommendationService()
-        videos = service.generate_feed(user, feed_size=10)
+        videos = service.generate_feed(user, feed_size=100)
 
         # Serialize and return
         serializer = self.get_serializer(videos, many=True)
