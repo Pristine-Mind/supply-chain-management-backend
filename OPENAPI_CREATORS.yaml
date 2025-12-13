@@ -1,0 +1,304 @@
+openapi: 3.0.1
+info:
+  title: Creators & Shoppable Videos (partial)
+  version: 1.0.0
+  description: OpenAPI components and example paths for CreatorProfile and ShoppableVideo frontend integration.
+
+paths:
+  /api/v1/creators/:
+    get:
+      summary: List creators (searchable)
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search query applied to handle/display_name/username
+        - in: query
+          name: page
+          schema:
+            type: integer
+          description: Page number
+      responses:
+        '200':
+          description: Paginated list of creators
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCreators'
+
+  /api/v1/creators/{id}/:
+    get:
+      summary: Retrieve a creator profile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Creator profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatorProfile'
+
+  /api/v1/creators/{id}/videos/:
+    get:
+      summary: List videos for a creator (creator_profile OR uploader match)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: page
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated list of videos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVideos'
+
+  /api/v1/creators/{id}/follow/:
+    post:
+      summary: Toggle follow/unfollow for authenticated user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Follow toggled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowToggleResponse'
+
+  /api/v1/shoppable-videos/{id}/view/:
+    post:
+      summary: Register a video view (increments video + creator counters)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Updated video view count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShoppableVideoViewResponse'
+
+  /api/v1/shoppable-videos/{id}/product-tags/:
+    get:
+      summary: List product tags for a video
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Array of product tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductTag'
+    post:
+      summary: Create a product tag on a video (authenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductTagCreate'
+      responses:
+        '201':
+          description: Created product tag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductTag'
+
+  /api/v1/affiliate/redirect:
+    get:
+      summary: Affiliate redirect (logs click and issues 302)
+      parameters:
+        - in: query
+          name: click_id
+          schema:
+            type: string
+        - in: query
+          name: post_id
+          schema:
+            type: integer
+        - in: query
+          name: product_id
+          schema:
+            type: integer
+      responses:
+        '302':
+          description: Redirect to partner target URL (Location header)
+
+components:
+  schemas:
+    CreatorProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        user:
+          type: integer
+        handle:
+          type: string
+        display_name:
+          type: string
+        bio:
+          type: string
+        follower_count:
+          type: integer
+        views_count:
+          type: integer
+        profile_image:
+          type: string
+      example:
+        id: 42
+        user: 101
+        handle: alice_shop
+        display_name: Alice
+        bio: Curated fashion and accessories
+        follower_count: 1200
+        views_count: 53400
+        profile_image: /media/avatars/alice.jpg
+
+    PaginatedCreators:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreatorProfile'
+
+    ShoppableVideo:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        video_url:
+          type: string
+        thumbnail:
+          type: string
+        uploader_profile:
+          $ref: '#/components/schemas/CreatorProfile'
+        creator_profile:
+          $ref: '#/components/schemas/CreatorProfile'
+        product_tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductTag'
+        views_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      example:
+        id: 9001
+        title: Spring lookbook
+        video_url: /media/videos/9001.mp4
+        thumbnail: /media/videos/thumbs/9001.jpg
+        views_count: 1200
+        created_at: '2025-12-01T10:23:00Z'
+
+    PaginatedVideos:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShoppableVideo'
+
+    FollowToggleResponse:
+      type: object
+      properties:
+        following:
+          type: boolean
+        follower_count:
+          type: integer
+      example:
+        following: true
+        follower_count: 1201
+
+    ShoppableVideoViewResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        views_count:
+          type: integer
+      example:
+        id: 9001
+        views_count: 1201
+
+    ProductTag:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        x:
+          type: number
+        y:
+          type: number
+        label:
+          type: string
+      example:
+        id: 1
+        product_id: 200
+        x: 0.42
+        y: 0.63
+        label: Jacket
+
+    ProductTagCreate:
+      type: object
+      required: [product_id, x, y]
+      properties:
+        product_id:
+          type: integer
+        x:
+          type: number
+        y:
+          type: number
+        label:
+          type: string

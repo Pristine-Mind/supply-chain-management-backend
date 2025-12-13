@@ -5,9 +5,12 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import (
     FileExtensionValidator,
+    MaxValueValidator,
     MinValueValidator,
     validate_email,
 )
@@ -1777,7 +1780,24 @@ class ShoppableVideo(models.Model):
     Allows tagging products for instant purchase.
     """
 
-    uploader = models.ForeignKey(User, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Uploader"))
+    uploader = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shoppable_videos",
+        verbose_name=_("Uploader"),
+    )
+    # Direct link to the creator profile (denormalized reference for faster reads)
+    creator_profile = models.ForeignKey(
+        "producer.CreatorProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="videos",
+        verbose_name=_("Creator Profile"),
+        db_index=True,
+    )
     video_file = models.FileField(
         upload_to="shoppable_videos/",
         verbose_name=_("Video File"),
@@ -1808,6 +1828,17 @@ class ShoppableVideo(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
     is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+    # Generic relation to structured product tags (image pins / video timecode tags)
+    product_tags = GenericRelation("market.ProductTag", related_query_name="product_tags")
+
+    def clean(self):
+        # Ensure at least one of uploader or creator_profile is present
+        errors = {}
+        if not self.uploader and not self.creator_profile:
+            errors["uploader"] = "Either uploader or creator_profile must be set."
+            errors["creator_profile"] = "Either uploader or creator_profile must be set."
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
         return f"Video {self.id} by {self.uploader.username}"
@@ -1928,3 +1959,89 @@ class UserFollow(models.Model):
 
     def __str__(self):
         return f"{self.follower.username} follows {self.following.username}"
+
+
+class ProductTag(models.Model):
+    """
+    Structured product tag that can be attached to arbitrary content (videos, images, posts)
+    via a GenericForeignKey. Supports positional hotspots and optional timecodes for videos.
+
+    Coordinates are stored as relative floats in the range [0.0, 1.0].
+    """
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    product = models.ForeignKey(
+        MarketplaceProduct, on_delete=models.CASCADE, related_name="product_tags", verbose_name=_("Product")
+    )
+
+    x = models.FloatField(validators=[MinValueValidator(0.0), MaxValueValidator(1.0)], help_text="Relative X (0-1)")
+    y = models.FloatField(validators=[MinValueValidator(0.0), MaxValueValidator(1.0)], help_text="Relative Y (0-1)")
+    width = models.FloatField(null=True, blank=True, validators=[MinValueValidator(0.0), MaxValueValidator(1.0)])
+    height = models.FloatField(null=True, blank=True, validators=[MinValueValidator(0.0), MaxValueValidator(1.0)])
+
+    # Optional timecode in seconds (for video tags)
+    timecode = models.FloatField(null=True, blank=True, validators=[MinValueValidator(0.0)])
+
+    label = models.CharField(max_length=200, blank=True)
+    merchant_url = models.URLField(blank=True, null=True)
+    affiliate_meta = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Product Tag")
+        verbose_name_plural = _("Product Tags")
+        indexes = [models.Index(fields=["content_type", "object_id"])]
+
+    def clean(self):
+        # Validate coordinate ranges and timecode
+        errors = {}
+        if not (0.0 <= self.x <= 1.0):
+            errors["x"] = "x must be between 0.0 and 1.0"
+        if not (0.0 <= self.y <= 1.0):
+            errors["y"] = "y must be between 0.0 and 1.0"
+        if self.width is not None and not (0.0 <= self.width <= 1.0):
+            errors["width"] = "width must be between 0.0 and 1.0"
+        if self.height is not None and not (0.0 <= self.height <= 1.0):
+            errors["height"] = "height must be between 0.0 and 1.0"
+        if self.timecode is not None and self.timecode < 0:
+            errors["timecode"] = "timecode must be non-negative"
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        ct = self.content_type.model if self.content_type else "object"
+        return f"Tag {self.id} on {ct} #{self.object_id} -> {self.product.product.name}"
+
+
+class AffiliateClick(models.Model):
+    """Log of affiliate redirects and clicks for attribution."""
+
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    product = models.ForeignKey(MarketplaceProduct, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Generic ref to the content (post/video) that produced the click
+    content_type = models.ForeignKey(ContentType, on_delete=models.SET_NULL, null=True, blank=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    redirect_url = models.URLField()
+    affiliate_meta = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    converted = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = _("Affiliate Click")
+        verbose_name_plural = _("Affiliate Clicks")
+        indexes = [
+            models.Index(fields=["product", "created_at"]),
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+
+    def __str__(self):
+        return f"AffiliateClick {self.id} -> {self.redirect_url}"

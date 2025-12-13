@@ -12,6 +12,7 @@ from .models import (
     Brand,
     Category,
     City,
+    CreatorProfile,
     Customer,
     DirectSale,
     LedgerEntry,
@@ -30,6 +31,33 @@ from .models import (
     Subcategory,
     SubSubcategory,
 )
+
+
+class CreatorProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = CreatorProfile
+        fields = [
+            "id",
+            "user",
+            "username",
+            "handle",
+            "display_name",
+            "bio",
+            "avatar",
+            "cover_image",
+            "is_verified",
+            "social_links",
+            "location",
+            "follower_count",
+            "posts_count",
+            "views_count",
+            "public_collections_enabled",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["user", "follower_count", "posts_count", "views_count", "created_at", "updated_at"]
 
 
 class ProducerSerializer(serializers.ModelSerializer):

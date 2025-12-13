@@ -3,11 +3,14 @@ import logging
 import requests
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status, views, viewsets
@@ -35,6 +38,7 @@ from producer.serializers import MarketplaceProductReviewSerializer
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
 from .models import (
+    AffiliateClick,
     Bid,
     Cart,
     CartItem,
@@ -49,6 +53,7 @@ from .models import (
     Notification,
     OrderStatus,
     Payment,
+    ProductTag,
     ProductView,
     ShoppableVideo,
     UserFollow,
@@ -74,6 +79,7 @@ from .serializers import (
     MarketplaceUserProductSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
+    ProductTagSerializer,
     PurchaseSerializer,
     SellerBidSerializer,
     SellerProductSerializer,
@@ -1505,6 +1511,21 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(videos, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="feed/following", permission_classes=[IsAuthenticated])
+    def following_feed(self, request):
+        """Return a feed composed of videos from creators the user follows."""
+        user = request.user
+        following_ids = UserFollow.objects.filter(follower=user).values_list("following_id", flat=True)
+        qs = ShoppableVideo.objects.filter(uploader__id__in=following_ids, is_active=True).order_by("-created_at")
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def like(self, request, pk=None):
         video = self.get_object()
@@ -1604,6 +1625,68 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
             {"status": "success", "message": f"Added {product.product.name} to cart", "cart_item_count": cart.items.count()}
         )
 
+    @action(detail=True, methods=["get", "post"], url_path="product-tags")
+    def product_tags(self, request, pk=None):
+        """Get or set structured product tags for this video/post.
+
+        GET: anyone can list tags.
+        POST: uploader or staff can replace tags for the content.
+        """
+        video = self.get_object()
+        if request.method == "GET":
+            tags = video.product_tags.all()
+            serializer = ProductTagSerializer(tags, many=True)
+            return Response(serializer.data)
+
+        # POST - require authentication and owner/staff
+        if not request.user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+        if request.user != video.uploader and not request.user.is_staff:
+            return Response({"detail": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        payload = request.data.get("product_tags") or []
+        if not isinstance(payload, list):
+            return Response({"detail": "product_tags must be a list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.contrib.contenttypes.models import ContentType
+
+        ct = ContentType.objects.get_for_model(video)
+
+        created_objs = []
+        try:
+            with transaction.atomic():
+                ProductTag.objects.filter(content_type=ct, object_id=video.pk).delete()
+                for item in payload:
+                    pid = item.get("product_id")
+                    if not pid:
+                        raise ValueError("product_id is required for each tag")
+                    try:
+                        product = MarketplaceProduct.objects.get(pk=pid)
+                    except MarketplaceProduct.DoesNotExist:
+                        raise ValueError(f"product_id {pid} not found")
+
+                    created = ProductTag.objects.create(
+                        content_type=ct,
+                        object_id=video.pk,
+                        product=product,
+                        x=item.get("x", 0.0),
+                        y=item.get("y", 0.0),
+                        width=item.get("width"),
+                        height=item.get("height"),
+                        timecode=item.get("timecode"),
+                        label=item.get("label", ""),
+                        merchant_url=item.get("merchant_url"),
+                        affiliate_meta=item.get("affiliate_meta", {}),
+                    )
+                    created_objs.append(created)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": "Validation error", "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ProductTagSerializer(created_objs, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], permission_classes=[AllowAny])
     def view(self, request, pk=None):
         """
@@ -1613,6 +1696,14 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         video.views_count = models.F("views_count") + 1
         video.save()
         video.refresh_from_db()
+        # Also increment uploader's creator profile views_count if present
+        try:
+            cp = video.uploader.creator_profile
+            cp.views_count = models.F("views_count") + 1
+            cp.save()
+            cp.refresh_from_db()
+        except Exception:
+            pass
         return Response({"status": "success", "views_count": video.views_count})
 
 
@@ -1689,3 +1780,117 @@ class UserFollowViewSet(viewsets.ModelViewSet):
             return Response({"status": "unfollowed"})
 
         return Response({"status": "followed"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def follow_creator(request, pk):
+    """Follow/unfollow a creator by user id (alias endpoint).
+
+    Returns current follower_count.
+    """
+    target = get_object_or_404(User, pk=pk)
+    if target == request.user:
+        return Response({"error": "You cannot follow yourself"}, status=status.HTTP_400_BAD_REQUEST)
+
+    follow, created = UserFollow.objects.get_or_create(follower=request.user, following=target)
+    if not created:
+        # Unfollow
+        follow.delete()
+        # decrement follower_count if CreatorProfile exists
+        try:
+            cp = target.creator_profile
+            cp.follower_count = models.F("follower_count") - 1
+            cp.save()
+            cp.refresh_from_db()
+            count = cp.follower_count
+        except Exception:
+            count = UserFollow.objects.filter(following=target).count()
+        return Response({"status": "unfollowed", "follower_count": count})
+
+    # created follow
+    try:
+        cp = target.creator_profile
+        cp.follower_count = models.F("follower_count") + 1
+        cp.save()
+        cp.refresh_from_db()
+        count = cp.follower_count
+    except Exception:
+        count = UserFollow.objects.filter(following=target).count()
+
+    # emit a notification/event if needed
+    try:
+        Notification.objects.create(
+            user=target, notification_type="new_follower", message=f"{request.user.username} started following you"
+        )
+    except Exception:
+        pass
+
+    return Response({"status": "followed", "follower_count": count})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@never_cache
+def affiliate_redirect(request):
+    """Resolve an affiliate redirect and log an AffiliateClick, then 302 redirect.
+
+    Query params supported:
+    - click_id: UUID of an existing AffiliateClick (if pre-created)
+    - post_id + product_id: to resolve ProductTag and its merchant_url/affiliate_meta
+    """
+    click_id = request.query_params.get("click_id")
+    post_id = request.query_params.get("post_id")
+    product_id = request.query_params.get("product_id")
+
+    # If click_id provided, try to fetch
+    if click_id:
+        try:
+            ac = AffiliateClick.objects.get(id=click_id)
+            # update request info
+            ac.ip_address = request.META.get("REMOTE_ADDR")
+            ac.user_agent = request.META.get("HTTP_USER_AGENT", "")
+            ac.user = request.user if request.user.is_authenticated else ac.user
+            ac.save()
+            return redirect(ac.redirect_url)
+        except AffiliateClick.DoesNotExist:
+            return Response({"error": "click_id not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Else resolve from post_id and product_id
+    if not (post_id and product_id):
+        return Response({"error": "post_id and product_id required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Find a ProductTag for this content
+    tags = ProductTag.objects.filter(object_id=post_id, product_id=product_id).order_by("id")
+    if not tags.exists():
+        # fallback: redirect to internal product detail
+        try:
+            mp = MarketplaceProduct.objects.get(id=product_id)
+            internal = request.build_absolute_uri(reverse("marketplace-detail", args=[mp.id]))
+            return redirect(internal)
+        except Exception:
+            return Response({"error": "product tag or product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    tag = tags.first()
+    redirect_url = tag.merchant_url or None
+    if not redirect_url:
+        # fallback to marketplace product page
+        try:
+            mp = MarketplaceProduct.objects.get(id=product_id)
+            redirect_url = request.build_absolute_uri(reverse("marketplace-detail", args=[mp.id]))
+        except Exception:
+            return Response({"error": "no redirect available"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Log AffiliateClick
+    ac = AffiliateClick.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        product_id=product_id,
+        content_type=ContentType.objects.get_for_model(tag.content_object),
+        object_id=tag.object_id,
+        redirect_url=redirect_url,
+        affiliate_meta=tag.affiliate_meta or {},
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+    )
+
+    return redirect(redirect_url)

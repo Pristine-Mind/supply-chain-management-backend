@@ -13,6 +13,7 @@ from user.admin_permissions import (
 )
 
 from .models import (
+    AffiliateClick,
     Bid,
     Cart,
     CartItem,
@@ -29,6 +30,7 @@ from .models import (
     Notification,
     OrderTrackingEvent,
     Payment,
+    ProductTag,
     Purchase,
     ShoppableVideo,
     UserInteraction,
@@ -54,6 +56,20 @@ class VideoLikeAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("user__username", "video__description")
     readonly_fields = ("created_at",)
+
+
+@admin.register(ProductTag)
+class ProductTagAdmin(admin.ModelAdmin):
+    list_display = ("id", "product", "content_type", "object_id", "timecode", "created_at")
+    search_fields = ("product__product__name", "label")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(AffiliateClick)
+class AffiliateClickAdmin(admin.ModelAdmin):
+    list_display = ("id", "product", "redirect_url", "user", "created_at")
+    search_fields = ("product__product__name", "redirect_url")
+    readonly_fields = ("id", "created_at")
 
 
 @admin.register(Purchase)

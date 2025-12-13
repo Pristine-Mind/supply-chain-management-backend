@@ -28,6 +28,7 @@ from .models import (
     Notification,
     OrderTrackingEvent,
     Payment,
+    ProductTag,
     Purchase,
     ShoppableVideo,
     UserFollow,
@@ -947,18 +948,27 @@ class VoiceSearchInputSerializer(serializers.Serializer):
 
 class ShoppableVideoSerializer(serializers.ModelSerializer):
     uploader_name = serializers.CharField(source="uploader.username", read_only=True)
+    uploader_profile = serializers.SerializerMethodField()
+    uploader_profile_url = serializers.SerializerMethodField()
+    creator_profile = serializers.SerializerMethodField()
+    creator_profile_id = serializers.IntegerField(write_only=True, required=False)
     product = MarketplaceProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=MarketplaceProduct.objects.all(), source="product", write_only=True
     )
     is_liked = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    product_tags = serializers.SerializerMethodField()
 
     class Meta:
         model = ShoppableVideo
         fields = [
             "id",
             "uploader",
+            "uploader_profile",
+            "creator_profile",
+            "creator_profile_id",
+            "uploader_profile_url",
             "uploader_name",
             "video_file",
             "thumbnail",
@@ -967,6 +977,7 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
             "product",
             "product_id",
             "tags",
+            "product_tags",
             "trend_score",
             "views_count",
             "likes_count",
@@ -983,6 +994,42 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
             return VideoLike.objects.filter(user=request.user, video=obj).exists()
         return False
 
+    def get_uploader_profile(self, obj):
+        try:
+            from producer.serializers import CreatorProfileSerializer
+
+            if hasattr(obj.uploader, "creator_profile"):
+                return CreatorProfileSerializer(obj.uploader.creator_profile, context=self.context).data
+        except Exception:
+            return None
+        return None
+
+    def get_uploader_profile_url(self, obj):
+        request = self.context.get("request")
+        try:
+            if not request:
+                return None
+            if hasattr(obj.uploader, "creator_profile"):
+                from django.urls import reverse
+
+                cp = obj.uploader.creator_profile
+                # router basename in main urls: 'creators'
+                url = reverse("creators-detail", args=[cp.id])
+                return request.build_absolute_uri(url)
+        except Exception:
+            return None
+        return None
+
+    def get_creator_profile(self, obj):
+        try:
+            if hasattr(obj, "creator_profile") and obj.creator_profile is not None:
+                from producer.serializers import CreatorProfileSerializer
+
+                return CreatorProfileSerializer(obj.creator_profile, context=self.context).data
+        except Exception:
+            return None
+        return None
+
     def get_is_saved(self, obj):
         request = self.context.get("request")
         if request and request.user.is_authenticated:
@@ -990,8 +1037,35 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
         return False
 
     def create(self, validated_data):
-        validated_data["uploader"] = self.context["request"].user
+        # If request user is authenticated, set uploader; otherwise allow creator_profile via payload
+        request = self.context.get("request")
+        if request and getattr(request, "user", None) and request.user.is_authenticated:
+            validated_data["uploader"] = request.user
+        # If uploader has a creator_profile, set it on the video for faster reads
+        try:
+            cp = getattr(request.user, "creator_profile", None) if request and getattr(request, "user", None) else None
+            if cp:
+                validated_data["creator_profile"] = cp
+            else:
+                # Accept creator_profile_id from payload for unauthenticated/alternate flows
+                cp_id = validated_data.pop("creator_profile_id", None)
+                if cp_id:
+                    from producer.models import CreatorProfile
+
+                    try:
+                        validated_data["creator_profile"] = CreatorProfile.objects.get(pk=cp_id)
+                    except CreatorProfile.DoesNotExist:
+                        pass
+        except Exception:
+            pass
         return super().create(validated_data)
+
+    def get_product_tags(self, obj):
+        # Provide structured product tags for the content (if any)
+        tags = getattr(obj, "product_tags", None)
+        if tags is None:
+            return []
+        return ProductTagSerializer(tags.all(), many=True).data
 
 
 class VideoLikeSerializer(serializers.ModelSerializer):
@@ -1029,6 +1103,36 @@ class VideoReportSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["reporter"] = self.context["request"].user
         return super().create(validated_data)
+
+
+class ProductTagSerializer(serializers.ModelSerializer):
+    product = serializers.PrimaryKeyRelatedField(read_only=True)
+    product_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductTag
+        fields = [
+            "id",
+            "product",
+            "product_detail",
+            "x",
+            "y",
+            "width",
+            "height",
+            "timecode",
+            "label",
+            "merchant_url",
+            "affiliate_meta",
+            "created_at",
+        ]
+
+    def get_product_detail(self, obj):
+        try:
+            from producer.serializers import MarketplaceProductSerializer
+
+            return MarketplaceProductSerializer(obj.product).data
+        except Exception:
+            return None
 
 
 class UserFollowSerializer(serializers.ModelSerializer):

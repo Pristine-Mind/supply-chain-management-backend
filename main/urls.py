@@ -40,9 +40,11 @@ from market.views import (
     UserFollowViewSet,
     VideoCommentViewSet,
     VideoReportViewSet,
+    affiliate_redirect,
     cancel_marketplace_order,
     create_order,
     create_purchase,
+    follow_creator,
     log_interaction,
     log_product_view,
     marketplace_order_detail,
@@ -58,6 +60,7 @@ from producer.views import (
     BrandViewSet,
     CategoryViewSet,
     CityListView,
+    CreatorProfileViewSet,
     CustomerViewSet,
     DailyProductStatsView,
     DashboardAPIView,
@@ -115,6 +118,7 @@ router.register(r"categories", CategoryViewSet, basename="categories")
 router.register(r"subcategories", SubcategoryViewSet, basename="subcategories")
 router.register(r"sub-subcategories", SubSubcategoryViewSet, basename="sub-subcategories")
 router.register(r"producers", ProducerViewSet)
+router.register(r"creators", CreatorProfileViewSet, basename="creators")
 router.register(r"customers", CustomerViewSet)
 router.register(r"products", ProductViewSet)
 router.register(r"orders", OrderViewSet)
@@ -204,6 +208,8 @@ urlpatterns = [
         CartItemDeleteView.as_view(),
         name="cart-item-delete",
     ),
+    path("api/v1/creators/<int:pk>/follow/", follow_creator, name="creator-follow"),
+    path("api/v1/affiliate/redirect/", affiliate_redirect, name="affiliate-redirect"),
     path("api/v1/deliveries/", DeliveryCreateView.as_view(), name="delivery-create"),
     path("api/shops/<uuid:shop_id>/qr/", ShopQRAPIView.as_view(), name="shop-qr"),
     path("api/products/<int:pk>/log-view/", log_product_view, name="log-product-view"),
