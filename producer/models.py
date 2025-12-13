@@ -398,6 +398,38 @@ class Product(models.Model):
         sales = list(self.actual_sales(start, today))
         day_map = {r["day"]: r["units_sold"] for r in sales}
 
+
+class CreatorProfile(models.Model):
+    """Profile data for creators/influencers."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="creator_profile")
+    handle = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    display_name = models.CharField(max_length=150, null=True, blank=True)
+    bio = models.TextField(blank=True, null=True)
+    avatar = models.ImageField(upload_to="creator_avatars/", null=True, blank=True)
+    cover_image = models.ImageField(upload_to="creator_covers/", null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
+    social_links = models.JSONField(default=dict, blank=True)
+    location = models.ForeignKey("City", on_delete=models.SET_NULL, null=True, blank=True, related_name="creators")
+    categories = models.ManyToManyField(Category, blank=True, related_name="creators")
+
+    follower_count = models.PositiveIntegerField(default=0)
+    posts_count = models.PositiveIntegerField(default=0)
+    views_count = models.PositiveIntegerField(default=0)
+
+    public_collections_enabled = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_active_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Creator Profile")
+        verbose_name_plural = _("Creator Profiles")
+
+    def __str__(self):
+        return self.display_name or (self.handle or self.user.username)
+
         actuals, forecast = [], []
         window_vals = []
         for i in range(days):

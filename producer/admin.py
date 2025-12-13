@@ -14,6 +14,7 @@ from .models import (
     B2BPriceTier,
     Brand,
     Category,
+    CreatorProfile,
     Customer,
     DirectSale,
     LedgerEntry,
@@ -93,6 +94,13 @@ class MarketplaceProductAdminForm(forms.ModelForm):
                 cleaned_data["color"] = product.color
 
         return cleaned_data
+
+
+@admin.register(CreatorProfile)
+class CreatorProfileAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "display_name", "handle", "follower_count", "created_at")
+    search_fields = ("user__username", "handle", "display_name")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(Producer)
@@ -487,25 +495,25 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
-        # # Staff and superusers can see everything
+
+        # Determine base filtered queryset according to user role
         if request.user.is_superuser:
-            return qs
+            filtered = qs
+        elif not hasattr(request.user, "user_profile"):
+            filtered = qs.none()
+        else:
+            user_profile = request.user.user_profile
+            if not user_profile.role:
+                filtered = qs.none()
+            elif user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
+                filtered = qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
+            elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
+                filtered = qs.all()
+            else:
+                filtered = qs.none()
 
-        if not hasattr(request.user, "user_profile"):
-            return qs.none()
-
-        user_profile = request.user.user_profile
-        if not user_profile.role:
-            return qs.none()
-
-        # Filter by shop_id if user is business_owner or business_staff
-        if user_profile.role.code in ["business_owner", "business_staff"] and user_profile.shop_id:
-            return qs.filter(product__user__user_profile__shop_id=user_profile.shop_id)
-        # For other roles, only show their own records
-        elif user_profile.role.code in ["agent", "admin"] and user_profile.shop_id:
-            return qs.all()
-
-        return qs.none()
+        # Avoid N+1 by selecting related product and commonly accessed product relations
+        return filtered.select_related("product", "product__brand", "product__user")
 
     def get_size_display(self, obj):
         """Display size choice with label or inherited from product"""

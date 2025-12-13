@@ -172,3 +172,53 @@ Report a video for inappropriate content.
   "description": "Bot account posting spam links"
 }
 ```
+
+### 5. Creators (`/creators/`)
+
+Endpoints related to creator profiles and discovery. Base path: `/api/v1/creators/`.
+
+#### List / Search Creators
+**GET** `/api/v1/creators/?q={query}`
+- Supports searching by `handle`, `display_name`, or `username` via the `q` query param.
+- Sorted by `follower_count` by default.
+
+**Response:**
+```json
+{
+  "count": 123,
+  "results": [
+    {
+      "id": 12,
+      "user": 45,
+      "username": "creator123",
+      "handle": "@creator",
+      "display_name": "Creator Name",
+      "avatar": "http://.../avatar.jpg",
+      "follower_count": 1024,
+      "posts_count": 34,
+      "views_count": 120345,
+      "uploader_profile_url": "http://localhost:8005/api/v1/creators/12/"
+    }
+  ]
+}
+```
+
+#### Retrieve Creator
+**GET** `/api/v1/creators/{id}/`
+Returns the full `CreatorProfile` for the given id.
+
+#### Update Creator (owner only)
+**PATCH/PUT** `/api/v1/creators/{id}/`
+- Only the profile owner may update their profile fields (avatar, bio, social_links, etc.).
+
+#### Followers
+**GET** `/api/v1/creators/{id}/followers/`
+Returns a list of users (or creator profiles) who follow this creator.
+
+#### Following
+**GET** `/api/v1/creators/{id}/following/`
+Returns a list of creators this creator (user) follows.
+
+#### My Following
+**GET** `/api/v1/creators/me_following/`
+Authenticated endpoint returning creators the current user follows.
