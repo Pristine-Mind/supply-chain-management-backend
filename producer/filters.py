@@ -145,6 +145,10 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         field_name="is_made_in_nepal",
         label="Made in Nepal",
     )
+    made_for_you = django_filters.BooleanFilter(
+        field_name="made_for_you",
+        label="Made For You",
+    )
 
     # Size and color filters with effective value support
     size = django_filters.MultipleChoiceFilter(
@@ -168,6 +172,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
             "city",
             "profile_type",
             "is_made_in_nepal",
+            "made_for_you",
             "size",
             "color",
             "has_additional_info",

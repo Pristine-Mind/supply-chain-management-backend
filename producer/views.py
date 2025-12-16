@@ -1266,6 +1266,48 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
         return response
 
+    @action(detail=False, methods=["get"], url_path="made-for-you", permission_classes=[AllowAny])
+    def made_for_you(self, request):
+        """Return marketplace products flagged `made_for_you`.
+
+        Uses the same optimized queryset (select_related / prefetch_related)
+        and caches the paginated response for a short TTL to avoid N+1s
+        and to make this endpoint fast.
+        """
+        qs = self.filter_queryset(self.get_queryset().filter(made_for_you=True))
+
+        try:
+            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
+        except Exception:
+            user_part = "anon"
+
+        cache_key = (
+            "producer:made_for_you:"
+            + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        paginator = self.paginator or PageNumberPagination()
+        page_size = request.query_params.get("page_size")
+        if page_size:
+            try:
+                paginator.page_size = int(page_size)
+            except (ValueError, TypeError):
+                pass
+
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = self.get_serializer(page, many=True, context={"request": request})
+        response = paginator.get_paginated_response(serializer.data)
+
+        try:
+            cache.set(cache_key, response.data, LIST_CACHE_TTL)
+        except Exception:
+            pass
+
+        return response
+
     @action(detail=False, methods=["get"], url_path="search", permission_classes=[AllowAny])
     def search(self, request):
         from haystack.query import SQ, SearchQuerySet

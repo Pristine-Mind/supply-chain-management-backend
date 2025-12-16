@@ -681,6 +681,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_free_shipping = serializers.BooleanField(read_only=True)
     is_featured = serializers.BooleanField(read_only=False)
     is_made_in_nepal = serializers.BooleanField(read_only=False)
+    made_for_you = serializers.BooleanField(read_only=False)
 
     # B2B Fields
     effective_price = serializers.SerializerMethodField()
@@ -719,6 +720,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "is_free_shipping",
             "is_featured",
             "is_made_in_nepal",
+            "made_for_you",
             "recent_purchases_count",
             "listed_date",
             "is_available",
@@ -908,6 +910,7 @@ class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
     shipping_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     is_featured = serializers.BooleanField(required=False, default=False)
     is_made_in_nepal = serializers.BooleanField(required=False, default=False)
+    made_for_you = serializers.BooleanField(required=False, default=False)
 
     # Read-only fields for confirmation
     source_brand_name = serializers.SerializerMethodField(read_only=True)

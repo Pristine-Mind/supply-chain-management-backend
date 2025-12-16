@@ -852,6 +852,11 @@ class MarketplaceProduct(models.Model):
     is_made_in_nepal = models.BooleanField(
         default=False, verbose_name=_("Made in Nepal"), help_text=_("Indicates if this product is made in Nepal")
     )
+    made_for_you = models.BooleanField(
+        default=False,
+        verbose_name=_("Made For You"),
+        help_text=_("Flag indicating the product is part of personalized 'made for you' recommendations"),
+    )
     size = models.CharField(
         max_length=20,
         choices=SizeChoices.choices,
