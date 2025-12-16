@@ -593,7 +593,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
             },
         ),
         ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "shipping_cost")}),
-        ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score")}),
+        ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score", "made_for_you")}),
         ("Analytics", {"fields": ("recent_purchases_count", "view_count"), "classes": ("collapse",)}),
     )
 
