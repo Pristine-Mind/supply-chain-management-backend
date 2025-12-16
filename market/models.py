@@ -399,6 +399,8 @@ class Delivery(models.Model):
     # Estimated and actual delivery times
     estimated_delivery_date = models.DateTimeField(null=True, blank=True)
     actual_delivery_date = models.DateTimeField(null=True, blank=True)
+    # Flag to indicate this delivery is for a buyer's first order
+    is_first_order = models.BooleanField(default=False, verbose_name=_("Is First Order"))
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -667,6 +669,9 @@ class MarketplaceSale(models.Model):
         verbose_name=_("Delivery Details"),
     )
 
+    # First order flag - if True, shipping is waived
+    is_first_order = models.BooleanField(default=False, verbose_name=_("Is First Order"))
+
     # Additional Information
     notes = models.TextField(blank=True, null=True, verbose_name=_("Order Notes"))
 
@@ -752,6 +757,24 @@ class MarketplaceSale(models.Model):
         # Calculate subtotal
         if not hasattr(self, "subtotal") or not self.subtotal:
             self.subtotal = self.unit_price_at_purchase * self.quantity
+
+        # Auto-detect first sale for authenticated buyers when creating
+        if not self.pk and self.buyer:
+            try:
+                self.is_first_order = not MarketplaceSale.objects.filter(buyer=self.buyer, is_deleted=False).exists()
+            except Exception:
+                self.is_first_order = False
+
+        # Auto-detect first order for authenticated customers when creating
+        if not self.pk and self.customer:
+            try:
+                self.is_first_order = not MarketplaceOrder.objects.filter(customer=self.customer, is_deleted=False).exists()
+            except Exception:
+                self.is_first_order = False
+
+        # If this is marked as first order, waive shipping
+        if getattr(self, "is_first_order", False):
+            self.shipping_cost = Decimal("0")
 
         # Calculate total amount
         if not hasattr(self, "total_amount") or not self.total_amount:
@@ -1045,7 +1068,9 @@ class MarketplaceOrderManager(models.Manager):
         return self.create(**kwargs)
 
     @transaction.atomic
-    def create_order_from_cart(self, cart, delivery_info, payment_method=None):
+    def create_order_from_cart(
+        self, cart, delivery_info, payment_method=None, is_first_order=None, shipping_cost=Decimal("0")
+    ):
         """
         Create a new order from cart items.
 
@@ -1060,10 +1085,20 @@ class MarketplaceOrderManager(models.Manager):
         if not cart.items.exists():
             raise ValidationError("Cannot create order from empty cart.")
 
-        # Calculate total amount
-        total_amount = sum(
+        # Calculate total amount (items + shipping)
+        items_total = sum(
             (item.product.discounted_price or item.product.listed_price) * item.quantity for item in cart.items.all()
         )
+        # Auto-detect first order if not explicitly provided
+        if is_first_order is None:
+            try:
+                is_first_order = not MarketplaceOrder.objects.filter(customer=cart.user, is_deleted=False).exists()
+            except Exception:
+                is_first_order = False
+
+        if is_first_order:
+            shipping_cost = Decimal("0")
+        total_amount = items_total + (shipping_cost or Decimal("0"))
 
         # Create the order
         order = self.create(
@@ -1071,6 +1106,8 @@ class MarketplaceOrderManager(models.Manager):
             delivery=delivery_info,
             total_amount=total_amount,
             payment_method=payment_method,
+            shipping_cost=shipping_cost,
+            is_first_order=is_first_order,
         )
 
         # Create order items from cart items
@@ -1157,6 +1194,9 @@ class MarketplaceOrder(models.Model):
 
     # Financial Information
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
+    shipping_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
+    )
     currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.NPR, verbose_name=_("Currency"))
 
     # Payment Information
@@ -1211,6 +1251,9 @@ class MarketplaceOrder(models.Model):
     is_deleted = models.BooleanField(default=False, verbose_name=_("Is Deleted"))
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Deleted At"))
 
+    # Flag to indicate this is the customer's first order (used to waive shipping)
+    is_first_order = models.BooleanField(default=False, verbose_name=_("Is First Order"))
+
     class Meta:
         verbose_name = _("Marketplace Order")
         verbose_name_plural = _("Marketplace Orders")
@@ -1261,6 +1304,10 @@ class MarketplaceOrder(models.Model):
         # Generate order number if not set
         if not self.order_number:
             self.order_number = f"MP-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+        # If this is marked as first order, waive shipping
+        if getattr(self, "is_first_order", False):
+            self.shipping_cost = Decimal("0")
 
         # Set delivered_at when status changes to delivered
         if self.order_status == OrderStatus.DELIVERED and not self.delivered_at:

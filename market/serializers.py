@@ -925,9 +925,14 @@ class CreateOrderSerializer(serializers.Serializer):
         # Create delivery info
         delivery_info = DeliveryInfo.objects.create(**delivery_data)
 
-        # Create order using the manager method
+        # Auto-detect first order for this customer and create order
+        try:
+            is_first_order = not MarketplaceOrder.objects.filter(customer=cart.user, is_deleted=False).exists()
+        except Exception:
+            is_first_order = False
+
         order = MarketplaceOrder.objects.create_order_from_cart(
-            cart=cart, delivery_info=delivery_info, payment_method=payment_method
+            cart=cart, delivery_info=delivery_info, payment_method=payment_method, is_first_order=is_first_order
         )
 
         # Clear the cart after successful order creation

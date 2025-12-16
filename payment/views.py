@@ -416,9 +416,24 @@ def create_marketplace_order_from_payment(payment_transaction):
             longitude=85.3240,  # Default Kathmandu coordinates
         )
 
+        # Ensure the cart belongs to the payment user (or attach if cart is anonymous)
+        cart = payment_transaction.cart
+        if cart.user is None and getattr(payment_transaction, "user", None):
+            cart.user = payment_transaction.user
+            try:
+                cart.save()
+            except Exception:
+                logger.warning("Failed to attach user to anonymous cart; proceeding without attaching.")
+
+        if cart.user and getattr(payment_transaction, "user", None) and cart.user != payment_transaction.user:
+            logger.error(
+                f"Payment user ({getattr(payment_transaction, 'user', None)}) does not match cart owner ({cart.user}). Aborting order creation."
+            )
+            return None
+
         # Create marketplace order
         order = MarketplaceOrder.objects.create_order_from_cart(
-            cart=payment_transaction.cart, delivery_info=delivery_info, payment_method=payment_transaction.gateway
+            cart=cart, delivery_info=delivery_info, payment_method=payment_transaction.gateway
         )
 
         # Update order with payment information
