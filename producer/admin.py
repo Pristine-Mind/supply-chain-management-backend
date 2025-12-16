@@ -141,6 +141,8 @@ class BrandAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "country_of_origin",
+        "category",
+        "subcategory",
         "is_active",
         "is_verified",
         "website",
@@ -149,12 +151,13 @@ class BrandAdmin(admin.ModelAdmin):
         "updated_at",
     )
     search_fields = ("name", "description", "country_of_origin", "contact_email")
-    list_filter = ("is_active", "is_verified", "country_of_origin", "created_at")
+    list_filter = ("is_active", "is_verified", "country_of_origin", "category", "created_at")
     readonly_fields = ("created_at", "updated_at")
 
     fieldsets = (
         ("Basic Information", {"fields": ("name", "description", "logo", "website")}),
         ("Contact Information", {"fields": ("contact_email", "contact_phone", "country_of_origin")}),
+        ("Category", {"fields": ("category", "subcategory", "sub_subcategory")}),
         ("Additional Information", {"fields": ("manufacturer_info",)}),
         ("Status", {"fields": ("is_active", "is_verified")}),
         ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),

@@ -185,6 +185,32 @@ class Brand(models.Model):
     contact_email = models.EmailField(blank=True, null=True, verbose_name=_("Contact Email"))
     contact_phone = models.CharField(max_length=20, blank=True, verbose_name=_("Contact Phone"))
 
+    # Optional category hierarchy for brands (brands may be associated with a primary category)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="brands",
+        verbose_name=_("Category"),
+    )
+    subcategory = models.ForeignKey(
+        Subcategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="brands",
+        verbose_name=_("Subcategory"),
+    )
+    sub_subcategory = models.ForeignKey(
+        SubSubcategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="brands",
+        verbose_name=_("Sub-subcategory"),
+    )
+
     def __str__(self):
         return self.name
 

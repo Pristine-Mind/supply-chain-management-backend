@@ -77,6 +77,9 @@ class SaleFilter(django_filters.FilterSet):
 class ProductFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="filter_search", label="Search")
     category = django_filters.CharFilter(method="filter_category", label="Category")
+    category_id = django_filters.CharFilter(method="filter_category_id", label="Category ID")
+    subcategory_id = django_filters.CharFilter(method="filter_subcategory_id", label="Subcategory ID")
+    sub_subcategory_id = django_filters.CharFilter(method="filter_sub_subcategory_id", label="Sub-subcategory ID")
     size = django_filters.MultipleChoiceFilter(choices=Product.SizeChoices.choices, field_name="size", label="Size")
     color = django_filters.MultipleChoiceFilter(choices=Product.ColorChoices.choices, field_name="color", label="Color")
     has_additional_info = django_filters.BooleanFilter(
@@ -312,7 +315,17 @@ class BrandFilter(django_filters.FilterSet):
 
     class Meta:
         model = Brand
-        fields = ["search", "is_verified", "country", "has_products", "category", "min_product_count"]
+        fields = [
+            "search",
+            "is_verified",
+            "country",
+            "has_products",
+            "category",
+            "category_id",
+            "subcategory_id",
+            "sub_subcategory_id",
+            "min_product_count",
+        ]
 
     def filter_search(self, queryset, name, value):
         """Search brands by name or product names"""
@@ -358,6 +371,30 @@ class BrandFilter(django_filters.FilterSet):
                     | Q(products__subcategory__name__icontains=value)
                     | Q(products__sub_subcategory__name__icontains=value)
                 ).distinct()
+
+    def filter_category_id(self, queryset, name, value):
+        """Filter brands by new category ID"""
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(products__category_id=value)
+            | Q(products__subcategory__category_id=value)
+            | Q(products__sub_subcategory__subcategory__category_id=value)
+        ).distinct()
+
+    def filter_subcategory_id(self, queryset, name, value):
+        """Filter brands by subcategory ID"""
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(products__subcategory_id=value) | Q(products__sub_subcategory__subcategory_id=value)
+        ).distinct()
+
+    def filter_sub_subcategory_id(self, queryset, name, value):
+        """Filter brands by sub-subcategory ID"""
+        if not value:
+            return queryset
+        return queryset.filter(products__sub_subcategory_id=value).distinct()
 
     def filter_min_product_count(self, queryset, name, value):
         """Filter brands with minimum number of products"""

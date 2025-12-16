@@ -184,6 +184,13 @@ class BrandSerializer(serializers.ModelSerializer):
 
     logo_url = serializers.SerializerMethodField()
     products_count = serializers.SerializerMethodField()
+    # Expose brand category hierarchy
+    category = serializers.IntegerField(source="category_id", read_only=True)
+    subcategory = serializers.IntegerField(source="subcategory_id", read_only=True)
+    sub_subcategory = serializers.IntegerField(source="sub_subcategory_id", read_only=True)
+    category_info = CategorySerializer(source="category", read_only=True)
+    subcategory_info = SubcategoryLightSerializer(source="subcategory", read_only=True)
+    sub_subcategory_info = SubSubcategoryLightSerializer(source="sub_subcategory", read_only=True)
 
     class Meta:
         model = Brand
@@ -195,6 +202,12 @@ class BrandSerializer(serializers.ModelSerializer):
             "logo_url",
             "website",
             "country_of_origin",
+            "category",
+            "subcategory",
+            "sub_subcategory",
+            "category_info",
+            "subcategory_info",
+            "sub_subcategory_info",
             "is_active",
             "is_verified",
             "created_at",
@@ -232,10 +245,12 @@ class BrandLightSerializer(serializers.ModelSerializer):
     """Light version of Brand serializer for nested usage"""
 
     logo_url = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    subcategory_name = serializers.CharField(source="subcategory.name", read_only=True)
 
     class Meta:
         model = Brand
-        fields = ["id", "name", "logo_url", "is_verified", "country_of_origin"]
+        fields = ["id", "name", "logo_url", "is_verified", "country_of_origin", "category_name", "subcategory_name"]
 
     def get_logo_url(self, obj):
         """Get full URL for brand logo"""
