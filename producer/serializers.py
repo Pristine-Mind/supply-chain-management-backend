@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from re import M
 
 from django.contrib.gis.geos import Point
 from rest_framework import serializers
@@ -376,6 +377,9 @@ class ProductSerializer(serializers.ModelSerializer):
     brand_name = serializers.CharField(source="get_brand_name", read_only=True)
     brand_details = serializers.SerializerMethodField()
 
+    # MarketplaceProduct id
+    marketplace_id = serializers.SerializerMethodField()
+
     # Choice field display methods
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
@@ -388,6 +392,13 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_brand_details(self, obj):
         """Get brand information from the brand_info property"""
         return obj.brand_info
+
+    def get_marketplace_id(self, obj):
+        """Return the id of the related MarketplaceProduct if it exists, else None."""
+        marketplace_product = MarketplaceProduct.objects.filter(product=obj)
+        if marketplace_product.exists():
+            return marketplace_product.first().id
+        return None
 
     def validate_price(self, value):
         """
