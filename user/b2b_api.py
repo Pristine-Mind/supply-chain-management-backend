@@ -1,12 +1,13 @@
 from django.contrib.auth.models import User
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
-from producer.models import Product
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+
+from producer.models import Product
 
 
 class B2BUserProductsSerializer(serializers.ModelSerializer):

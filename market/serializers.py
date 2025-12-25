@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from market.utils import notify_event
-from producer.models import MarketplaceProduct, Sale, Product
+from producer.models import MarketplaceProduct, Product, Sale
 from producer.serializers import MarketplaceProductSerializer
 
 from .models import (
@@ -28,10 +28,10 @@ from .models import (
     Notification,
     OrderTrackingEvent,
     Payment,
+    ProductChatMessage,
     ProductTag,
     Purchase,
     SellerChatMessage,
-    ProductChatMessage,
     ShoppableVideo,
     UserFollow,
     UserProductImage,

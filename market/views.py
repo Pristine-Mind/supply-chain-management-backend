@@ -53,10 +53,10 @@ from .models import (
     Notification,
     OrderStatus,
     Payment,
+    ProductChatMessage,
     ProductTag,
     ProductView,
     SellerChatMessage,
-    ProductChatMessage,
     ShoppableVideo,
     UserFollow,
     VideoComment,
@@ -71,7 +71,6 @@ from .serializers import (
     CartItemSerializer,
     CartSerializer,
     ChatMessageSerializer,
-    ProductChatMessageSerializer,
     CreateDeliveryFromSaleSerializer,
     CreateOrderSerializer,
     DeliveryInfoSerializer,
@@ -82,6 +81,7 @@ from .serializers import (
     MarketplaceUserProductSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
+    ProductChatMessageSerializer,
     ProductTagSerializer,
     PurchaseSerializer,
     SellerBidSerializer,
@@ -171,27 +171,26 @@ class SellerChatMessageViewSet(viewsets.ModelViewSet):
         user = self.request.user
         other_user_id = self.request.query_params.get("user_id")
         show_unread = self.request.query_params.get("unread") == "true"
-        
-        base_qs = SellerChatMessage.objects.select_related(
-            "sender", "target_user"
-        ).order_by("-timestamp")
-        
+
+        base_qs = SellerChatMessage.objects.select_related("sender", "target_user").order_by("-timestamp")
+
         if other_user_id:
             # Specific conversation: messages where user is sender OR recipient
             other_user = User.objects.get(id=other_user_id)
             qs = base_qs.filter(
-                models.Q(sender=user, target_user=other_user) |
-                models.Q(sender=other_user, target_user=user)
+                models.Q(sender=user, target_user=other_user) | models.Q(sender=other_user, target_user=user)
             )
         else:
             # All conversations involving current user
-            qs = base_qs.filter(
-                models.Q(sender=user) | models.Q(target_user=user)
-            ).distinct("target_user__id", "sender__id")[:50]  # Limit to recent convos
-        
+            qs = base_qs.filter(models.Q(sender=user) | models.Q(target_user=user)).distinct(
+                "target_user__id", "sender__id"
+            )[
+                :50
+            ]  # Limit to recent convos
+
         if show_unread:
             qs = qs.filter(models.Q(target_user=user) & ~models.Q(is_read=True))
-            
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -199,17 +198,13 @@ class SellerChatMessageViewSet(viewsets.ModelViewSet):
         target_id = request.data.get("target_user")
         if not target_id or int(target_id) == request.user.id:
             return Response(
-                {"error": "Valid target_user required and cannot message yourself"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Valid target_user required and cannot message yourself"}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         chat_message = serializer.save(sender=request.user)
-        return Response(
-            self.get_serializer(chat_message).data, 
-            status=status.HTTP_201_CREATED
-        )
+        return Response(self.get_serializer(chat_message).data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
         # Auto-mark as read when recipient views/updates
@@ -220,6 +215,7 @@ class SellerChatMessageViewSet(viewsets.ModelViewSet):
 
 class ProductChatMessageViewSet(viewsets.ModelViewSet):
     """Chats attached directly to the base `Product` model (producer.Product)."""
+
     serializer_class = ProductChatMessageSerializer
     permission_classes = [IsAuthenticated]
 
