@@ -32,6 +32,7 @@ from market.views import (
     NotificationListView,
     OrderTrackingEventViewSet,
     ProductFeedbackView,
+    SellerChatMessageViewSet,
     SellerProductsView,
     ShoppableVideoViewSet,
     UserBidViewSet,
@@ -95,6 +96,7 @@ from producer.views import (
     stats_dashboard,
 )
 from transport import views as transport_views
+from user.b2b_api import B2BVerifiedUsersProductsView
 from user.views import (
     B2BCreditManagementView,
     BusinessRegisterView,
@@ -111,7 +113,6 @@ from user.views import (
     UploadProfilePictureView,
     VerifyOTPView,
 )
-from user.b2b_api import B2BVerifiedUsersProductsView
 
 router = DefaultRouter()
 router.register(r"brands", BrandViewSet, basename="brands")
@@ -130,6 +131,7 @@ router.register(r"marketplace-trending", TrendingProductsViewSet, basename="mark
 router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, basename="marketplace-user-products")
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
+router.register(r"seller-chats", SellerChatMessageViewSet, basename="seller-chats")
 router.register(r"user-bids", UserBidViewSet, basename="user-bids")
 router.register(r"user-recommendation", MarketplaceUserRecommendedProductViewSet, basename="user-recommendation")
 router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")

@@ -1,11 +1,13 @@
 import io
+
+import qrcode
+from django.conf import settings
+from django.core.files.base import ContentFile
+from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-import qrcode
-from PIL import Image
-from django.core.files.base import ContentFile
-from django.conf import settings
-from .models import MarketplaceSale, Delivery, MarketplaceOrder
+
+from .models import Delivery, MarketplaceOrder, MarketplaceSale
 
 
 def generate_shipping_label_for_marketplace_sale(marketplace_sale_id):

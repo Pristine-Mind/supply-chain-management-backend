@@ -55,6 +55,7 @@ from .models import (
     Payment,
     ProductTag,
     ProductView,
+    SellerChatMessage,
     ShoppableVideo,
     UserFollow,
     VideoComment,
@@ -82,6 +83,7 @@ from .serializers import (
     ProductTagSerializer,
     PurchaseSerializer,
     SellerBidSerializer,
+    SellerChatMessageSerializer,
     SellerProductSerializer,
     ShoppableVideoSerializer,
     UserFollowSerializer,
@@ -151,6 +153,29 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
     serializer_class = ChatMessageSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = ChatFilter
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        chat_message = serializer.save()
+        return Response(self.get_serializer(chat_message).data, status=status.HTTP_201_CREATED)
+
+
+class SellerChatMessageViewSet(viewsets.ModelViewSet):
+    serializer_class = SellerChatMessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = SellerChatMessage.objects.select_related("sender", "target_user").all().order_by("-timestamp")
+        direction = self.request.query_params.get("direction")
+        if direction == "inbox":
+            qs = qs.filter(target_user=user)
+        elif direction == "sent":
+            qs = qs.filter(sender=user)
+        else:
+            qs = qs.filter(models.Q(sender=user) | models.Q(target_user=user))
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

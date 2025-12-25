@@ -30,6 +30,7 @@ from .models import (
     Payment,
     ProductTag,
     Purchase,
+    SellerChatMessage,
     ShoppableVideo,
     UserFollow,
     UserProductImage,
@@ -281,6 +282,35 @@ class ChatMessageSerializer(serializers.ModelSerializer):
                 via_in_app=True,
             )
         return chat_message
+
+
+class SellerChatMessageSerializer(serializers.ModelSerializer):
+    sender_details = UserSerializer(source="sender", read_only=True)
+    target_user_details = UserSerializer(source="target_user", read_only=True)
+
+    class Meta:
+        model = SellerChatMessage
+        fields = ["id", "sender", "sender_details", "target_user", "target_user_details", "subject", "message", "timestamp"]
+        read_only_fields = ["sender", "timestamp"]
+
+    def create(self, validated_data):
+        validated_data["sender"] = self.context["request"].user
+        chat = super().create(validated_data)
+
+        # Notify the seller about the new message
+        try:
+            from market.utils import notify_event
+
+            notify_event(
+                user=chat.target_user,
+                notif_type="alert",
+                message=f"New message from {chat.sender.username}: {chat.subject or chat.message[:80]}",
+                via_in_app=True,
+            )
+        except Exception:
+            pass
+
+        return chat
 
 
 class UserProductImageSerializer(serializers.ModelSerializer):

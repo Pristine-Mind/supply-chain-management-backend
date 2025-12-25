@@ -6,8 +6,7 @@ from datetime import date, datetime, timedelta
 import requests
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -26,8 +25,8 @@ from rest_framework.views import APIView
 
 from market.models import MarketplaceProduct, ShoppableVideo, UserFollow
 from market.serializers import MarketplaceProductSerializer, ShoppableVideoSerializer
-from user.models import UserProfile
 from notification.models import Notification
+from user.models import UserProfile
 
 # Cache TTLs (seconds) - can be overridden in Django settings
 SEARCH_CACHE_TTL = getattr(settings, "PRODUCER_SEARCH_CACHE_TTL", 30)
