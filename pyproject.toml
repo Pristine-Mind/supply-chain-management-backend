@@ -51,6 +51,8 @@ django-haystack = "*"
 elasticsearch = ">=7.0.0,<8.0.0"
 djangorestframework-simplejwt = "*"
 SpeechRecognition = "*"
+qrcode = "*"
+python-barcode = "*"
 
 
 [tool.poetry.dev-dependencies]

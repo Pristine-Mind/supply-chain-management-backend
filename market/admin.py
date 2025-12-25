@@ -1,5 +1,7 @@
 import logging
-
+import tempfile
+import zipfile
+from django.http import HttpResponse
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
@@ -217,6 +219,14 @@ class CartItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
 
 @admin.register(MarketplaceSale)
 class MarketplaceSaleAdmin(admin.ModelAdmin):
+    actions = ["generate_shipping_label_action"]
+
+    def generate_shipping_label_action(self, request, queryset):
+        for sale in queryset:
+            sale.generate_and_attach_shipping_label()
+        self.message_user(request, f"Shipping labels generated for {queryset.count()} sale(s).")
+
+    generate_shipping_label_action.short_description = "Generate shipping label PDF for selected sales"
     list_display = (
         "order_number",
         "buyer_display_name",
@@ -351,6 +361,14 @@ class MarketplaceSaleAdmin(admin.ModelAdmin):
 
 @admin.register(Delivery)
 class DeliveryAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
+    def label_pdf_link(self, obj):
+        if obj.label_pdf:
+            return f'<a href="{obj.label_pdf.url}" target="_blank">Download Label</a>'
+        return "No label"
+
+    label_pdf_link.allow_tags = True
+    label_pdf_link.short_description = "Shipping Label"
+
     list_display = (
         "customer_name",
         "phone_number",
@@ -360,6 +378,7 @@ class DeliveryAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
         "delivery_source_display",
         "tracking_number",
         "created_at",
+        "label_pdf_link",
     )
     list_filter = ("city", "state", "delivery_status", "created_at")
     search_fields = ("customer_name", "phone_number", "address", "tracking_number")
@@ -459,6 +478,7 @@ class MarketplaceOrderAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
         "total_amount",
         "created_at",
         "items_count",
+        "label_pdf_link",
     )
     list_filter = (
         "order_status",
@@ -517,7 +537,13 @@ class MarketplaceOrderAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     delete_roles = ["admin"]
 
     # Custom actions
-    actions = ["mark_as_confirmed", "mark_as_shipped", "mark_as_delivered", "cancel_orders"]
+    actions = [
+        "mark_as_confirmed",
+        "mark_as_shipped",
+        "mark_as_delivered",
+        "cancel_orders",
+        "generate_shipping_label_action",
+    ]
 
     def mark_as_confirmed(self, request, queryset):
         """Mark selected orders as confirmed."""
@@ -568,6 +594,29 @@ class MarketplaceOrderAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
         self.message_user(request, f"{count} order(s) cancelled.")
 
     cancel_orders.short_description = _("Cancel selected orders")
+
+    def generate_shipping_label_action(self, request, queryset):
+        temp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        with zipfile.ZipFile(temp_zip, "w") as zipf:
+            for order in queryset:
+                label_file = order.generate_and_attach_shipping_label()
+                if label_file and order.label_pdf:
+                    zipf.write(order.label_pdf.path, arcname=f"{order.order_number}_label.pdf")
+        temp_zip.seek(0)
+        response = HttpResponse(temp_zip.read(), content_type="application/zip")
+        response["Content-Disposition"] = "attachment; filename=shipping_labels.zip"
+        temp_zip.close()
+        return response
+
+    generate_shipping_label_action.short_description = "Download shipping label PDFs for selected orders as ZIP"
+
+    def label_pdf_link(self, obj):
+        if obj.label_pdf:
+            return f'<a href="{obj.label_pdf.url}" target="_blank">Download Label</a>'
+        return "No label"
+
+    label_pdf_link.allow_tags = True
+    label_pdf_link.short_description = "Shipping Label"
 
 
 @admin.register(MarketplaceOrderItem)

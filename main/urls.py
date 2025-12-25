@@ -111,6 +111,7 @@ from user.views import (
     UploadProfilePictureView,
     VerifyOTPView,
 )
+from user.b2b_api import B2BVerifiedUsersProductsView
 
 router = DefaultRouter()
 router.register(r"brands", BrandViewSet, basename="brands")
@@ -146,7 +147,7 @@ router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketpl
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
 router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
-
+router.register(r"b2b-verified-users-products", B2BVerifiedUsersProductsView, basename="b2b-verified-users-products")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
