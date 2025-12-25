@@ -152,6 +152,34 @@ class ChatMessage(models.Model):
         verbose_name_plural = _("Chat Messages")
 
 
+class SellerChatMessage(models.Model):
+    """
+    Represents a chat message directed to a seller (user-level conversation across a seller's products).
+
+    Fields:
+    - sender: User who sent the message
+    - target_user: The seller/user who is the recipient of the message
+    - subject: Optional short subject or context
+    - message: Text content
+    - timestamp: When the message was sent
+    """
+
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_seller_messages", verbose_name=_("Sender"))
+    target_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="received_seller_messages", verbose_name=_("Target User")
+    )
+    subject = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Subject"))
+    message = models.TextField(verbose_name=_("Message"))
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name=_("Timestamp"))
+
+    class Meta:
+        verbose_name = _("Seller Chat Message")
+        verbose_name_plural = _("Seller Chat Messages")
+
+    def __str__(self):
+        return f"Message from {self.sender.username} to {self.target_user.username}: {self.subject or self.message[:30]}"
+
+
 class ShippingAddress(models.Model):
     """
     Represents the shipping address for a purchase.
