@@ -487,7 +487,7 @@ class MiniProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ["id", "name", "brand_name", "price", "thumbnail", "category_info"]
+        fields = ["id", "name", "brand_name", "price", "thumbnail", "category_info", "description"]
 
     def get_marketplace_id(self, obj):
         mp = MarketplaceProduct.objects.filter(product=obj).only("id").first()
