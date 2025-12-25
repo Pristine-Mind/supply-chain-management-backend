@@ -56,6 +56,7 @@ from .models import (
     ProductTag,
     ProductView,
     SellerChatMessage,
+    ProductChatMessage,
     ShoppableVideo,
     UserFollow,
     VideoComment,
@@ -70,6 +71,7 @@ from .serializers import (
     CartItemSerializer,
     CartSerializer,
     ChatMessageSerializer,
+    ProductChatMessageSerializer,
     CreateDeliveryFromSaleSerializer,
     CreateOrderSerializer,
     DeliveryInfoSerializer,
@@ -167,21 +169,76 @@ class SellerChatMessageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = SellerChatMessage.objects.select_related("sender", "target_user").all().order_by("-timestamp")
-        direction = self.request.query_params.get("direction")
-        if direction == "inbox":
-            qs = qs.filter(target_user=user)
-        elif direction == "sent":
-            qs = qs.filter(sender=user)
+        other_user_id = self.request.query_params.get("user_id")
+        show_unread = self.request.query_params.get("unread") == "true"
+        
+        base_qs = SellerChatMessage.objects.select_related(
+            "sender", "target_user"
+        ).order_by("-timestamp")
+        
+        if other_user_id:
+            # Specific conversation: messages where user is sender OR recipient
+            other_user = User.objects.get(id=other_user_id)
+            qs = base_qs.filter(
+                models.Q(sender=user, target_user=other_user) |
+                models.Q(sender=other_user, target_user=user)
+            )
         else:
-            qs = qs.filter(models.Q(sender=user) | models.Q(target_user=user))
+            # All conversations involving current user
+            qs = base_qs.filter(
+                models.Q(sender=user) | models.Q(target_user=user)
+            ).distinct("target_user__id", "sender__id")[:50]  # Limit to recent convos
+        
+        if show_unread:
+            qs = qs.filter(models.Q(target_user=user) & ~models.Q(is_read=True))
+            
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        # Ensure target_user exists and isn't self
+        target_id = request.data.get("target_user")
+        if not target_id or int(target_id) == request.user.id:
+            return Response(
+                {"error": "Valid target_user required and cannot message yourself"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        chat_message = serializer.save(sender=request.user)
+        return Response(
+            self.get_serializer(chat_message).data, 
+            status=status.HTTP_201_CREATED
+        )
+
+    def perform_update(self, serializer):
+        # Auto-mark as read when recipient views/updates
+        if serializer.instance.target_user == self.request.user:
+            serializer.instance.is_read = True
+        serializer.save()
+
+
+class ProductChatMessageViewSet(viewsets.ModelViewSet):
+    """Chats attached directly to the base `Product` model (producer.Product)."""
+    serializer_class = ProductChatMessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = ProductChatMessage.objects.select_related("sender", "product").all().order_by("-timestamp")
+        product_id = self.request.query_params.get("product_id")
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        else:
+            # restrict to messages where the user is sender or owner of the product
+            qs = qs.filter(models.Q(sender=user) | models.Q(product__user=user))
         return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        chat_message = serializer.save()
-        return Response(self.get_serializer(chat_message).data, status=status.HTTP_201_CREATED)
+        chat = serializer.save()
+        return Response(self.get_serializer(chat).data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET"])

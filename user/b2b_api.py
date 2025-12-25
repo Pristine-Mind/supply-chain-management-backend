@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
+from producer.models import Product
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -109,24 +110,28 @@ class B2BVerifiedUsersProductsView(viewsets.ReadOnlyModelViewSet):
     )
     def product_chat(self, request, product_id=None, *args, **kwargs):
         """List or create chat messages for a specific product of this B2B user."""
-        from market.serializers import ChatMessageSerializer
-        from producer.models import MarketplaceProduct
+        # Use ProductChatMessage (tied to producer.Product) for B2B product chats
+        from market.serializers import ProductChatMessageSerializer
 
         user = self.get_object()
-        product = get_object_or_404(MarketplaceProduct, id=product_id, product__user=user)
+        # Ensure the base Product belongs to the B2B user
+        product = get_object_or_404(Product, id=product_id, user=user)
 
+        # List product-level chats tied to the base Product
         if request.method == "GET":
-            qs = product.chatmessage_set.select_related("sender").all().order_by("-timestamp")
+            from market.models import ProductChatMessage
+
+            qs = ProductChatMessage.objects.filter(product=product).select_related("sender").all().order_by("-timestamp")
             page = self.paginate_queryset(qs)
-            serializer = ChatMessageSerializer(page or qs, many=True, context={"request": request})
+            serializer = ProductChatMessageSerializer(page or qs, many=True, context={"request": request})
             if page is not None:
                 return self.get_paginated_response(serializer.data)
             return Response(serializer.data)
 
-        # POST - create a new chat message for this product
+        # POST - create a new product-level chat message
         data = request.data.copy()
         data["product"] = product.id
-        serializer = ChatMessageSerializer(data=data, context={"request": request})
+        serializer = ProductChatMessageSerializer(data=data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         chat = serializer.save()
-        return Response(ChatMessageSerializer(chat, context={"request": request}).data, status=201)
+        return Response(ProductChatMessageSerializer(chat, context={"request": request}).data, status=201)
