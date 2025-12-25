@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from market.utils import notify_event
-from producer.models import MarketplaceProduct, Sale
+from producer.models import MarketplaceProduct, Sale, Product
 from producer.serializers import MarketplaceProductSerializer
 
 from .models import (
@@ -31,6 +31,7 @@ from .models import (
     ProductTag,
     Purchase,
     SellerChatMessage,
+    ProductChatMessage,
     ShoppableVideo,
     UserFollow,
     UserProductImage,
@@ -282,6 +283,38 @@ class ChatMessageSerializer(serializers.ModelSerializer):
                 via_in_app=True,
             )
         return chat_message
+
+
+class ProductChatMessageSerializer(serializers.ModelSerializer):
+    sender_details = UserSerializer(source="sender", read_only=True)
+
+    class Meta:
+        model = ProductChatMessage
+        fields = ["id", "sender", "sender_details", "product", "message", "timestamp"]
+        read_only_fields = ["sender", "timestamp"]
+
+    def create(self, validated_data):
+        validated_data["sender"] = self.context["request"].user
+        # import here to avoid circular import during module load
+        from market.models import ProductChatMessage
+
+        chat = ProductChatMessage.objects.create(**validated_data)
+
+        # Notify product owner if not the sender
+        try:
+            product = validated_data["product"]
+            product_owner = product.user
+            if product_owner != chat.sender:
+                notify_event(
+                    user=product_owner,
+                    notif_type="alert",
+                    message=f"New message from {chat.sender.username} about your product '{product.name}': {chat.message}",
+                    via_in_app=True,
+                )
+        except Exception:
+            pass
+
+        return chat
 
 
 class SellerChatMessageSerializer(serializers.ModelSerializer):

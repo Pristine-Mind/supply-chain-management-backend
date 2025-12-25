@@ -21,6 +21,7 @@ from market.views import (
     CartItemDeleteView,
     CartItemUpdateView,
     ChatMessageViewSet,
+    ProductChatMessageViewSet,
     DeliveryCreateView,
     DeliveryViewSet,
     FeedbackViewSet,
@@ -132,6 +133,7 @@ router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, bas
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
 router.register(r"seller-chats", SellerChatMessageViewSet, basename="seller-chats")
+router.register(r"product-chats", ProductChatMessageViewSet, basename="product-chats")
 router.register(r"user-bids", UserBidViewSet, basename="user-bids")
 router.register(r"user-recommendation", MarketplaceUserRecommendedProductViewSet, basename="user-recommendation")
 router.register(r"ledger-entries", LedgerEntryViewSet, basename="ledger-entry")

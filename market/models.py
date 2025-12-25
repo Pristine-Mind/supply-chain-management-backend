@@ -171,6 +171,7 @@ class SellerChatMessage(models.Model):
     subject = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Subject"))
     message = models.TextField(verbose_name=_("Message"))
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name=_("Timestamp"))
+    is_read = models.BooleanField(default=False, verbose_name=_("Is Read"))
 
     class Meta:
         verbose_name = _("Seller Chat Message")
@@ -178,6 +179,28 @@ class SellerChatMessage(models.Model):
 
     def __str__(self):
         return f"Message from {self.sender.username} to {self.target_user.username}: {self.subject or self.message[:30]}"
+
+
+class ProductChatMessage(models.Model):
+    """
+    Chat messages tied directly to the base `Product` model (producer.Product).
+
+    Use this when conversation should be attached to the product regardless of any
+    marketplace listing (`MarketplaceProduct`).
+    """
+
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Sender"))
+    product = models.ForeignKey("producer.Product", on_delete=models.CASCADE, verbose_name=_("Product"))
+    message = models.TextField(verbose_name=_("Message"))
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name=_("Timestamp"))
+
+    class Meta:
+        verbose_name = _("Product Chat Message")
+        verbose_name_plural = _("Product Chat Messages")
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"Message from {self.sender.username} about {self.product.name}: {self.message[:30]}"
 
 
 class ShippingAddress(models.Model):
