@@ -329,6 +329,8 @@ class CartItem(models.Model):
 
 
 class Delivery(models.Model):
+    # Shipping label PDF
+    label_pdf = models.FileField(upload_to="shipping_labels/", null=True, blank=True)
     # Cart relationship (nullable for deliveries created from sales)
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="delivery", null=True, blank=True)
 
@@ -961,6 +963,21 @@ class MarketplaceSale(models.Model):
         """Get the URL for the order detail view."""
         return reverse("market:sale-detail", kwargs={"order_number": self.order_number})
 
+    def generate_and_attach_shipping_label(self):
+        """
+        Generates a shipping label PDF and attaches it to the delivery (as a FileField 'label_pdf').
+        Requires a FileField 'label_pdf' on Delivery model.
+        """
+        from .label_utils import generate_shipping_label_for_marketplace_sale
+
+        if not self.delivery:
+            return None
+        label_file = generate_shipping_label_for_marketplace_sale(self.id)
+        if label_file:
+            self.delivery.label_pdf.save(label_file.name, label_file)
+            self.delivery.save()
+        return label_file
+
 
 class ProductView(models.Model):
     """
@@ -1254,6 +1271,8 @@ class MarketplaceOrder(models.Model):
     # Flag to indicate this is the customer's first order (used to waive shipping)
     is_first_order = models.BooleanField(default=False, verbose_name=_("Is First Order"))
 
+    label_pdf = models.FileField(upload_to="shipping_labels/", null=True, blank=True)
+
     class Meta:
         verbose_name = _("Marketplace Order")
         verbose_name_plural = _("Marketplace Orders")
@@ -1476,6 +1495,18 @@ class MarketplaceOrder(models.Model):
     def get_absolute_url(self):
         """Get the URL for the order detail view."""
         return reverse("market:order-detail", kwargs={"order_number": self.order_number})
+
+    def generate_and_attach_shipping_label(self):
+        """
+        Generates a shipping label PDF and attaches it to the order (as a FileField 'label_pdf').
+        """
+        from .label_utils import generate_shipping_label_for_marketplace_order
+
+        label_file = generate_shipping_label_for_marketplace_order(self.id)
+        if label_file:
+            self.label_pdf.save(label_file.name, label_file)
+            self.save()
+        return label_file
 
 
 class MarketplaceOrderItem(models.Model):

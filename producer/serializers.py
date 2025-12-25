@@ -95,6 +95,17 @@ class CategorySerializer(serializers.ModelSerializer):
         return obj.subcategories.filter(is_active=True).count()
 
 
+class MiniCategorySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Category
+        fields = [
+            "id",
+            "code",
+            "name",
+        ]
+
+
 class SubSubcategorySerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="subcategory.category.name", read_only=True)
     category_code = serializers.CharField(source="subcategory.category.code", read_only=True)
@@ -465,6 +476,36 @@ class ProductSerializer(serializers.ModelSerializer):
             ProductImage.objects.filter(id__in=deleted_images, product=product).delete()
 
         return product
+
+
+class MiniProductSerializer(serializers.ModelSerializer):
+    """Small/lightweight serializer for Product used in compact listings."""
+
+    brand_name = serializers.CharField(source="get_brand_name", read_only=True)
+    thumbnail = serializers.SerializerMethodField()
+    category_info = MiniCategorySerializer(source="category", read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "brand_name", "price", "thumbnail", "category_info"]
+
+    def get_marketplace_id(self, obj):
+        mp = MarketplaceProduct.objects.filter(product=obj).only("id").first()
+        return mp.id if mp else None
+
+    def get_thumbnail(self, obj):
+        request = self.context.get("request") if hasattr(self, "context") else None
+        img = None
+        try:
+            img = obj.images.first()
+        except Exception:
+            img = None
+        if img and getattr(img, "image", None):
+            try:
+                return request.build_absolute_uri(img.image.url) if request else img.image.url
+            except Exception:
+                return img.image.url
+        return None
 
 
 class OrderSerializer(serializers.ModelSerializer):
