@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     "payment",
     "notification.apps.NotificationConfig",
     "external_delivery.apps.ExternalDeliveryConfig",
+    "recommendations",
 ]
 
 MIDDLEWARE = [
