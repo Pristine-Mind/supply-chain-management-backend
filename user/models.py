@@ -340,6 +340,10 @@ class UserProfile(models.Model):
     class Meta:
         verbose_name = _("User Profile")
         verbose_name_plural = _("User Profiles")
+        indexes = [
+            models.Index(fields=["business_type", "location"]),
+            models.Index(fields=["b2b_verified"]),
+        ]
 
 
 class Contact(models.Model):

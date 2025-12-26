@@ -408,6 +408,10 @@ class Product(models.Model):
     class Meta:
         verbose_name = _("Product")
         verbose_name_plural = _("Products")
+        indexes = [
+            models.Index(fields=["user", "is_active", "category"]),
+            models.Index(fields=["price"]),
+        ]
 
     def actual_sales(self, start: date, end: date):
         return (

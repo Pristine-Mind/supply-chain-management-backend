@@ -96,6 +96,7 @@ from producer.views import (
     sales_view,
     stats_dashboard,
 )
+from recommendations.views import business_recommendations
 from transport import views as transport_views
 from user.b2b_api import B2BVerifiedUsersProductsView
 from user.views import (
@@ -302,6 +303,7 @@ urlpatterns = [
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
     # External Delivery Integration URLs
     path("", include("external_delivery.urls")),
+    path("api/v1/recommendations/", business_recommendations, name="business_recommendations"),
 ]
 
 # Add API documentation URLs only in DEBUG mode
