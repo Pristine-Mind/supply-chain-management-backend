@@ -56,6 +56,9 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
+    DistributorProfileView,
+    DistributorOrdersView,
+    DistributorOrderInvoiceView,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -304,6 +307,14 @@ urlpatterns = [
     # External Delivery Integration URLs
     path("", include("external_delivery.urls")),
     path("api/v1/recommendations/", business_recommendations, name="business_recommendations"),
+    # Distributor specific endpoints
+    path("api/v1/distributor/profile/", DistributorProfileView.as_view(), name="distributor-profile"),
+    path("api/v1/distributor/orders/", DistributorOrdersView.as_view(), name="distributor-orders"),
+    path(
+        "api/v1/distributor/orders/<int:pk>/invoice/",
+        DistributorOrderInvoiceView.as_view(),
+        name="distributor-order-invoice",
+    ),
 ]
 
 # Add API documentation URLs only in DEBUG mode

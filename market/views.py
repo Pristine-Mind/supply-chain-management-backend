@@ -4,13 +4,15 @@ import requests
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.db import models, transaction
-from django.db.models import OuterRef, QuerySet, Subquery
-from django.http import HttpResponse
+from django.db.models import Avg, Count, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.cache import never_cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page, never_cache
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status, views, viewsets
@@ -93,6 +95,7 @@ from .serializers import (
     VideoLikeSerializer,
     VideoReportSerializer,
 )
+from .services import PDF_AVAILABLE, InvoiceGenerationService
 from .utils import sms_service
 
 
@@ -426,6 +429,234 @@ class SellerProductsView(views.APIView):
             serialized_product["bids"] = SellerBidSerializer(bids, many=True).data
             serialized_products.append(serialized_product)
         return Response(serialized_products)
+
+
+class DistributorPermissionMixin:
+    """Mixin to handle distributor permission checks efficiently"""
+
+    def check_distributor_permission(self, user):
+        """
+        Check if user is a distributor with proper error handling
+        Returns: (is_distributor: bool, error_response: Response|None)
+        """
+        if not user or not user.is_authenticated:
+            return False, Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        profile = getattr(user, "user_profile", None)
+
+        if not profile:
+            return False, Response({"error": "User profile not found"}, status=status.HTTP_403_FORBIDDEN)
+
+        is_distributor = False
+        if hasattr(profile, "is_distributor"):
+            try:
+                # Handle both method and property
+                is_distributor = (
+                    profile.is_distributor() if callable(profile.is_distributor) else bool(profile.is_distributor)
+                )
+            except (TypeError, AttributeError) as e:
+                logger.warning(f"Error checking distributor status for user {user.id}: {e}")
+                is_distributor = False
+
+        if not is_distributor:
+            return False, Response({"error": "User is not a distributor"}, status=status.HTTP_403_FORBIDDEN)
+
+        return True, None
+
+
+class DistributorProfileView(DistributorPermissionMixin, views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Check permissions
+        is_distributor, error_response = self.check_distributor_permission(request.user)
+        if not is_distributor:
+            return error_response
+
+        # Use select_related and prefetch_related for optimized queries
+        # Aggregate all metrics in a single query using annotations
+        products = (
+            MarketplaceProduct.objects.filter(product__user=request.user)
+            .select_related("product")
+            .annotate(
+                views_count=Count("views", distinct=True),
+                total_sold=Sum("order_items__quantity"),
+                avg_rating=Avg("reviews__rating"),
+            )
+            .distinct()
+        )
+
+        # Build product list with pre-aggregated data
+        product_list = [
+            {
+                "id": product.id,
+                "name": getattr(product.product, "name", None) or str(product),
+                "views": product.views_count or 0,
+                "total_sold": int(product.total_sold or 0),
+                "avg_rating": round(float(product.avg_rating or 0), 2),
+            }
+            for product in products
+        ]
+
+        # Single efficient query for orders count with proper filtering
+        orders_count = MarketplaceOrder.objects.filter(items__product__product__user=request.user).distinct().count()
+
+        return Response({"products": product_list, "orders_count": orders_count})
+
+
+class DistributorOrdersView(DistributorPermissionMixin, views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    # Cache results for 60 seconds to reduce DB load
+    @method_decorator(cache_page(60))
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def get(self, request):
+        # Check permissions
+        is_distributor, error_response = self.check_distributor_permission(request.user)
+        if not is_distributor:
+            return error_response
+
+        # Optimized query with selective prefetching
+        # Only fetch items that belong to this seller
+        seller_items_prefetch = Prefetch(
+            "items",
+            queryset=MarketplaceOrderItem.objects.select_related("product__product").filter(
+                product__product__user=request.user
+            ),
+            to_attr="seller_items_list",
+        )
+
+        queryset = (
+            MarketplaceOrder.objects.filter(items__product__product__user=request.user)
+            .select_related("delivery", "customer")
+            .prefetch_related(seller_items_prefetch)
+            .distinct()
+            .order_by("-created_at")[:50]
+        )
+
+        orders = []
+        for order in queryset:
+            # Use pre-filtered items from prefetch
+            seller_items = order.seller_items_list
+
+            if not seller_items:
+                continue  # Skip orders with no seller items (edge case)
+
+            items_for_seller = [
+                {
+                    "id": item.id,
+                    "product_id": item.product.id,
+                    "product_name": getattr(item.product.product, "name", None) or str(item.product),
+                    "quantity": item.quantity or 0,
+                    "unit_price": float(item.unit_price or 0),
+                    "total_price": float(item.total_price or 0),
+                }
+                for item in seller_items
+            ]
+
+            # Calculate seller's subtotal for this order
+            seller_subtotal = sum(float(item.total_price or 0) for item in seller_items)
+
+            orders.append(
+                {
+                    "id": order.id,
+                    "order_number": order.order_number or f"ORD-{order.id}",
+                    "customer": getattr(order.customer, "username", "Unknown") if order.customer else "Guest",
+                    "created_at": order.created_at.isoformat() if order.created_at else None,
+                    "order_status": order.order_status or "pending",
+                    "payment_status": order.payment_status or "pending",
+                    "seller_items": items_for_seller,
+                    "seller_subtotal": round(seller_subtotal, 2),
+                    "total_amount": float(order.total_amount or 0),
+                }
+            )
+
+        return Response(orders)
+
+
+class DistributorOrderInvoiceView(DistributorPermissionMixin, views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        # Check permissions
+        is_distributor, error_response = self.check_distributor_permission(request.user)
+        if not is_distributor:
+            return error_response
+
+        # Validate pk
+        if not pk or not str(pk).isdigit():
+            return Response({"error": "Invalid order ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Optimized query with prefetch
+        try:
+            order = MarketplaceOrder.objects.prefetch_related("items__product__product").select_related("invoice").get(pk=pk)
+        except MarketplaceOrder.DoesNotExist:
+            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error fetching order {pk}: {e}")
+            return Response({"error": "Invalid order ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify seller has items in this order
+        seller_items = [item for item in order.items.all() if getattr(item.product.product, "user", None) == request.user]
+
+        if not seller_items:
+            return Response(
+                {"error": "You don't have permission to view invoice for this order"}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get or create invoice
+        invoice = getattr(order, "invoice", None)
+
+        try:
+            # Create invoice if it doesn't exist
+            if not invoice:
+                try:
+                    invoice = InvoiceGenerationService.create_invoice_from_marketplace_order(order)
+                except Exception as e:
+                    logger.error(f"Error creating invoice for order {pk}: {e}")
+                    return Response({"error": "Failed to create invoice"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Generate PDF if needed and available
+            if not invoice.pdf_file:
+                try:
+                    if PDF_AVAILABLE:
+                        InvoiceGenerationService.generate_invoice_pdf(invoice)
+                    else:
+                        return Response(
+                            {"message": "Invoice created but PDF generation not available", "invoice_id": invoice.id}
+                        )
+                except Exception as e:
+                    logger.error(f"Error generating PDF for invoice {invoice.id}: {e}")
+                    return Response({"message": "Invoice exists but PDF generation failed", "invoice_id": invoice.id})
+
+            # Return PDF file
+            if invoice.pdf_file:
+                try:
+                    pdf_path = invoice.pdf_file.path
+                    if not pdf_path or not hasattr(invoice.pdf_file, "path"):
+                        return Response({"message": "Invoice PDF path not available", "invoice_id": invoice.id})
+
+                    # Check file exists before opening
+                    import os
+
+                    if not os.path.exists(pdf_path):
+                        logger.error(f"PDF file not found at path: {pdf_path}")
+                        return Response({"error": "Invoice PDF file not found"}, status=status.HTTP_404_NOT_FOUND)
+
+                    return FileResponse(
+                        open(pdf_path, "rb"), content_type="application/pdf", filename=f"invoice_{order.order_number}.pdf"
+                    )
+                except (IOError, OSError) as e:
+                    logger.error(f"Error reading PDF file for invoice {invoice.id}: {e}")
+                    return Response({"error": "Failed to read invoice PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({"message": "Invoice generated but PDF not available", "invoice_id": invoice.id})
+
+        except Exception as e:
+            logger.error(f"Unexpected error processing invoice for order {pk}: {e}")
+            return Response({"error": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class NotificationListView(views.APIView):

@@ -235,6 +235,68 @@ class InvoiceGenerationService:
             return invoice
 
     @staticmethod
+    def create_invoice_from_marketplace_order(marketplace_order):
+        """
+        Create invoice from MarketplaceOrder (multi-item order).
+        """
+        from .models import Invoice, InvoiceLineItem
+
+        # Only create invoice for orders that are paid or explicitly require invoice
+        if not marketplace_order.is_paid and not getattr(marketplace_order, "requires_invoice", False):
+            raise ValueError("Can only create invoices for paid orders or orders that require invoice")
+
+        existing_invoice = getattr(marketplace_order, "invoice", None)
+        if existing_invoice:
+            logger.info(f"Invoice already exists for order {marketplace_order.order_number}")
+            return existing_invoice
+
+        with transaction.atomic():
+            # Basic customer and billing information
+            name = (
+                getattr(marketplace_order.customer, "get_full_name", lambda: None)() or marketplace_order.customer.username
+            )
+            email = marketplace_order.customer.email
+            phone = ""
+            billing_address = InvoiceGenerationService._get_billing_address_from_order(marketplace_order)
+
+            invoice = Invoice.objects.create(
+                marketplace_order=marketplace_order,
+                customer=marketplace_order.customer,
+                customer_name=name,
+                customer_email=email,
+                customer_phone=phone,
+                billing_address=billing_address,
+                due_date=timezone.now() + timedelta(days=30),
+                subtotal=marketplace_order.total_amount - (marketplace_order.shipping_cost or Decimal("0")),
+                tax_amount=Decimal("0"),
+                shipping_cost=marketplace_order.shipping_cost or Decimal("0"),
+                total_amount=marketplace_order.total_amount,
+                currency=getattr(marketplace_order, "currency", "NPR") or "NPR",
+                status="paid" if marketplace_order.is_paid else "draft",
+            )
+
+            # Create line items for each order item
+            for item in marketplace_order.items.select_related("product", "product__product").all():
+                InvoiceLineItem.objects.create(
+                    invoice=invoice,
+                    product_name=getattr(item.product.product, "name", str(item.product)),
+                    product_sku=getattr(item.product.product, "sku", ""),
+                    description=InvoiceGenerationService._format_product_description(item.product),
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    marketplace_product=item.product,
+                )
+
+            # Generate PDF
+            if PDF_AVAILABLE:
+                InvoiceGenerationService.generate_invoice_pdf(invoice)
+            else:
+                logger.warning("PDF generation unavailable - ReportLab not installed")
+
+            logger.info(f"Invoice {invoice.invoice_number} created for order {marketplace_order.order_number}")
+            return invoice
+
+    @staticmethod
     def generate_invoice_pdf(invoice):
         if not PDF_AVAILABLE:
             logger.error("Cannot generate PDF - ReportLab not installed")
