@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "market",
     "user",
     "report",
+    "search_suggestions",
     "drf_spectacular",
     "transport",
     "payment",
@@ -431,6 +432,37 @@ CELERY_BEAT_SCHEDULE = {
         "task": "user.tasks.get_login_security_stats_task",
         "schedule": crontab(minute=0, hour=8),  # Daily at 8 AM
     },
+    "update-query-associations-hourly": {
+        "task": "search_suggestions.update_query_associations",
+        "schedule": 3600.0,  # Every hour
+    },
+    # Update query popularity every 15 minutes
+    "update-query-popularity-quarterly": {
+        "task": "search_suggestions.update_query_popularity",
+        "schedule": 900.0,  # Every 15 minutes
+    },
+    # Clear stale cache daily
+    "clear-stale-cache-daily": {
+        "task": "search_suggestions.clear_stale_cache",
+        "schedule": 86400.0,  # Every day
+    },
+    # Cleanup old data weekly
+    "cleanup-old-data-weekly": {
+        "task": "search_suggestions.cleanup_old_data",
+        "schedule": 604800.0,  # Every week
+    },
+    # Generate daily report at midnight
+    "generate-daily-report": {
+        "task": "search_suggestions.generate_daily_report",
+        "schedule": 86400.0,  # Every day
+        "kwargs": {"hour": 0, "minute": 0},  # At midnight
+    },
+    # Warm up cache every 6 hours
+    "warmup-cache-6h": {
+        "task": "search_suggestions.warmup_cache",
+        "schedule": 21600.0,  # Every 6 hours
+        "args": (100,),  # Cache 100 popular queries
+    },
 }
 
 SITE_URL = "https://appmulyabazzar.com"
@@ -443,7 +475,13 @@ if CACHE_REDIS_URL:
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": CACHE_REDIS_URL,
-            "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+                "SOCKET_CONNECT_TIMEOUT": 5,
+                "SOCKET_TIMEOUT": 5,
+                "CONNECTION_POOL_KWARGS": {"max_connections": 100},
+            },
         }
     }
 else:
