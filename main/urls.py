@@ -23,6 +23,9 @@ from market.views import (
     ChatMessageViewSet,
     DeliveryCreateView,
     DeliveryViewSet,
+    DistributorOrderInvoiceView,
+    DistributorOrdersView,
+    DistributorProfileView,
     FeedbackViewSet,
     GlobalEnumView,
     MarketplaceProductReviewViewSet,
@@ -56,9 +59,6 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
-    DistributorProfileView,
-    DistributorOrdersView,
-    DistributorOrderInvoiceView,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -100,6 +100,7 @@ from producer.views import (
     stats_dashboard,
 )
 from recommendations.views import business_recommendations
+from search_suggestions.views import SearchSuggestionsAPIView, SuggestionClickAPIView
 from transport import views as transport_views
 from user.b2b_api import B2BVerifiedUsersProductsView
 from user.views import (
@@ -315,6 +316,8 @@ urlpatterns = [
         DistributorOrderInvoiceView.as_view(),
         name="distributor-order-invoice",
     ),
+    path("api/v1/suggestions/", SearchSuggestionsAPIView.as_view(), name="search-suggestions"),
+    path("api/v1/suggestions/click/", SuggestionClickAPIView.as_view(), name="suggestion-click"),
 ]
 
 # Add API documentation URLs only in DEBUG mode
