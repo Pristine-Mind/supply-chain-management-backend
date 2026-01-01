@@ -114,7 +114,64 @@ class SearchSuggestionService:
         # Sort by score descending
         suggestions_list.sort(key=lambda x: x["score"], reverse=True)
 
+        # Attach marketplace product id where possible to allow frontend deep-links
+        try:
+            self._attach_product_ids(suggestions_list)
+        except Exception:
+            logger.exception("Failed to attach product ids to suggestions")
+
         return suggestions_list
+
+    def _attach_product_ids(self, suggestions_list: List[Dict]):
+        """Try to attach a MarketplaceProduct id for each suggestion if a good match exists."""
+        try:
+            from producer.models import MarketplaceProduct
+        except Exception:
+            return
+        import re
+
+        for suggestion in suggestions_list:
+            if suggestion.get("product_id"):
+                continue
+
+            query_text = (suggestion.get("query") or "").strip()
+            if not query_text:
+                continue
+
+            # 1) Try exact phrase match on product name/description
+            mp = (
+                MarketplaceProduct.objects.filter(
+                    (Q(product__name__icontains=query_text) | Q(product__description__icontains=query_text)),
+                    is_available=True,
+                )
+                .only("id")
+                .first()
+            )
+            if mp:
+                suggestion["product_id"] = mp.id
+                continue
+
+            # 2) Tokenized AND match (all significant tokens must appear)
+            tokens = [t for t in re.findall(r"\w+", query_text.lower()) if len(t) > 2]
+            if tokens:
+                q_and = Q()
+                for t in tokens:
+                    q_and &= Q(product__name__icontains=t) | Q(product__description__icontains=t)
+
+                mp = MarketplaceProduct.objects.filter(q_and, is_available=True).only("id").first()
+                if mp:
+                    suggestion["product_id"] = mp.id
+                    continue
+
+            # 3) Fallback: match any token (prefer products matching more tokens could be optimized later)
+            if tokens:
+                q_or = Q()
+                for t in tokens[:4]:
+                    q_or |= Q(product__name__icontains=t) | Q(product__description__icontains=t)
+
+                mp = MarketplaceProduct.objects.filter(q_or, is_available=True).only("id").first()
+                if mp:
+                    suggestion["product_id"] = mp.id
 
     def _get_co_search_suggestions(self, query: str) -> List[Dict]:
         """
@@ -235,7 +292,7 @@ class SearchSuggestionService:
         """
         Get suggestions based on size/color attributes
         """
-        from producer.models import Product
+        from producer.models import MarketplaceProduct
 
         suggestions = []
 
@@ -275,8 +332,9 @@ class SearchSuggestionService:
                 )
 
                 if base_query:
-                    products = Product.objects.filter(
-                        Q(name__icontains=base_query) | Q(description__icontains=base_query), is_active=True
+                    products = MarketplaceProduct.objects.filter(
+                        Q(product__name__icontains=base_query) | Q(product__description__icontains=base_query),
+                        is_available=True,
                     )[:10]
 
                     for product in products:
