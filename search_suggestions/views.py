@@ -77,7 +77,13 @@ class SearchSuggestionsAPIView(APIView):
                 "query": query,
                 "normalized_query": self.suggestion_service.normalize_query(query),
                 "suggestions": [
-                    {"query": s["query"], "type": s["type"], "reason": s["reason"], "confidence": round(s["confidence"], 2)}
+                    {
+                        "query": s["query"],
+                        "type": s["type"],
+                        "reason": s.get("reason"),
+                        "confidence": round(s.get("confidence", 0.0), 2),
+                        "product_id": s.get("product_id"),
+                    }
                     for s in suggestions
                 ],
                 "count": len(suggestions),

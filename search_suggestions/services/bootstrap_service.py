@@ -225,10 +225,10 @@ class CatalogBootstrapService:
 
     def _get_product_types_for_category(self, category) -> List[str]:
         """Extract product types from products in category"""
-        from producer.models import Product
+        from producer.models import MarketplaceProduct
 
         # Get product names from this category
-        products = Product.objects.filter(category=category, is_active=True).values_list("name", flat=True)[:50]
+        products = MarketplaceProduct.objects.filter(product__category=category, is_available=True).values_list("product__name", flat=True)[:50]
 
         # Extract common words (assume they're product types)
         product_types = set()
@@ -354,33 +354,33 @@ class CatalogBootstrapService:
         """
         Create suggestions based on product attributes (size, color)
         """
-        from producer.models import Product
+        from producer.models import MarketplaceProduct
 
         from ..models import QueryAssociation
 
         attributes_created = 0
 
         # Get products with attributes
-        products = Product.objects.filter(
-            Q(size__isnull=False) | Q(color__isnull=False),
-            is_active=True,
+        products = MarketplaceProduct.objects.filter(
+            Q(product__size__isnull=False) | Q(product__color__isnull=False),
+            is_available=True,
         )[:200]
 
         # Group by category and create attribute associations
         category_attributes = {}
 
         for product in products:
-            if not product.category:
+            if not product.product.category:
                 continue
 
-            category_name = product.category.name
+            category_name = product.product.category.name
             if category_name not in category_attributes:
                 category_attributes[category_name] = {"sizes": set(), "colors": set()}
 
-            if product.size:
-                category_attributes[category_name]["sizes"].add(product.size)
-            if product.color:
-                category_attributes[category_name]["colors"].add(product.color)
+            if product.product.size:
+                category_attributes[category_name]["sizes"].add(product.product.size)
+            if product.product.color:
+                category_attributes[category_name]["colors"].add(product.product.color)
 
         # Create associations between sizes and colors within categories
         associations = []
