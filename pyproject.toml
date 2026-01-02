@@ -53,6 +53,7 @@ djangorestframework-simplejwt = "*"
 SpeechRecognition = "*"
 qrcode = "*"
 python-barcode = "*"
+beautifulsoup4 = "*"
 
 
 [tool.poetry.dev-dependencies]
