@@ -3,6 +3,7 @@ from datetime import datetime
 from re import M
 
 from django.contrib.gis.geos import Point
+import market
 from rest_framework import serializers
 
 from user.models import UserProfile
@@ -484,10 +485,11 @@ class MiniProductSerializer(serializers.ModelSerializer):
     brand_name = serializers.CharField(source="get_brand_name", read_only=True)
     thumbnail = serializers.SerializerMethodField()
     category_info = MiniCategorySerializer(source="category", read_only=True)
+    marketplace_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
-        fields = ["id", "name", "brand_name", "price", "thumbnail", "category_info", "description"]
+        fields = ["id", "name", "brand_name", "price", "thumbnail", "category_info", "description", "marketplace_id"]
 
     def get_marketplace_id(self, obj):
         mp = MarketplaceProduct.objects.filter(product=obj).only("id").first()
