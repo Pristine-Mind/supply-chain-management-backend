@@ -1,17 +1,23 @@
 import logging
 import os
-import requests
 from decimal import Decimal
 from io import BytesIO
 
 import pandas as pd
-from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand
-from django.core.files.base import ContentFile
-from django.db import transaction
+import requests
 from bs4 import BeautifulSoup
+from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
+from django.core.management.base import BaseCommand
+from django.db import transaction
 
-from producer.models import Category, Producer, Product, ProductImage, MarketplaceProduct
+from producer.models import (
+    Category,
+    MarketplaceProduct,
+    Producer,
+    Product,
+    ProductImage,
+)
 from user.models import Role, UserProfile
 
 # Set up logging
