@@ -7,7 +7,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models, transaction
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum, Case, When
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
@@ -1119,151 +1119,62 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     filterset_class = MarketplaceProductFilter
 
     def get_queryset(self):
-        # Base queryset
-        qs = (
-            MarketplaceProduct.objects.filter(is_available=True)
-            .select_related(
-                "product",
-                "product__user",
-                "product__user__user_profile",
-                "product__brand",
-                "product__category",
-                "product__subcategory",
-                "product__sub_subcategory",
-                "product__producer",
-                "product__location",
-            )
-            .prefetch_related("bulk_price_tiers", "variants", "reviews", "product__images")
-            .order_by("-listed_date")
-            .distinct()
-        )
-
-        # Optional filter: restrict to products belonging to a specific seller/user
-        user_id = None
-        try:
-            user_id = self.request.query_params.get("user_id") or self.request.query_params.get("seller_id")
-        except Exception:
-            user_id = None
-
-        if user_id:
-            try:
-                uid = int(user_id)
-                qs = qs.filter(product__user__id=uid)
-            except (ValueError, TypeError):
-                pass
-
-        return qs
+        """
+        Optimized base queryset using select_related for 1-to-1/FK 
+        and prefetch_related for M2M/Reverse FKs.
+        """
+        return MarketplaceProduct.objects.filter(is_available=True).select_related(
+            "product",
+            "product__user",
+            "product__category",
+        ).prefetch_related(
+            "bulk_price_tiers", 
+            "variants"
+        ).order_by("-listed_date")
 
     def list(self, request, *args, **kwargs):
-        """List marketplace products but randomize order within the first N results.
+        cache_key = self._get_cache_key(request)
+        cached_response = cache.get(cache_key)
+        if cached_response:
+            return Response(cached_response)
 
-        This takes the filtered queryset (so filtering backends still apply),
-        limits to `first_n` products (default 50) ordered by listed_date,
-        shuffles them in-memory, then paginates the shuffled list.
-        """
-        # Apply filtering backends (search, filterset, etc.)
         qs = self.filter_queryset(self.get_queryset())
 
-        # Determine how many top products to randomize from
         try:
-            first_n = int(request.query_params.get("first_n", 50))
+            first_n = min(int(request.query_params.get("first_n", 50)), 200)
         except (ValueError, TypeError):
             first_n = 50
 
-        # Take a candidate pool (larger than first_n) to allow picking from
-        # multiple categories, then build a category-balanced list by
-        # round-robin selecting from each category in random order.
-        candidate_factor = 3
-        max_candidate_cap = 500
-        candidate_size = min(max_candidate_cap, max(first_n * candidate_factor, first_n))
-        candidates = list(qs[:candidate_size])
+        candidate_ids = list(qs.values_list('id', flat=True)[:first_n * 2])
+        
+        if candidate_ids:
+            random.shuffle(candidate_ids)
+            selected_ids = candidate_ids[:first_n]
+            
+            preserved_order = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(selected_ids)])
+            
+            random_part = qs.filter(id__in=selected_ids).order_by(preserved_order)
+            remaining_part = qs.exclude(id__in=selected_ids)
+            
+            final_qs = random_part | remaining_part
+        else:
+            final_qs = qs
 
-        # Shuffle candidates to ensure randomness within categories too
-        random.shuffle(candidates)
+        page = self.paginate_queryset(final_qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response_data = self.get_paginated_response(serializer.data).data
+            cache.set(cache_key, response_data, 300)
+            return Response(response_data)
 
-        # Group candidates by category (use category id or name where available)
-        from collections import defaultdict
+        serializer = self.get_serializer(final_qs, many=True)
+        return Response(serializer.data)
 
-        buckets = defaultdict(list)
-        for mp in candidates:
-            try:
-                cat = mp.product.category
-            except Exception:
-                cat = None
-            # Use id if it's a model, else use the value directly
-            cat_key = getattr(cat, "id", None) if getattr(cat, "id", None) is not None else cat
-            buckets[cat_key].append(mp)
-
-        # Randomize bucket order so categories are interleaved unpredictably
-        category_keys = list(buckets.keys())
-        random.shuffle(category_keys)
-
-        limited_qs = []
-        # Round-robin pick one from each bucket until we reach first_n
-        while len(limited_qs) < first_n and any(buckets[k] for k in category_keys):
-            for k in list(category_keys):
-                if not buckets[k]:
-                    continue
-                # Pop from front to keep higher-ranked items earlier for each category
-                limited_qs.append(buckets[k].pop(0))
-                if len(limited_qs) >= first_n:
-                    break
-
-        # If still short, append remaining candidates in order
-        if len(limited_qs) < first_n:
-            remaining = [mp for k in category_keys for mp in buckets[k]]
-            for mp in remaining:
-                if len(limited_qs) >= first_n:
-                    break
-                limited_qs.append(mp)
-
-        # Build the final ordered list: randomized first `first_n`, then the rest
-        try:
-            selected_ids = [int(mp.id) for mp in limited_qs]
-        except Exception:
-            selected_ids = []
-
-        # Get remaining products (preserve original queryset ordering)
-        try:
-            remaining_qs = list(qs.exclude(id__in=selected_ids)) if selected_ids else list(qs)
-        except Exception:
-            # Fallback: use candidates not already selected
-            remaining_qs = [mp for mp in list(qs) if getattr(mp, "id", None) not in selected_ids]
-
-        final_list = limited_qs + remaining_qs
-
-        # Use DRF paginator on the combined list
-        try:
-            user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
-        except Exception:
-            user_part = "anon"
-        cache_key = (
-            "producer:list:" + hashlib.sha256((request.get_full_path() + ":" + user_part).encode("utf-8")).hexdigest()
-        )
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
-
-        paginator = self.paginator or PageNumberPagination()
-        # Allow page_size via query param if provided
-        page_size = request.query_params.get("page_size")
-        if page_size:
-            try:
-                paginator.page_size = int(page_size)
-            except (ValueError, TypeError):
-                pass
-
-        page = paginator.paginate_queryset(final_list, request, view=self)
-        serializer = self.get_serializer(page, many=True, context={"request": request})
-        response = paginator.get_paginated_response(serializer.data)
-
-        # Cache the response data (dict) for a short TTL
-        try:
-            cache.set(cache_key, response.data, LIST_CACHE_TTL)
-        except Exception:
-            pass
-
-        return response
+    def _get_cache_key(self, request):
+        """Generates a unique MD5 hash for the request based on URL and User."""
+        user_id = request.user.id if request.user.is_authenticated else "anon"
+        raw_key = f"{request.get_full_path()}_{user_id}"
+        return f"market_v3_{hashlib.md5(raw_key.encode()).hexdigest()}"
 
     @action(detail=False, methods=["get"], url_path="made-for-you", permission_classes=[AllowAny])
     def made_for_you(self, request):

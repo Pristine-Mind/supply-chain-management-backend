@@ -906,7 +906,7 @@ class MarketplaceProduct(models.Model):
     b2b_min_quantity = models.PositiveIntegerField(
         null=True, blank=True, verbose_name=_("B2B Minimum Quantity"), help_text=_("Minimum order quantity for B2B pricing")
     )
-
+        
     def save(self, *args, **kwargs):
         user_profile = None
         try:
@@ -1067,6 +1067,9 @@ class MarketplaceProduct(models.Model):
     class Meta:
         verbose_name = _("Marketplace Product")
         verbose_name_plural = _("Marketplace Products")
+        indexes = [
+            models.Index(fields=['is_available', '-listed_date']),
+        ]
 
 
 class MarketplaceBulkPriceTier(models.Model):
