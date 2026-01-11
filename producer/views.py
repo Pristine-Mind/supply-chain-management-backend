@@ -119,15 +119,24 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         return [IsAuthenticated()]
 
     def list(self, request):
-        """List creators; supports `?q=` to search handle/display_name/username."""
+        """List creators; supports `?q=` to search handle/display_name/username and `?category=` or `?video_category=`."""
         q = request.query_params.get("q", "").strip()
+        category_id = request.query_params.get("category")
+        video_category_id = request.query_params.get("video_category")
         qs = self.get_queryset()
+
         if q:
             qs = qs.filter(
                 models.Q(handle__icontains=q) | models.Q(display_name__icontains=q) | models.Q(user__username__icontains=q)
             )
 
-        page = self.paginate_queryset(qs.order_by("-follower_count"))
+        if category_id:
+            qs = qs.filter(categories__id=category_id)
+
+        if video_category_id:
+            qs = qs.filter(video_categories__id=video_category_id)
+
+        page = self.paginate_queryset(qs.distinct().order_by("-follower_count"))
         if page is not None:
             serializer = self.get_serializer(page, many=True, context={"request": request})
             return self.get_paginated_response(serializer.data)

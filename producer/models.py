@@ -442,6 +442,7 @@ class CreatorProfile(models.Model):
     social_links = models.JSONField(default=dict, blank=True)
     location = models.ForeignKey("City", on_delete=models.SET_NULL, null=True, blank=True, related_name="creators")
     categories = models.ManyToManyField(Category, blank=True, related_name="creators")
+    video_categories = models.ManyToManyField("market.ShoppableVideoCategory", blank=True, related_name="creators")
 
     follower_count = models.PositiveIntegerField(default=0)
     posts_count = models.PositiveIntegerField(default=0)

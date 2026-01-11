@@ -35,6 +35,7 @@ from market.views import (
     ProductFeedbackView,
     SellerProductsView,
     ShoppableVideoViewSet,
+    ShoppableVideoCategoryViewSet,
     UserBidViewSet,
     UserCartView,
     UserFeedbackView,
@@ -134,6 +135,7 @@ router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketpl
 router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
 router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"shoppable-videos", ShoppableVideoViewSet, basename="shoppable-videos")
+router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, basename="shoppable-video-categories")
 router.register(r"video-comments", VideoCommentViewSet, basename="video-comments")
 router.register(r"video-reports", VideoReportViewSet, basename="video-reports")
 router.register(r"user-follows", UserFollowViewSet, basename="user-follows")
