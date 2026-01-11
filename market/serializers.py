@@ -34,6 +34,7 @@ from .models import (
     SellerChatMessage,
     ShoppableVideo,
     ShoppableVideoCategory,
+    ShoppableVideoItem,
     UserFollow,
     UserProductImage,
     VideoComment,
@@ -1021,6 +1022,12 @@ class ShoppableVideoCategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "icon", "is_active", "order"]
 
 
+class ShoppableVideoItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShoppableVideoItem
+        fields = ["id", "file", "thumbnail", "order", "created_at"]
+
+
 class ShoppableVideoSerializer(serializers.ModelSerializer):
     uploader_name = serializers.CharField(source="uploader.username", read_only=True)
     uploader_profile = serializers.SerializerMethodField()
@@ -1028,6 +1035,7 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
     creator_profile = serializers.SerializerMethodField()
     creator_profile_id = serializers.IntegerField(write_only=True, required=False)
     category_details = ShoppableVideoCategorySerializer(source="category", read_only=True)
+    items = ShoppableVideoItemSerializer(many=True, read_only=True)
     product = MarketplaceProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=MarketplaceProduct.objects.all(), source="product", write_only=True
@@ -1046,8 +1054,11 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
             "creator_profile_id",
             "uploader_profile_url",
             "uploader_name",
+            "content_type",
             "video_file",
+            "image_file",
             "thumbnail",
+            "items",
             "category",
             "category_details",
             "title",
@@ -1068,6 +1079,9 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
 
     def get_is_liked(self, obj):
         request = self.context.get("request")
+        liked_ids = self.context.get("liked_ids")
+        if liked_ids is not None:
+            return obj.id in liked_ids
         if request and request.user.is_authenticated:
             return VideoLike.objects.filter(user=request.user, video=obj).exists()
         return False
@@ -1110,6 +1124,9 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
+        saved_ids = self.context.get("saved_ids")
+        if saved_ids is not None:
+            return obj.id in saved_ids
         if request and request.user.is_authenticated:
             return VideoSave.objects.filter(user=request.user, video=obj).exists()
         return False

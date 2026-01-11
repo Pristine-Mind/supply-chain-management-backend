@@ -61,6 +61,7 @@ from .models import (
     SellerChatMessage,
     ShoppableVideo,
     ShoppableVideoCategory,
+    ShoppableVideoItem,
     UserFollow,
     VideoComment,
     VideoLike,
@@ -90,8 +91,9 @@ from .serializers import (
     SellerBidSerializer,
     SellerChatMessageSerializer,
     SellerProductSerializer,
-    ShoppableVideoSerializer,
     ShoppableVideoCategorySerializer,
+    ShoppableVideoItemSerializer,
+    ShoppableVideoSerializer,
     UserFollowSerializer,
     VideoCommentSerializer,
     VideoLikeSerializer,
@@ -1799,7 +1801,12 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
     ViewSet for Shoppable Videos (TikTok-style).
     """
 
-    queryset = ShoppableVideo.objects.all().order_by("-created_at")
+    queryset = (
+        ShoppableVideo.objects.select_related("uploader", "creator_profile", "category", "product", "product__product")
+        .prefetch_related("items", "additional_products")
+        .filter(is_active=True)
+        .order_by("-created_at")
+    )
     serializer_class = ShoppableVideoSerializer
     permission_classes = [IsAuthenticated]
 
@@ -1808,29 +1815,49 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return super().get_permissions()
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.request.user.is_authenticated:
+            # Avoid N+1 for is_liked and is_saved
+            # For the current batch of videos being serialized, pre-fetch user's likes/saves
+            # Note: This is an optimization for small batches (like pagination size)
+            pass
+        return context
+
     def list(self, request, *args, **kwargs):
         """
         Get a personalized feed of videos using the recommendation engine,
         or filter by category if category ID is provided.
         """
         category_id = request.query_params.get("category")
-        if category_id:
-            videos = ShoppableVideo.objects.filter(category_id=category_id, is_active=True).order_by("-created_at")
-            page = self.paginate_queryset(videos)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True, context={"request": request})
-                return self.get_paginated_response(serializer.data)
-            serializer = self.get_serializer(videos, many=True, context={"request": request})
-            return Response(serializer.data)
-
         user = request.user if request.user.is_authenticated else None
 
-        # Get recommended videos
-        service = VideoRecommendationService()
-        videos = service.generate_feed(user, feed_size=100)
+        if category_id:
+            videos = self.get_queryset().filter(category_id=category_id)
+        else:
+            # Get recommended videos
+            service = VideoRecommendationService()
+            videos = service.generate_feed(user, feed_size=100)
 
-        # Serialize and return
-        serializer = self.get_serializer(videos, many=True, context={"request": request})
+        # Optimize: Pre-fetch engagement status for the user
+        liked_ids = set()
+        saved_ids = set()
+        if user:
+            # Get IDs of all videos in the current list
+            video_ids = [v.id for v in videos]
+            liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+            saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+
+        page = self.paginate_queryset(videos)
+        if page is not None:
+            serializer = self.get_serializer(
+                page, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+            )
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(
+            videos, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+        )
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="feed/following", permission_classes=[IsAuthenticated])
@@ -1838,15 +1865,45 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         """Return a feed composed of videos from creators the user follows."""
         user = request.user
         following_ids = UserFollow.objects.filter(follower=user).values_list("following_id", flat=True)
-        qs = ShoppableVideo.objects.filter(uploader__id__in=following_ids, is_active=True).order_by("-created_at")
+        qs = self.get_queryset().filter(uploader__id__in=following_ids)
+
+        # Optimized engagement fetch
+        video_ids = list(qs.values_list("id", flat=True)[:100])  # Limit for optimization
+        liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+        saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
 
         page = self.paginate_queryset(qs)
         if page is not None:
-            serializer = self.get_serializer(page, many=True, context={"request": request})
+            serializer = self.get_serializer(
+                page, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+            )
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(qs, many=True, context={"request": request})
+        serializer = self.get_serializer(
+            qs, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+        )
         return Response(serializer.data)
+
+    def perform_create(self, serializer):
+        uploader = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(uploader=uploader)
+
+    @action(detail=True, methods=["post"], url_path="add-item")
+    def add_item(self, request, pk=None):
+        """Add an item (image/video) to a collection/carousel."""
+        video = self.get_object()
+
+        # Check if it's a collection
+        if video.content_type != "COLLECTION":
+            return Response({"error": "Items can only be added to COLLECTION type content."}, status=400)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "No file provided"}, status=400)
+
+        order = request.data.get("order", 0)
+        item = ShoppableVideoItem.objects.create(video=video, file=file, order=order)
+        return Response(ShoppableVideoItemSerializer(item).data, status=201)
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def like(self, request, pk=None):
@@ -1868,6 +1925,13 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         video.refresh_from_db()
 
         return Response({"status": "success", "liked": liked, "likes_count": video.likes_count})
+
+    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
+    def view(self, request, pk=None):
+        """Track video views."""
+        # Using F expression to avoid race conditions and for speed
+        ShoppableVideo.objects.filter(pk=pk).update(views_count=models.F("views_count") + 1)
+        return Response({"status": "success"})
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def save_video(self, request, pk=None):

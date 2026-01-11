@@ -438,19 +438,19 @@ class CreatorProfile(models.Model):
     bio = models.TextField(blank=True, null=True)
     avatar = models.ImageField(upload_to="creator_avatars/", null=True, blank=True)
     cover_image = models.ImageField(upload_to="creator_covers/", null=True, blank=True)
-    is_verified = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False, db_index=True)
     social_links = models.JSONField(default=dict, blank=True)
     location = models.ForeignKey("City", on_delete=models.SET_NULL, null=True, blank=True, related_name="creators")
     categories = models.ManyToManyField(Category, blank=True, related_name="creators")
     video_categories = models.ManyToManyField("market.ShoppableVideoCategory", blank=True, related_name="creators")
 
-    follower_count = models.PositiveIntegerField(default=0)
+    follower_count = models.PositiveIntegerField(default=0, db_index=True)
     posts_count = models.PositiveIntegerField(default=0)
     views_count = models.PositiveIntegerField(default=0)
 
     public_collections_enabled = models.BooleanField(default=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_active_at = models.DateTimeField(null=True, blank=True)
 

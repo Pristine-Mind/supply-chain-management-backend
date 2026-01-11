@@ -1924,9 +1924,14 @@ class ShoppableVideoCategory(models.Model):
 
 class ShoppableVideo(models.Model):
     """
-    Represents a short, shoppable video (TikTok-style) uploaded by sellers or influencers.
-    Allows tagging products for instant purchase.
+    Represents a short content (TikTok-style video, single image, or carousel)
+    uploaded by sellers or influencers. Allows tagging products for instant purchase.
     """
+
+    class ContentType(models.TextChoices):
+        VIDEO = "VIDEO", _("Video")
+        IMAGE = "IMAGE", _("Graphic/Single Image")
+        COLLECTION = "COLLECTION", _("Collection/Carousel")
 
     uploader = models.ForeignKey(
         User,
@@ -1946,10 +1951,25 @@ class ShoppableVideo(models.Model):
         verbose_name=_("Creator Profile"),
         db_index=True,
     )
+    content_type = models.CharField(
+        max_length=20,
+        choices=ContentType.choices,
+        default=ContentType.VIDEO,
+        verbose_name=_("Content Type"),
+        db_index=True,
+    )
     video_file = models.FileField(
         upload_to="shoppable_videos/",
         verbose_name=_("Video File"),
         validators=[FileExtensionValidator(allowed_extensions=["mp4", "avi", "mov"])],
+        null=True,
+        blank=True,
+    )
+    image_file = models.ImageField(
+        upload_to="shoppable_graphics/",
+        verbose_name=_("Image File (for Single Image)"),
+        null=True,
+        blank=True,
     )
     thumbnail = models.ImageField(
         upload_to="shoppable_videos/thumbnails/", null=True, blank=True, verbose_name=_("Thumbnail")
@@ -1961,13 +1981,18 @@ class ShoppableVideo(models.Model):
         blank=True,
         related_name="videos",
         verbose_name=_("Category"),
+        db_index=True,
     )
     title = models.CharField(max_length=255, verbose_name=_("Video Title"), default="")
     description = models.TextField(blank=True, verbose_name=_("Description"))
 
     # Product featured in the video
     product = models.ForeignKey(
-        MarketplaceProduct, on_delete=models.CASCADE, related_name="shoppable_videos", verbose_name=_("Primary Product")
+        MarketplaceProduct,
+        on_delete=models.CASCADE,
+        related_name="shoppable_videos",
+        verbose_name=_("Primary Product"),
+        db_index=True,
     )
     additional_products = models.ManyToManyField(
         MarketplaceProduct, related_name="featured_in_videos", blank=True, verbose_name=_("Additional Products")
@@ -1980,29 +2005,78 @@ class ShoppableVideo(models.Model):
 
     # Recommendation fields
     tags = models.JSONField(default=list, blank=True, verbose_name=_("Tags"))
-    trend_score = models.FloatField(default=0.0, verbose_name=_("Trend Score"))
+    trend_score = models.FloatField(default=0.0, verbose_name=_("Trend Score"), db_index=True)
 
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
-    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"), db_index=True)
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"), db_index=True)
     # Generic relation to structured product tags (image pins / video timecode tags)
     product_tags = GenericRelation("market.ProductTag", related_query_name="product_tags")
 
     def clean(self):
         # Ensure at least one of uploader or creator_profile is present
+        from django.core.exceptions import ValidationError
+
         errors = {}
         if not self.uploader and not self.creator_profile:
             errors["uploader"] = "Either uploader or creator_profile must be set."
             errors["creator_profile"] = "Either uploader or creator_profile must be set."
+
+        if self.content_type == "VIDEO" and not self.video_file:
+            errors["video_file"] = "Video file is required for VIDEO content type."
+        if self.content_type == "IMAGE" and not self.image_file:
+            errors["image_file"] = "Image file is required for IMAGE content type."
+        if self.content_type == "COLLECTION" and not self.image_file:
+            # We use image_file as the cover image for collections
+            errors["image_file"] = "Cover image is required for COLLECTION content type."
+
         if errors:
             raise ValidationError(errors)
 
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Video {self.id} by {self.uploader.username}"
+        return f"Content {self.id} by {self.uploader.username if self.uploader else 'Unknown'}"
 
     class Meta:
-        verbose_name = _("Shoppable Video")
-        verbose_name_plural = _("Shoppable Videos")
+        verbose_name = _("Shoppable Content")
+        verbose_name_plural = _("Shoppable Contents")
         ordering = ["-created_at"]
+
+
+class ShoppableVideoItem(models.Model):
+    """
+    Individual items for a collection or carousel in ShoppableVideo.
+    """
+
+    video = models.ForeignKey(
+        ShoppableVideo,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name=_("Parent Content"),
+    )
+    file = models.FileField(
+        upload_to="shoppable_content/items/",
+        verbose_name=_("Media File"),
+        help_text=_("Image or video file for the carousel item"),
+    )
+    thumbnail = models.ImageField(
+        upload_to="shoppable_content/items/thumbnails/",
+        null=True,
+        blank=True,
+        verbose_name=_("Thumbnail"),
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name=_("Display Order"))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Item {self.id} for Content {self.video_id}"
+
+    class Meta:
+        verbose_name = _("Shoppable Content Item")
+        verbose_name_plural = _("Shoppable Content Items")
+        ordering = ["order", "created_at"]
 
 
 class VideoLike(models.Model):

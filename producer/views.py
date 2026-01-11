@@ -7,7 +7,17 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models, transaction
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum, Case, When
+from django.db.models import (
+    Case,
+    Count,
+    ExpressionWrapper,
+    F,
+    FloatField,
+    Prefetch,
+    Q,
+    Sum,
+    When,
+)
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
