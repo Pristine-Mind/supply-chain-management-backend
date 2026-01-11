@@ -35,8 +35,22 @@ from .models import (
 )
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    subcategories_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ["id", "code", "name", "description", "is_active", "created_at", "updated_at", "subcategories_count"]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def get_subcategories_count(self, obj):
+        return obj.subcategories.filter(is_active=True).count()
+
+
 class CreatorProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
+    category_details = CategorySerializer(source="categories", many=True, read_only=True)
+    video_category_details = serializers.SerializerMethodField()
 
     class Meta:
         model = CreatorProfile
@@ -52,6 +66,10 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             "is_verified",
             "social_links",
             "location",
+            "categories",
+            "category_details",
+            "video_categories",
+            "video_category_details",
             "follower_count",
             "posts_count",
             "views_count",
@@ -60,6 +78,14 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["user", "follower_count", "posts_count", "views_count", "created_at", "updated_at"]
+
+    def get_video_category_details(self, obj):
+        try:
+            from market.serializers import ShoppableVideoCategorySerializer
+
+            return ShoppableVideoCategorySerializer(obj.video_categories.all(), many=True).data
+        except Exception:
+            return []
 
 
 class ProducerSerializer(serializers.ModelSerializer):
@@ -82,18 +108,6 @@ class ProducerSerializer(serializers.ModelSerializer):
         if not value.isalnum():
             raise serializers.ValidationError("Registration number must be alphanumeric.")
         return value
-
-
-class CategorySerializer(serializers.ModelSerializer):
-    subcategories_count = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Category
-        fields = ["id", "code", "name", "description", "is_active", "created_at", "updated_at", "subcategories_count"]
-        read_only_fields = ["created_at", "updated_at"]
-
-    def get_subcategories_count(self, obj):
-        return obj.subcategories.filter(is_active=True).count()
 
 
 class MiniCategorySerializer(serializers.ModelSerializer):

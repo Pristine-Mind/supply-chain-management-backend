@@ -33,6 +33,7 @@ from .models import (
     Purchase,
     SellerChatMessage,
     ShoppableVideo,
+    ShoppableVideoCategory,
     UserFollow,
     UserProductImage,
     VideoComment,
@@ -1014,12 +1015,19 @@ class VoiceSearchInputSerializer(serializers.Serializer):
         return data
 
 
+class ShoppableVideoCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShoppableVideoCategory
+        fields = ["id", "name", "icon", "is_active", "order"]
+
+
 class ShoppableVideoSerializer(serializers.ModelSerializer):
     uploader_name = serializers.CharField(source="uploader.username", read_only=True)
     uploader_profile = serializers.SerializerMethodField()
     uploader_profile_url = serializers.SerializerMethodField()
     creator_profile = serializers.SerializerMethodField()
     creator_profile_id = serializers.IntegerField(write_only=True, required=False)
+    category_details = ShoppableVideoCategorySerializer(source="category", read_only=True)
     product = MarketplaceProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=MarketplaceProduct.objects.all(), source="product", write_only=True
@@ -1040,6 +1048,8 @@ class ShoppableVideoSerializer(serializers.ModelSerializer):
             "uploader_name",
             "video_file",
             "thumbnail",
+            "category",
+            "category_details",
             "title",
             "description",
             "product",

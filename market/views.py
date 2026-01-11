@@ -60,6 +60,7 @@ from .models import (
     ProductView,
     SellerChatMessage,
     ShoppableVideo,
+    ShoppableVideoCategory,
     UserFollow,
     VideoComment,
     VideoLike,
@@ -90,6 +91,7 @@ from .serializers import (
     SellerChatMessageSerializer,
     SellerProductSerializer,
     ShoppableVideoSerializer,
+    ShoppableVideoCategorySerializer,
     UserFollowSerializer,
     VideoCommentSerializer,
     VideoLikeSerializer,
@@ -1808,8 +1810,19 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         """
-        Get a personalized feed of videos using the recommendation engine.
+        Get a personalized feed of videos using the recommendation engine,
+        or filter by category if category ID is provided.
         """
+        category_id = request.query_params.get("category")
+        if category_id:
+            videos = ShoppableVideo.objects.filter(category_id=category_id, is_active=True).order_by("-created_at")
+            page = self.paginate_queryset(videos)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True, context={"request": request})
+                return self.get_paginated_response(serializer.data)
+            serializer = self.get_serializer(videos, many=True, context={"request": request})
+            return Response(serializer.data)
+
         user = request.user if request.user.is_authenticated else None
 
         # Get recommended videos
@@ -1817,7 +1830,7 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         videos = service.generate_feed(user, feed_size=100)
 
         # Serialize and return
-        serializer = self.get_serializer(videos, many=True)
+        serializer = self.get_serializer(videos, many=True, context={"request": request})
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="feed/following", permission_classes=[IsAuthenticated])
@@ -2014,6 +2027,59 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         return Response({"status": "success", "views_count": video.views_count})
+
+
+class ShoppableVideoCategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Shoppable Video Categories.
+    """
+
+    queryset = ShoppableVideoCategory.objects.filter(is_active=True).order_by("order", "name")
+    serializer_class = ShoppableVideoCategorySerializer
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve", "creators", "videos"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    @action(detail=True, methods=["get"])
+    def creators(self, request, pk=None):
+        """Return list of creators who have videos in this category."""
+        category = self.get_object()
+        from producer.models import CreatorProfile
+        from producer.serializers import CreatorProfileSerializer
+
+        creator_ids = ShoppableVideo.objects.filter(category=category, is_active=True).values_list(
+            "creator_profile_id", flat=True
+        )
+        # Also include creators linked via uploader
+        uploader_ids = ShoppableVideo.objects.filter(category=category, is_active=True).values_list("uploader_id", flat=True)
+
+        qs = CreatorProfile.objects.filter(
+            Q(id__in=creator_ids) | Q(user_id__in=uploader_ids) | Q(video_categories=category)
+        ).distinct()
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = CreatorProfileSerializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = CreatorProfileSerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def videos(self, request, pk=None):
+        """Return list of videos in this category."""
+        category = self.get_object()
+        qs = ShoppableVideo.objects.filter(category=category, is_active=True).order_by("-created_at")
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = ShoppableVideoSerializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ShoppableVideoSerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
 
 
 class VideoCommentViewSet(viewsets.ModelViewSet):

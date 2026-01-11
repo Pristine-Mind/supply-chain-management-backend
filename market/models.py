@@ -1903,6 +1903,25 @@ class InvoiceLineItem(models.Model):
         return f"{self.product_name} x {self.quantity} = {self.total_price}"
 
 
+class ShoppableVideoCategory(models.Model):
+    """
+    Categories for shoppable videos to allow easy browsing.
+    """
+
+    name = models.CharField(max_length=100, verbose_name=_("Category Name"))
+    icon = models.ImageField(upload_to="video_categories/", null=True, blank=True, verbose_name=_("Icon"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+    order = models.PositiveIntegerField(default=0, verbose_name=_("Order"))
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = _("Shoppable Video Category")
+        verbose_name_plural = _("Shoppable Video Categories")
+        ordering = ["order", "name"]
+
+
 class ShoppableVideo(models.Model):
     """
     Represents a short, shoppable video (TikTok-style) uploaded by sellers or influencers.
@@ -1934,6 +1953,14 @@ class ShoppableVideo(models.Model):
     )
     thumbnail = models.ImageField(
         upload_to="shoppable_videos/thumbnails/", null=True, blank=True, verbose_name=_("Thumbnail")
+    )
+    category = models.ForeignKey(
+        ShoppableVideoCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="videos",
+        verbose_name=_("Category"),
     )
     title = models.CharField(max_length=255, verbose_name=_("Video Title"), default="")
     description = models.TextField(blank=True, verbose_name=_("Description"))
