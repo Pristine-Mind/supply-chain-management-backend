@@ -114,7 +114,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
     serializer_class = CreatorProfileSerializer
 
     def get_permissions(self):
-        if self.action in ["retrieve", "list", "followers", "following"]:
+        if self.action in ["retrieve", "list", "followers", "following", "videos"]:
             return [AllowAny()]
         return [IsAuthenticated()]
 
