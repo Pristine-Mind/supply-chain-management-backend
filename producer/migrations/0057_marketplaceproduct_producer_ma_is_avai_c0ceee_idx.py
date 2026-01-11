@@ -6,12 +6,12 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('producer', '0056_product_producer_pr_user_id_dde20d_idx_and_more'),
+        ("producer", "0056_product_producer_pr_user_id_dde20d_idx_and_more"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='marketplaceproduct',
-            index=models.Index(fields=['is_available', '-listed_date'], name='producer_ma_is_avai_c0ceee_idx'),
+            model_name="marketplaceproduct",
+            index=models.Index(fields=["is_available", "-listed_date"], name="producer_ma_is_avai_c0ceee_idx"),
         ),
     ]

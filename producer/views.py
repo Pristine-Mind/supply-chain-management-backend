@@ -114,7 +114,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
     serializer_class = CreatorProfileSerializer
 
     def get_permissions(self):
-        if self.action in ["retrieve", "list", "followers", "following", "videos"]:
+        if self.action in ["retrieve", "list", "followers", "following", "videos", "products"]:
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -295,6 +295,35 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = ShoppableVideoSerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], permission_classes=[AllowAny])
+    def products(self, request, pk=None):
+        """Return paginated list of marketplace products associated with this creator.
+
+        This includes:
+        - Products owned by the creator's user account.
+        - Products featured in the creator's shoppable videos.
+        """
+        creator = self.get_object()
+        qs = (
+            MarketplaceProduct.objects.filter(
+                Q(product__user=creator.user)
+                | Q(shoppable_videos__creator_profile=creator)
+                | Q(shoppable_videos__uploader=creator.user)
+                | Q(featured_in_videos__creator_profile=creator)
+                | Q(featured_in_videos__uploader=creator.user)
+            )
+            .distinct()
+            .select_related("product", "product__user")
+        )
+
+        page = self.paginate_queryset(qs.order_by("-listed_date"))
+        if page is not None:
+            serializer = MarketplaceProductSerializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = MarketplaceProductSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
 
@@ -1120,10 +1149,10 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Keep this as lean as possible
-        return MarketplaceProduct.objects.filter(is_available=True).select_related(
-            "product", "product__user", "product__category"
-        ).prefetch_related(
-            "bulk_price_tiers", "variants"
+        return (
+            MarketplaceProduct.objects.filter(is_available=True)
+            .select_related("product", "product__user", "product__category")
+            .prefetch_related("bulk_price_tiers", "variants")
         )
 
     def list(self, request, *args, **kwargs):
@@ -1144,14 +1173,14 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         if pool_ids:
             # Shuffle the list of IDs in memory
             random.shuffle(pool_ids)
-            
+
             # Use Case/When to force the DB to return these IDs in the shuffled order
             preserved_order = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(pool_ids)])
-            
+
             # Combine: Shuffled Pool + Everything else (ordered by date)
             random_pool_qs = qs.filter(id__in=pool_ids).order_by(preserved_order)
             remaining_qs = qs.exclude(id__in=pool_ids).order_by("-listed_date")
-            
+
             # Merge querysets using union or pipe (pipe preserves order better in some DBs)
             final_qs = random_pool_qs | remaining_qs
         else:
@@ -1162,7 +1191,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             response_data = self.get_paginated_response(serializer.data).data
-            cache.set(cache_key, response_data, 300) # Cache for 5 mins
+            cache.set(cache_key, response_data, 300)  # Cache for 5 mins
             return Response(response_data)
 
         # Fallback for non-paginated
