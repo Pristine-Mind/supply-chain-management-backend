@@ -7,7 +7,17 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models, transaction
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Prefetch, Q, Sum, Case, When
+from django.db.models import (
+    Case,
+    Count,
+    ExpressionWrapper,
+    F,
+    FloatField,
+    Prefetch,
+    Q,
+    Sum,
+    When,
+)
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
@@ -114,9 +124,19 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
     serializer_class = CreatorProfileSerializer
 
     def get_permissions(self):
-        if self.action in ["retrieve", "list", "followers", "following", "videos", "products"]:
+        if self.action in ["retrieve", "list", "followers", "following", "videos", "products", "trending"]:
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    @action(detail=False, methods=["get"], permission_classes=[AllowAny])
+    def trending(self, request):
+        """
+        Return a ranked list of trending creators based on social velocity.
+        In this implementation, we rank by follower_count and recency of verification.
+        """
+        qs = self.get_queryset().order_by("-follower_count", "-is_verified", "-created_at")[:20]
+        serializer = self.get_serializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
 
     def list(self, request):
         """List creators; supports `?q=` to search handle/display_name/username and `?category=` or `?video_category=`."""

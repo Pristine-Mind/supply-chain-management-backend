@@ -38,6 +38,7 @@ from market.views import (
     ProductFeedbackView,
     SellerChatMessageViewSet,
     SellerProductsView,
+    ShoppableVideoCategoryViewSet,
     ShoppableVideoViewSet,
     UserBidViewSet,
     UserCartView,
@@ -59,7 +60,6 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
-    ShoppableVideoCategoryViewSet,
 )
 from producer.views import (
     AuditLogViewSet,

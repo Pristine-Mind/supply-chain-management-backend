@@ -3,9 +3,9 @@ from datetime import datetime
 from re import M
 
 from django.contrib.gis.geos import Point
-import market
 from rest_framework import serializers
 
+import market
 from user.models import UserProfile
 
 from .models import (

@@ -1,218 +1,299 @@
+import logging
+
+import faiss
+import numpy as np
 import random
-from collections import defaultdict
-from datetime import timedelta
-
+from django.core.cache import cache
 from django.db.models import Count, Q
-from django.utils import timezone
+from implicit.als import AlternatingLeastSquares
+from scipy.sparse import csr_matrix
 
-from producer.models import MarketplaceProduct
+from user.models import UserProfile
 
 from .models import ShoppableVideo, UserInteraction, VideoLike, VideoSave
+
+logger = logging.getLogger(__name__)
+
+
+class DiscoveryEngine:
+    """Matrix Factorization (WALS) for latent factor discovery."""
+
+    def __init__(self, factors=64):
+        self.model = AlternatingLeastSquares(factors=factors, iterations=20, use_gpu=False)
+
+    def train(self):
+        """Build Sparse Matrix from interactions and train ALS model."""
+        # Define weights for different interaction types
+        # Likes = 3, Saves = 5, Views = 1
+        interactions = []
+
+        # We use user_id and video_id. For ALS, we usually need contiguous indices.
+        # But we can use raw IDs if we handle the mapping.
+
+        likes = VideoLike.objects.values("user_id", "video_id").annotate(weight=Count("id"))
+        for l in likes:
+            interactions.append((l["user_id"], l["video_id"], 3.0))
+
+        saves = VideoSave.objects.values("user_id", "video_id").annotate(weight=Count("id"))
+        for s in saves:
+            interactions.append((s["user_id"], s["video_id"], 5.0))
+
+        views = (
+            UserInteraction.objects.filter(event_type__in=["video_view", "watch_time"])
+            .values("user_id", "video_id")
+            .annotate(weight=Count("id"))
+        )
+        for v in views:
+            if v["user_id"] and v["video_id"]:
+                interactions.append((v["user_id"], v["video_id"], 1.0))
+
+        if not interactions:
+            logger.warning("No interactions found for training DiscoveryEngine.")
+            return
+
+        user_ids, video_ids, weights = zip(*interactions)
+
+        # Create mappings for sparse matrix indices
+        unique_users = sorted(set(user_ids))
+        unique_videos = sorted(set(video_ids))
+
+        user_map = {uid: i for i, uid in enumerate(unique_users)}
+        video_map = {vid: i for i, vid in enumerate(unique_videos)}
+
+        rows = [user_map[uid] for uid in user_ids]
+        cols = [video_map[vid] for vid in video_ids]
+
+        matrix = csr_matrix((weights, (rows, cols)), shape=(len(unique_users), len(unique_videos)))
+        self.model.fit(matrix)
+
+        # Save embeddings back to models for persistence
+        self._persist_embeddings(unique_users, unique_videos, user_map, video_map)
+
+    def _persist_embeddings(self, user_ids, video_ids, user_map, video_map):
+        """Save computed factors to UserProfile and ShoppableVideo."""
+        # Update Videos
+        for vid in video_ids:
+            factor = self.model.item_factors[video_map[vid]].tolist()
+            ShoppableVideo.objects.filter(id=vid).update(embedding=factor)
+
+        # Update Users
+        for uid in user_ids:
+            factor = self.model.user_factors[user_map[uid]].tolist()
+            UserProfile.objects.filter(user_id=uid).update(recommendation_embedding=factor)
+
+
+class FastRetrievalService:
+    """HNSW Vector Search (FAISS) for sub-100ms retrieval."""
+
+    def __init__(self, dimension=64):
+        # M=32 defines the number of bi-directional links in the graph
+        self.index = faiss.IndexHNSWFlat(dimension, 32)
+        self.id_map = {}  # Internal index to Video ID
+
+    def rebuild_index(self):
+        """Load embeddings from database and build FAISS index."""
+        videos = ShoppableVideo.objects.filter(embedding__isnull=False, is_active=True).values("id", "embedding")
+        if not videos:
+            return
+
+        vectors = []
+        ids = []
+        for v in videos:
+            vectors.append(v["embedding"])
+            ids.append(v["id"])
+
+        vectors_np = np.array(vectors).astype("float32")
+        self.index.add(vectors_np)
+
+        for i, vid in enumerate(ids):
+            self.id_map[i] = vid
+
+        logger.info(f"FAISS index rebuilt with {len(ids)} videos.")
+
+    def fetch_candidates(self, user_vector, k=100):
+        """Search top-k similar videos in O(logN)."""
+        if self.index.ntotal == 0:
+            return []
+
+        user_vector_np = np.array(user_vector).reshape(1, -1).astype("float32")
+        distances, indices = self.index.search(user_vector_np, k)
+
+        return [self.id_map[idx] for idx in indices[0] if idx != -1 and idx in self.id_map]
+
+
+def apply_diversity_filter(candidates_with_vectors, user_vector, lambda_val=0.6, top_n=20):
+    """Maximal Marginal Relevance (MMR) for diversity."""
+    selected = []
+    # remaining: List of (id, vector)
+    remaining = [(vid, np.array(vec)) for vid, vec in candidates_with_vectors if vec]
+    user_vec = np.array(user_vector)
+
+    while len(selected) < top_n and remaining:
+        best_mmr = -1e9
+        best_item = None
+
+        for item in remaining:
+            vid, v_vector = item
+            # Cosine similarity roughly equivalent to dot product for normalized vectors
+            relevance = np.dot(user_vec, v_vector)
+
+            # Penalty for similarity to already selected items
+            novelty = max([np.dot(v_vector, s[1]) for s in selected]) if selected else 0
+
+            mmr_score = lambda_val * relevance - (1 - lambda_val) * novelty
+
+            if mmr_score > best_mmr:
+                best_mmr = mmr_score
+                best_item = item
+
+        if best_item:
+            selected.append(best_item)
+            remaining.remove(best_item)
+        else:
+            break
+
+    return [s[0] for s in selected]
 
 
 class VideoRecommendationService:
     def __init__(self):
-        pass
+        self.retrieval_service = FastRetrievalService()
+        # In a production app, we would persist the index or rebuild on startup.
+        # For this implementation, we try to load from a singleton or rebuild.
+        self._ensure_index()
 
-    def get_user_interests(self, user):
-        """
-        Derive user interests from their history with time decay.
-        Returns a dictionary with 'categories' and 'tags' mapping to weights.
-        """
-        interests = {"categories": defaultdict(float), "tags": defaultdict(float)}
+    def _ensure_index(self):
+        """Ensures the FAISS index is loaded."""
+        # Simple singleton-like behavior for the session
+        global _FAISS_INDEX
+        if "_FAISS_INDEX" not in globals():
+            global _FAISS_INDEX
+            _FAISS_INDEX = FastRetrievalService()
+            _FAISS_INDEX.rebuild_index()
+        self.retrieval_service = _FAISS_INDEX
 
+    def get_user_embedding(self, user):
+        """Retrieve pre-computed embedding from UserProfile or cache."""
         if not user or not user.is_authenticated:
-            return interests
+            return None
 
-        now = timezone.now()
+        # Try cache first
+        cache_key = f"user_emb_{user.id}"
+        emb = cache.get(cache_key)
+        if emb:
+            return emb
 
-        def calculate_decay_weight(created_at):
-            # Weight = 1 / (days_since + 1)
-            days_since = (now - created_at).days
-            return 1.0 / (max(days_since, 0) + 1)
+        try:
+            profile = UserProfile.objects.get(user=user)
+            emb = profile.recommendation_embedding
+            if emb:
+                cache.set(cache_key, emb, 3600)
+                return emb
+        except UserProfile.DoesNotExist:
+            pass
 
-        # 1. From Liked Videos (High Weight)
-        liked_videos = VideoLike.objects.filter(user=user).select_related("video", "video__product__product")
-        for like in liked_videos:
-            weight = calculate_decay_weight(like.created_at) * 2.0  # Base weight 2.0 for likes
-            video = like.video
-            if video.product.product.category:
-                interests["categories"][video.product.product.category] += weight
-            if video.tags:
-                for tag in video.tags:
-                    interests["tags"][tag] += weight
+        return None
 
-        # 2. From Saved Videos (Highest Weight)
-        saved_videos = VideoSave.objects.filter(user=user).select_related("video", "video__product__product")
-        for save in saved_videos:
-            weight = calculate_decay_weight(save.created_at) * 3.0  # Base weight 3.0 for saves
-            video = save.video
-            if video.product.product.category:
-                interests["categories"][video.product.product.category] += weight
-            if video.tags:
-                for tag in video.tags:
-                    interests["tags"][tag] += weight
-
-        # 3. From User Interactions (viewed products) (Lower Weight)
-        interactions = UserInteraction.objects.filter(user=user, event_type="product_view").order_by("-created_at")[:50]
-
-        product_ids = []
-        interaction_dates = {}
-        for interaction in interactions:
-            if interaction.data and "product_id" in interaction.data:
-                pid = interaction.data["product_id"]
-                product_ids.append(pid)
-                interaction_dates[pid] = interaction.created_at
-
-        if product_ids:
-            products = MarketplaceProduct.objects.filter(id__in=product_ids).select_related("product")
-            for product in products:
-                weight = calculate_decay_weight(interaction_dates.get(product.id, now)) * 1.0
-                if product.product.category:
-                    interests["categories"][product.product.category] += weight
-
-        return interests
-
-    def get_candidate_videos(self, user):
+    def generate_feed(self, user, feed_size=20, session_interests=None):
         """
-        Generate candidate videos based on user interests and trends.
+        Two-Stage Pipeline:
+        1. Retrieval: FAISS HNSW candidate generation.
+        2. Ranking: MMR Diversity filtering.
         """
-        all_videos = ShoppableVideo.objects.filter(is_active=True).select_related("product__product")
+        user_vector = self.get_user_embedding(user)
 
-        if not user or not user.is_authenticated:
-            # For anonymous users, return trending videos
-            return list(all_videos.order_by("-trend_score")[:50])
+        # 1. Retrieval Stage (Recall)
+        if user_vector:
+            candidate_ids = self.retrieval_service.fetch_candidates(user_vector, k=100)
+            candidates = ShoppableVideo.objects.filter(id__in=candidate_ids, is_active=True)
+        else:
+            # Cold start / Anonymous: Fallback to trending
+            candidates = list(ShoppableVideo.objects.filter(is_active=True).order_by("-trend_score")[:100])
+            # Randomize in-memory to avoid Slice-Reorder error
+            random.shuffle(candidates)
+            return candidates[:feed_size]
 
-        interests = self.get_user_interests(user)
-        candidates = set()
+        if not candidates.exists():
+            return list(ShoppableVideo.objects.filter(is_active=True).order_by("-trend_score")[:feed_size])
 
-        # 1. Interest-based (Category)
-        # Get top 3 categories by weight
-        top_categories = sorted(interests["categories"].items(), key=lambda x: x[1], reverse=True)[:3]
-        top_category_names = [c[0] for c in top_categories]
+        # 2. Ranking & Diversity Stage (Precision)
+        # Prepare data for MMR
+        candidate_data = []
+        for v in candidates:
+            if v.embedding:
+                candidate_data.append((v.id, v.embedding))
 
-        if top_category_names:
-            cat_videos = all_videos.filter(product__product__category__in=top_category_names)
-            candidates.update(cat_videos)
+        if not candidate_data:
+            return list(candidates[:feed_size])
 
-        # 2. Interest-based (Tags)
-        # Get top 5 tags
-        top_tags = sorted(interests["tags"].items(), key=lambda x: x[1], reverse=True)[:5]
-        top_tag_names = {t[0] for t in top_tags}
+        final_ids = apply_diversity_filter(candidate_data, user_vector, top_n=feed_size)
 
-        # Fetch trending videos to filter by tags (optimization)
-        trending_videos = all_videos.filter(trend_score__gt=0.5).order_by("-trend_score")[:100]
+        # Load full objects while maintaining MMR order
+        video_map = {v.id: v for v in candidates}
+        return [video_map[vid] for vid in final_ids if vid in video_map]
 
-        for video in trending_videos:
-            candidates.add(video)
-            if video.tags and any(tag in top_tag_names for tag in video.tags):
-                candidates.add(video)
-
-        # If we don't have enough candidates, add some random recent ones
-        if len(candidates) < 20:
-            recent_videos = all_videos.order_by("-created_at")[:20]
-            candidates.update(recent_videos)
-
-        return list(candidates)
-
-    def score_video(self, video, user, interests):
+    def get_similar_videos(self, video_id, limit=10):
         """
-        Score a video for a specific user using weighted interests.
+        Find videos similar to the given video based on category and tags.
+        Classic content-based filtering for 'More Like This' sections.
         """
-        score = 0.0
+        try:
+            target = ShoppableVideo.objects.get(pk=video_id)
+        except ShoppableVideo.DoesNotExist:
+            return []
 
-        # 1. Category Match (Weighted)
-        cat_weight = interests["categories"].get(video.product.product.category, 0.0)
-        if cat_weight > 0:
-            score += 2.0 + (cat_weight * 0.5)  # Base score + weighted bonus
+        # Find videos in same category or with overlapping tags
+        similar = (
+            ShoppableVideo.objects.filter(Q(category=target.category) | Q(tags__overlap=target.tags), is_active=True)
+            .exclude(id=target.id)
+            .distinct()
+        )
 
-        # 2. Tag Match (Weighted)
-        if video.tags:
-            for tag in video.tags:
-                tag_weight = interests["tags"].get(tag, 0.0)
-                if tag_weight > 0:
-                    score += 1.5 + (tag_weight * 0.3)
+        # Score them by overlap
+        results = []
+        target_tags = set(target.tags or [])
 
-        # 3. Engagement Metrics
-        # Normalize these or use log scale in real app
-        # Here we use raw counts but scaled down
-        score += 0.01 * video.views_count  # Proxy for watch time
-        score += 1.0 * video.likes_count
-        score += (
-            1.2 * video.shares_count
-        )  # Using shares as saves proxy if saves count not on model, but we added VideoSave model
+        for v in similar:
+            score = 0
+            if v.category == target.category:
+                score += 5
 
-        # We need to count saves efficiently.
-        # Ideally ShoppableVideo should have saves_count field updated via signals.
-        # For now, we'll query it or assume shares_count is close enough for this algo demo
-        # score += 1.2 * video.saves.count() # This would be N+1 query, avoid in loop
+            v_tags = set(v.tags or [])
+            overlap = len(target_tags.intersection(v_tags))
+            score += overlap * 2
 
-        # 4. Trend Score
-        score += 4.0 * video.trend_score
+            results.append((v, score))
 
-        # 5. Randomness
-        score += random.uniform(0, 0.5)
+        # Sort by overlap score and trend
+        results.sort(key=lambda x: (x[1], x[0].trend_score), reverse=True)
+        return [r[0] for r in results[:limit]]
 
-        return score
-
-    def generate_feed(self, user, feed_size=20):
+    def get_social_proof_videos(self, video_id, limit=5):
         """
-        Generate the final feed with diversity enforcement.
-        Target Ratio: 60% Interest Match, 20% Trending, 20% Discovery
+        'People who watched this also watched...'
+        Collaborative filtering based on UserInteraction co-occurrence.
         """
-        candidates = self.get_candidate_videos(user)
-        interests = self.get_user_interests(user)
+        # Find users who watched this video
+        users_who_watched = (
+            UserInteraction.objects.filter(video_id=video_id, event_type__in=["video_view", "watch_time"])
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
 
-        scored_candidates = []
-        for video in candidates:
-            s = self.score_video(video, user, interests)
-            scored_candidates.append((video, s))
+        if not users_who_watched:
+            return self.get_similar_videos(video_id, limit=limit)
 
-        # Sort by score
-        ranked_candidates = sorted(scored_candidates, key=lambda x: x[1], reverse=True)
+        # Find other videos watched by these users
+        other_videos = (
+            UserInteraction.objects.filter(user_id__in=users_who_watched, event_type__in=["video_view", "watch_time"])
+            .exclude(video_id=video_id)
+            .values("video_id")
+            .annotate(watch_count=Count("id"))
+            .order_by("-watch_count")[:limit]
+        )
 
-        # Diversity Enforcement
-        final_feed = []
-        seen_ids = set()
+        video_ids = [item["video_id"] for item in other_videos if item["video_id"]]
+        if not video_ids:
+            return self.get_similar_videos(video_id, limit=limit)
 
-        # 1. Top Interest Matches (60%)
-        interest_count = int(feed_size * 0.6)
-        for video, score in ranked_candidates:
-            if len(final_feed) >= interest_count:
-                break
-            if video.id not in seen_ids:
-                final_feed.append(video)
-                seen_ids.add(video.id)
-
-        # 2. Trending (20%) - High trend score, regardless of personalization
-        trending_count = int(feed_size * 0.2)
-        trending_candidates = sorted(candidates, key=lambda x: x.trend_score, reverse=True)
-
-        added_trending = 0
-        for video in trending_candidates:
-            if added_trending >= trending_count:
-                break
-            if video.id not in seen_ids:
-                final_feed.append(video)
-                seen_ids.add(video.id)
-                added_trending += 1
-
-        # 3. Discovery / Random (Remaining 20%)
-        remaining_candidates = [v for v in candidates if v.id not in seen_ids]
-        random.shuffle(remaining_candidates)
-
-        for video in remaining_candidates:
-            if len(final_feed) >= feed_size:
-                break
-            final_feed.append(video)
-            seen_ids.add(video.id)
-
-        # Shuffle the final feed slightly so it's not strictly segmented
-        # But keep top 3 highly relevant ones at the top
-        if len(final_feed) > 3:
-            top_3 = final_feed[:3]
-            rest = final_feed[3:]
-            random.shuffle(rest)
-            final_feed = top_3 + rest
-
-        return final_feed
+        return list(ShoppableVideo.objects.filter(id__in=video_ids, is_active=True))

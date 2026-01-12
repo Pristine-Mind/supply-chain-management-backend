@@ -54,6 +54,10 @@ SpeechRecognition = "*"
 qrcode = "*"
 python-barcode = "*"
 beautifulsoup4 = "*"
+faiss-cpu = "*"
+implicit = "*"
+numpy = "*"
+scipy = "*"
 
 
 [tool.poetry.dev-dependencies]
