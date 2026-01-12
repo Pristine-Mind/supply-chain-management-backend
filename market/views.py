@@ -1832,12 +1832,21 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         category_id = request.query_params.get("category")
         user = request.user if request.user.is_authenticated else None
 
+        # Capture session-based interests for real-time reactivity
+        # Stores recent category interactions in the user session
+        session_interests = request.session.get("video_session_interests", {"categories": {}, "tags": {}})
+
         if category_id:
+            # When user specifically browses a category, boost it in their session interests
+            # Convert to string for JSON session consistency
+            cat_id_str = str(category_id)
+            session_interests["categories"][cat_id_str] = session_interests["categories"].get(cat_id_str, 0) + 1
+            request.session["video_session_interests"] = session_interests
             videos = self.get_queryset().filter(category_id=category_id)
         else:
             # Get recommended videos
             service = VideoRecommendationService()
-            videos = service.generate_feed(user, feed_size=100)
+            videos = service.generate_feed(user, feed_size=100, session_interests=session_interests)
 
         # Optimize: Pre-fetch engagement status for the user
         liked_ids = set()
@@ -1854,6 +1863,45 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
                 page, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
             )
             return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(
+            videos, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="more-like-this")
+    def more_like_this(self, request, pk=None):
+        """Return videos similar to the one being viewed."""
+        service = VideoRecommendationService()
+        videos = service.get_similar_videos(pk)
+
+        # Optimize engagement statuses for 'more like this'
+        user = request.user if request.user.is_authenticated else None
+        liked_ids = set()
+        saved_ids = set()
+        if user:
+            video_ids = [v.id for v in videos]
+            liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+            saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+
+        serializer = self.get_serializer(
+            videos, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="also-watched")
+    def also_watched(self, request, pk=None):
+        """Collaborative filtering: People who watched this also watched..."""
+        service = VideoRecommendationService()
+        videos = service.get_social_proof_videos(pk)
+
+        user = request.user if request.user.is_authenticated else None
+        liked_ids = set()
+        saved_ids = set()
+        if user:
+            video_ids = [v.id for v in videos]
+            liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+            saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
 
         serializer = self.get_serializer(
             videos, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
@@ -1926,12 +1974,39 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
 
         return Response({"status": "success", "liked": liked, "likes_count": video.likes_count})
 
-    @action(detail=True, methods=["post"], permission_classes=[AllowAny])
-    def view(self, request, pk=None):
-        """Track video views."""
-        # Using F expression to avoid race conditions and for speed
-        ShoppableVideo.objects.filter(pk=pk).update(views_count=models.F("views_count") + 1)
-        return Response({"status": "success"})
+    @action(detail=True, methods=["post"], url_path="track-interaction", permission_classes=[AllowAny])
+    def track_interaction(self, request, pk=None):
+        """
+        Track detailed user interactions like 'watch_time', 'dwell_time', or 'cta_click'.
+        Supports both authenticated and anonymous session-based tracking.
+        """
+        video = self.get_object()
+        event_type = request.data.get("event_type", "video_view")
+        dwell_time = request.data.get("dwell_time")
+
+        user = request.user if request.user.is_authenticated else None
+
+        # Log the interaction for the recommendation engine
+        interaction = UserInteraction.objects.create(
+            user=user, video=video, event_type=event_type, dwell_time=dwell_time, data=request.data.get("extra_data", {})
+        )
+
+        # Update session-level interests for real-time reactivity
+        session_interests = request.session.get("video_session_interests", {"categories": {}, "tags": {}})
+
+        # Boost category in current session
+        if video.category:
+            cat_id = str(video.category.id)
+            session_interests["categories"][cat_id] = session_interests["categories"].get(cat_id, 0) + 1
+
+        # Boost tags in current session
+        if video.tags:
+            for tag in video.tags:
+                session_interests["tags"][tag] = session_interests["tags"].get(tag, 0) + 1
+
+        request.session["video_session_interests"] = session_interests
+
+        return Response({"status": "captured", "interaction_id": interaction.id})
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def save_video(self, request, pk=None):

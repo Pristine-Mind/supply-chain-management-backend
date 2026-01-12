@@ -353,10 +353,14 @@ class Feedback(models.Model):
 
 
 class UserInteraction(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
-    event_type = models.CharField(max_length=100, help_text="Type of event (e.g., 'click', 'page_view')")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, db_index=True)
+    event_type = models.CharField(
+        max_length=100, help_text="Type of event (e.g., 'click', 'page_view', 'watch_time')", db_index=True
+    )
+    video = models.ForeignKey("ShoppableVideo", on_delete=models.CASCADE, null=True, blank=True, related_name="interactions")
+    dwell_time = models.FloatField(null=True, blank=True, help_text="Duration in seconds (for video/page stay)")
     data = models.JSONField(blank=True, null=True, help_text="Additional event details (e.g., element info, coordinates)")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     def __str__(self):
         return f"{self.event_type} at {self.created_at}"
@@ -2006,6 +2010,7 @@ class ShoppableVideo(models.Model):
     # Recommendation fields
     tags = models.JSONField(default=list, blank=True, verbose_name=_("Tags"))
     trend_score = models.FloatField(default=0.0, verbose_name=_("Trend Score"), db_index=True)
+    embedding = models.JSONField(null=True, blank=True, verbose_name=_("Vector Embedding"))
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"), db_index=True)
     is_active = models.BooleanField(default=True, verbose_name=_("Is Active"), db_index=True)

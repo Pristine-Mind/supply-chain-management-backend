@@ -154,6 +154,7 @@ class UserProfile(models.Model):
         blank=True,
         verbose_name=_("Business Type"),
     )
+    recommendation_embedding = models.JSONField(null=True, blank=True, verbose_name=_("Recommendation Vector"))
     registration_certificate = models.FileField(
         upload_to="user_documents/registration_certificates/",
         null=True,
