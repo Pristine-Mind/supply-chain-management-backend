@@ -1,6 +1,7 @@
 import json
 import time
 from datetime import datetime
+from decimal import Decimal
 from urllib.parse import urlencode
 
 import requests

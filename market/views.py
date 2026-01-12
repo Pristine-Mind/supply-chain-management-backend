@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 import requests
 from django.conf import settings
@@ -2631,7 +2632,5 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                 via_in_app=True,
             )
             return Response(self.get_serializer(instance).data)
-
-        return super().partial_update(request, *args, **kwargs)
 
         return super().partial_update(request, *args, **kwargs)
