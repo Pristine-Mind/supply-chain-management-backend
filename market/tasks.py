@@ -13,6 +13,26 @@ from producer.models import Order, Sale
 logger = logging.getLogger(__name__)
 
 
+@shared_task
+def cleanup_expired_negotiations():
+    """
+    Periodic task to mark old negotiations as rejected/expired.
+    """
+    from market.models import Negotiation
+
+    expired_count = 0
+    # Only check active negotiations
+    active_negotiations = Negotiation.objects.filter(
+        status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER]
+    )
+
+    for neg in active_negotiations:
+        if neg.mark_as_expired():
+            expired_count += 1
+
+    return f"Marked {expired_count} negotiations as expired."
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)  # 5 minute delay between retries
 def send_email(self, to_email, subject, template_name, context):
     """

@@ -25,6 +25,8 @@ from .models import (
     MarketplaceOrderItem,
     MarketplaceSale,
     MarketplaceUserProduct,
+    Negotiation,
+    NegotiationHistory,
     Notification,
     OrderTrackingEvent,
     Payment,
@@ -1241,4 +1243,146 @@ class UserFollowSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data["follower"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class NegotiationHistorySerializer(serializers.ModelSerializer):
+    offer_by_username = serializers.CharField(source="offer_by.username", read_only=True)
+
+    class Meta:
+        model = NegotiationHistory
+        fields = ["id", "offer_by", "offer_by_username", "price", "quantity", "message", "timestamp"]
+        read_only_fields = ["id", "offer_by", "timestamp"]
+
+
+class NegotiationSerializer(serializers.ModelSerializer):
+    history = NegotiationHistorySerializer(many=True, read_only=True)
+    product_name = serializers.CharField(source="product.product.name", read_only=True)
+    buyer_username = serializers.CharField(source="buyer.username", read_only=True)
+    seller_username = serializers.CharField(source="seller.username", read_only=True)
+    last_offer_by_username = serializers.CharField(source="last_offer_by.username", read_only=True)
+    message = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = Negotiation
+        fields = [
+            "id",
+            "buyer",
+            "buyer_username",
+            "seller",
+            "seller_username",
+            "product",
+            "product_name",
+            "proposed_price",
+            "proposed_quantity",
+            "status",
+            "last_offer_by",
+            "last_offer_by_username",
+            "created_at",
+            "updated_at",
+            "history",
+            "message",
+        ]
+        read_only_fields = [
+            "id",
+            "buyer",
+            "seller",
+            "last_offer_by",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, data):
+        buyer = self.context["request"].user
+        product = data.get("product")
+        proposed_price = data.get("proposed_price")
+        proposed_quantity = data.get("proposed_quantity")
+
+        # 1. Product availability
+        if not product.is_available:
+            raise serializers.ValidationError("This product is not currently available for negotiation.")
+
+        if not product.enable_b2b_sales:
+            raise serializers.ValidationError("This product does not support B2B price negotiation.")
+
+        # 2. User verification
+        try:
+            profile = buyer.user_profile
+            if not profile.b2b_verified:
+                raise serializers.ValidationError("Your account must be B2B verified to start a negotiation.")
+        except Exception:
+            raise serializers.ValidationError("User profile not found. Please complete your profile.")
+
+        # 3. Price validation
+        listed_price = Decimal(str(product.discounted_price or product.listed_price))
+        if proposed_price > listed_price:
+            raise serializers.ValidationError(f"Proposed price cannot be higher than the listed price ({listed_price}).")
+
+        # Floor price (e.g., 50% of listed price to prevent extreme low-balling)
+        floor_price = listed_price * Decimal("0.5")
+        if proposed_price < floor_price:
+            raise serializers.ValidationError(f"Proposed price is too low. Minimum allowed is {floor_price}.")
+
+        # 4. Quantity validation
+        if product.min_order and proposed_quantity < product.min_order:
+            raise serializers.ValidationError(f"Minimum order quantity for this product is {product.min_order}.")
+
+        if proposed_quantity > product.product.stock:
+            raise serializers.ValidationError(f"Requested quantity exceeds current stock ({product.product.stock}).")
+
+        return data
+
+    def create(self, validated_data):
+        message = validated_data.pop("message", "")
+        buyer = self.context["request"].user
+        product = validated_data["product"]
+
+        # Determine seller from product
+        try:
+            seller = product.product.producer.user
+        except Exception:
+            raise serializers.ValidationError("Seller information not found for this product.")
+
+        if buyer == seller:
+            raise serializers.ValidationError("You cannot negotiate with yourself.")
+
+        # Check for existing active negotiation
+        existing = Negotiation.objects.filter(
+            buyer=buyer,
+            product=product,
+            status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER],
+        ).first()
+        if existing:
+            raise serializers.ValidationError("An active negotiation already exists for this product.")
+
+        negotiation = Negotiation.objects.create(
+            buyer=buyer,
+            seller=seller,
+            product=product,
+            proposed_price=validated_data["proposed_price"],
+            proposed_quantity=validated_data["proposed_quantity"],
+            last_offer_by=buyer,
+            status=Negotiation.Status.PENDING,
+        )
+
+        NegotiationHistory.objects.create(
+            negotiation=negotiation,
+            offer_by=buyer,
+            price=negotiation.proposed_price,
+            quantity=negotiation.proposed_quantity,
+            message=message,
+        )
+
+        # Notify seller
+        from market.utils import notify_event
+
+        notify_event(
+            user=seller,
+            notif_type=Notification.Type.MARKETPLACE,
+            message=f"New negotiation offer for {product.product.name} from {buyer.username}",
+            via_in_app=True,
+        )
+
+        return negotiation
         return super().create(validated_data)
