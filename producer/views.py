@@ -17,6 +17,7 @@ from django.db.models import (
     Q,
     Sum,
     When,
+    IntegerField,
 )
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -1177,7 +1178,6 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
     filterset_class = MarketplaceProductFilter
 
     def get_queryset(self):
-        # Keep this as lean as possible
         return (
             MarketplaceProduct.objects.filter(is_available=True)
             .select_related("product", "product__user", "product__category")
@@ -1185,51 +1185,52 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
-        # 1. Quick Cache Check
         cache_key = self._generate_cache_key(request)
         cached_data = cache.get(cache_key)
         if cached_data:
             return Response(cached_data)
-
-        # 2. Apply filtering backends
+        
         qs = self.filter_queryset(self.get_queryset())
-
-        # 3. Create the Random Pool
-        # We fetch only the IDs of the first 200 items to avoid loading full objects
+        
         pool_size = 200
         pool_ids = list(qs.order_by("-listed_date").values_list("id", flat=True)[:pool_size])
-
+        
         if pool_ids:
-            # Shuffle the list of IDs in memory
             random.shuffle(pool_ids)
-
-            # Use Case/When to force the DB to return these IDs in the shuffled order
-            preserved_order = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(pool_ids)])
-
-            # Combine: Shuffled Pool + Everything else (ordered by date)
-            random_pool_qs = qs.filter(id__in=pool_ids).order_by(preserved_order)
-            remaining_qs = qs.exclude(id__in=pool_ids).order_by("-listed_date")
-
-            # Merge querysets using union or pipe (pipe preserves order better in some DBs)
-            final_qs = random_pool_qs | remaining_qs
+            
+            preserved_order = Case(
+                *[When(id=pk, then=pos) for pos, pk in enumerate(pool_ids)],
+                output_field=IntegerField()
+            )
+            shuffled_pool = list(qs.filter(id__in=pool_ids).order_by(preserved_order))
+            remaining_items = qs.exclude(id__in=pool_ids).order_by("-listed_date")
+            
+            combined_items = shuffled_pool + list(remaining_items)
+            
+            page = self.paginate_queryset(combined_items)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                response_data = self.get_paginated_response(serializer.data).data
+                cache.set(cache_key, response_data, 300)
+                return Response(response_data)
+            
+            serializer = self.get_serializer(combined_items, many=True)
+            return Response(serializer.data)
         else:
-            final_qs = qs
-
-        # 4. Paginate the resulting QuerySet (Efficient SQL LIMIT/OFFSET)
-        page = self.paginate_queryset(final_qs)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            response_data = self.get_paginated_response(serializer.data).data
-            cache.set(cache_key, response_data, 300)  # Cache for 5 mins
-            return Response(response_data)
-
-        # Fallback for non-paginated
-        serializer = self.get_serializer(final_qs, many=True)
-        return Response(serializer.data)
+            page = self.paginate_queryset(qs)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                response_data = self.get_paginated_response(serializer.data).data
+                cache.set(cache_key, response_data, 300)
+                return Response(response_data)
+            
+            serializer = self.get_serializer(qs, many=True)
+            return Response(serializer.data)
 
     def _generate_cache_key(self, request):
         user_id = request.user.id if request.user.is_authenticated else "anon"
-        raw_key = f"{request.get_full_path()}:{user_id}"
+        query_params = request.GET.urlencode()
+        raw_key = f"{request.path}:{query_params}:{user_id}"
         return f"market_pool_{hashlib.md5(raw_key.encode()).hexdigest()}"
 
     @action(detail=False, methods=["get"], url_path="made-for-you", permission_classes=[AllowAny])
