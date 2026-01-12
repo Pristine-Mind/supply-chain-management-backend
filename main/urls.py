@@ -60,6 +60,7 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
+    NegotiationViewSet,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -159,6 +160,7 @@ router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="o
 router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
 router.register(r"b2b-verified-users-products", B2BVerifiedUsersProductsView, basename="b2b-verified-users-products")
 router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, basename="shoppable-video-categories")
+router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
