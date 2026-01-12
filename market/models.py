@@ -1158,9 +1158,54 @@ class MarketplaceOrderManager(models.Manager):
             raise ValidationError("Cannot create order from empty cart.")
 
         # Calculate total amount (items + shipping)
-        items_total = sum(
-            (item.product.discounted_price or item.product.listed_price) * item.quantity for item in cart.items.all()
-        )
+        items_total = Decimal("0")
+        item_prices = {}
+        has_negotiated_item = False
+
+        # Pre-check buyer B2B verification for any negotiated items
+        is_buyer_b2b_verified = False
+        try:
+            if hasattr(cart.user, "user_profile"):
+                is_buyer_b2b_verified = cart.user.user_profile.b2b_verified
+        except Exception:
+            pass
+
+        for cart_item in cart.items.all():
+            # Check for accepted negotiation
+            from django.apps import apps
+
+            Negotiation = apps.get_model("market", "Negotiation")
+
+            # Get the latest accepted negotiation for this product
+            negotiation = (
+                Negotiation.objects.filter(buyer=cart.user, product=cart_item.product, status=Negotiation.Status.ACCEPTED)
+                .order_by("-updated_at")
+                .first()
+            )
+
+            public_price = Decimal(str(cart_item.product.discounted_price or cart_item.product.listed_price))
+            applied_price = public_price
+            used_negotiation = None
+
+            if negotiation and is_buyer_b2b_verified and not negotiation.is_expired:
+                # Negotiated price applies if quantity is at least what was negotiated
+                if cart_item.quantity >= negotiation.proposed_quantity:
+                    negotiated_price = Decimal(str(negotiation.proposed_price))
+                    # Best Price Guard: always give the buyer the lower price if public price dropped further
+                    if negotiated_price < public_price:
+                        applied_price = negotiated_price
+                        used_negotiation = negotiation
+                        has_negotiated_item = True
+                    else:
+                        applied_price = public_price
+                else:
+                    applied_price = public_price
+            else:
+                applied_price = public_price
+
+            item_prices[cart_item.id] = (applied_price, used_negotiation)
+            items_total += applied_price * cart_item.quantity
+
         # Auto-detect first order if not explicitly provided
         if is_first_order is None:
             try:
@@ -1180,18 +1225,29 @@ class MarketplaceOrderManager(models.Manager):
             payment_method=payment_method,
             shipping_cost=shipping_cost,
             is_first_order=is_first_order,
+            is_b2b_order=has_negotiated_item,
         )
 
         # Create order items from cart items
         for cart_item in cart.items.all():
+            unit_price, negotiation = item_prices[cart_item.id]
             _ = MarketplaceOrderItem.objects.create(
                 order=order,
                 product=cart_item.product,
                 quantity=cart_item.quantity,
-                unit_price=cart_item.product.discounted_price or cart_item.product.listed_price,
+                unit_price=unit_price,
+                negotiation=negotiation,
             )
 
+            # Update negotiation status if it was used
+            if negotiation:
+                negotiation.status = Negotiation.Status.ORDERED
+                negotiation.save()
+
             # Update product stock (access the underlying Product model)
+            if cart_item.product.product.stock < cart_item.quantity:
+                raise ValidationError(f"Insufficient stock for {cart_item.product.product.name}")
+
             cart_item.product.product.stock -= cart_item.quantity
             cart_item.product.product.save()
 
@@ -1577,6 +1633,14 @@ class MarketplaceOrderItem(models.Model):
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)], verbose_name=_("Quantity"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Unit Price"))
     total_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Price"))
+    negotiation = models.ForeignKey(
+        "Negotiation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_items",
+        verbose_name=_("Applied Negotiation"),
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
 
@@ -2280,3 +2344,83 @@ class AffiliateClick(models.Model):
 
     def __str__(self):
         return f"AffiliateClick {self.id} -> {self.redirect_url}"
+
+
+class Negotiation(models.Model):
+    """
+    Tracks the overall state of a negotiation between a buyer and a seller for a specific product.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("Pending")
+        ACCEPTED = "ACCEPTED", _("Accepted")
+        REJECTED = "REJECTED", _("Rejected")
+        COUNTER_OFFER = "COUNTER_OFFER", _("Counter Offer")
+        ORDERED = "ORDERED", _("Ordered")
+
+    buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="buyer_negotiations", verbose_name=_("Buyer"))
+    seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name="seller_negotiations", verbose_name=_("Seller"))
+    product = models.ForeignKey(
+        "producer.MarketplaceProduct", on_delete=models.CASCADE, related_name="negotiations", verbose_name=_("Product")
+    )
+    proposed_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Proposed Price"))
+    proposed_quantity = models.PositiveIntegerField(verbose_name=_("Proposed Quantity"))
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, verbose_name=_("Status"))
+    last_offer_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="last_negotiation_offers", verbose_name=_("Last Offer By")
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+
+    class Meta:
+        verbose_name = _("Negotiation")
+        verbose_name_plural = _("Negotiations")
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"Negotiation {self.id} for {self.product.product.name} ({self.status})"
+
+    @property
+    def is_expired(self):
+        """Check if the negotiation has expired (default: 7 days without update)."""
+        expiry_days = getattr(settings, "NEGOTIATION_EXPIRY_DAYS", 7)
+        return timezone.now() > self.updated_at + timedelta(days=expiry_days)
+
+    def mark_as_expired(self):
+        """Transition negotiation to REJECTED if it has expired."""
+        if self.status in [self.Status.PENDING, self.Status.COUNTER_OFFER] and self.is_expired:
+            self.status = self.Status.REJECTED
+            self.save()
+            # Log in history
+            NegotiationHistory.objects.create(
+                negotiation=self,
+                offer_by=self.seller,  # Or system user
+                price=self.proposed_price,
+                quantity=self.proposed_quantity,
+                message="Negotiation expired due to inactivity.",
+            )
+            return True
+        return False
+
+
+class NegotiationHistory(models.Model):
+    """
+    Stores every iteration of the negotiation for auditing and chat-style history.
+    """
+
+    negotiation = models.ForeignKey(
+        Negotiation, on_delete=models.CASCADE, related_name="history", verbose_name=_("Negotiation")
+    )
+    offer_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name=_("Offer By"))
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Price"))
+    quantity = models.PositiveIntegerField(verbose_name=_("Quantity"))
+    message = models.TextField(blank=True, null=True, verbose_name=_("Message"))
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name=_("Timestamp"))
+
+    class Meta:
+        verbose_name = _("Negotiation History")
+        verbose_name_plural = _("Negotiation Histories")
+        ordering = ["timestamp"]
+
+    def __str__(self):
+        return f"Offer by {self.offer_by.username} at {self.timestamp}"

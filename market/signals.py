@@ -574,3 +574,59 @@ def create_transport_delivery_from_sale(sender, instance, created, **kwargs):
         import traceback
 
         traceback.print_exc()
+
+
+@receiver(post_save, sender=Product)
+def handle_stock_change(sender, instance, **kwargs):
+    """
+    Reject all active negotiations where the requested quantity is no longer available in stock.
+    """
+    from market.models import Negotiation
+
+    # Get all active negotiations for this product
+    active_negotiations = Negotiation.objects.filter(
+        product__product=instance, status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER]
+    )
+
+    for negotiation in active_negotiations:
+        if negotiation.proposed_quantity > instance.stock:
+            negotiation.status = Negotiation.Status.REJECTED
+            negotiation.save()
+            # History log
+            from market.models import NegotiationHistory
+
+            NegotiationHistory.objects.create(
+                negotiation=negotiation,
+                offer_by=negotiation.seller,  # Rejection by system on behalf of seller
+                price=negotiation.proposed_price,
+                quantity=negotiation.proposed_quantity,
+                message=f"Negotiation automatically rejected: Requested quantity ({negotiation.proposed_quantity}) exceeds available stock ({instance.stock}).",
+            )
+
+
+@receiver(post_save, sender=MarketplaceProduct)
+def handle_marketplace_product_update(sender, instance, **kwargs):
+    """
+    If a product is marked as unavailable or B2B sales are disabled, reject active negotiations.
+    """
+    from market.models import Negotiation
+
+    if not instance.is_available or not instance.enable_b2b_sales:
+        active_negotiations = Negotiation.objects.filter(
+            product=instance, status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER]
+        )
+
+        reason = "Product is no longer available" if not instance.is_available else "B2B sales disabled for this product"
+
+        for negotiation in active_negotiations:
+            negotiation.status = Negotiation.Status.REJECTED
+            negotiation.save()
+            from market.models import NegotiationHistory
+
+            NegotiationHistory.objects.create(
+                negotiation=negotiation,
+                offer_by=negotiation.seller,
+                price=negotiation.proposed_price,
+                quantity=negotiation.proposed_quantity,
+                message=f"Negotiation automatically rejected: {reason}.",
+            )

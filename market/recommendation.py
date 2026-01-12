@@ -1,8 +1,8 @@
 import logging
+import random
 
 import faiss
 import numpy as np
-import random
 from django.core.cache import cache
 from django.db.models import Count, Q
 from implicit.als import AlternatingLeastSquares

@@ -30,6 +30,7 @@ from market.views import (
     MarketplaceSaleViewSet,
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
+    NegotiationViewSet,
     NotificationListView,
     OrderTrackingEventViewSet,
     ProductFeedbackView,
@@ -139,6 +140,7 @@ router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, ba
 router.register(r"video-comments", VideoCommentViewSet, basename="video-comments")
 router.register(r"video-reports", VideoReportViewSet, basename="video-reports")
 router.register(r"user-follows", UserFollowViewSet, basename="user-follows")
+router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
 

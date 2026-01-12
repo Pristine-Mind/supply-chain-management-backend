@@ -461,7 +461,6 @@ class CreatorProfile(models.Model):
     def __str__(self):
         return self.display_name or (self.handle or self.user.username)
 
-
     @property
     def projected_stockout_date(self):
         today = timezone.localdate()

@@ -52,6 +52,8 @@ from .models import (
     MarketplaceOrderItem,
     MarketplaceSale,
     MarketplaceUserProduct,
+    Negotiation,
+    NegotiationHistory,
     Notification,
     OrderStatus,
     Payment,
@@ -83,6 +85,7 @@ from .serializers import (
     MarketplaceOrderSerializer,
     MarketplaceSaleSerializer,
     MarketplaceUserProductSerializer,
+    NegotiationSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
     ProductChatMessageSerializer,
@@ -2406,3 +2409,229 @@ def affiliate_redirect(request):
     )
 
     return redirect(redirect_url)
+
+
+class NegotiationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for handling buyer-seller price and quantity negotiations.
+    """
+
+    serializer_class = NegotiationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter negotiations for the authenticated user."""
+        user = self.request.user
+        queryset = Negotiation.objects.filter(Q(buyer=user) | Q(seller=user)).prefetch_related("history")
+
+        status_val = self.request.query_params.get("status")
+        if status_val:
+            queryset = queryset.filter(status=status_val.upper())
+
+        product_id = self.request.query_params.get("product_id")
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=["get"])
+    @extend_schema(
+        summary="Get active negotiation",
+        description="Retrieves the current active negotiation for a specific product between the requester and product owner.",
+        parameters=[
+            {"name": "product", "description": "Product ID", "required": True, "type": "integer", "in": "query"},
+        ],
+    )
+    def active(self, request):
+        product_id = request.query_params.get("product")
+        if not product_id:
+            return Response({"error": "Product ID is required"}, status=400)
+
+        user = request.user
+        negotiation = (
+            Negotiation.objects.filter(
+                Q(buyer=user) | Q(seller=user),
+                product_id=product_id,
+                status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER],
+            )
+            .order_by("-updated_at")
+            .first()
+        )
+
+        if not negotiation:
+            return Response({"detail": "No active negotiation found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for expiration on the fly
+        if negotiation.mark_as_expired():
+            return Response({"detail": "The negotiation for this product has expired"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(negotiation)
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Handle status updates and counter-offers."""
+        instance = self.get_object()
+        user = request.user
+        data = request.data
+        status_val = data.get("status")
+        proposed_price = data.get("proposed_price")
+        proposed_quantity = data.get("proposed_quantity")
+        message = data.get("message", "")
+
+        # 0. Check if negotiation is already in a final state
+        if instance.status in [Negotiation.Status.ACCEPTED, Negotiation.Status.REJECTED]:
+            return Response(
+                {"error": "This negotiation has already been closed and cannot be modified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 0.1 Check product availability
+        if not instance.product.is_available:
+            return Response(
+                {"error": "The product is no longer available for negotiation."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 0.2 Check B2B verification status
+        try:
+            if not instance.buyer.user_profile.b2b_verified:
+                return Response(
+                    {"error": "Buyer is not B2B verified. Negotiation cannot proceed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Exception:
+            return Response({"error": "Buyer profile not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Turn-based validation
+        is_last_offer_by_me = instance.last_offer_by == user
+
+        if status_val == Negotiation.Status.ACCEPTED:
+            if is_last_offer_by_me:
+                return Response({"error": "You cannot accept your own offer"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if stock is still sufficient before accepting
+            if instance.product.product.stock < instance.proposed_quantity:
+                return Response(
+                    {"error": f"Insufficient stock ({instance.product.product.stock}) to accept this quantity."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            instance.status = Negotiation.Status.ACCEPTED
+            instance.save()
+            # Create history record for acceptance
+            NegotiationHistory.objects.create(
+                negotiation=instance,
+                offer_by=user,
+                price=instance.proposed_price,
+                quantity=instance.proposed_quantity,
+                message="Offer accepted",
+            )
+            # Notify the other party
+            target_user = instance.buyer if user == instance.seller else instance.seller
+            from .utils import notify_event
+
+            notify_event(
+                user=target_user,
+                notif_type=Notification.Type.MARKETPLACE,
+                message=f"Negotiation offer for {instance.product.product.name} has been ACCEPTED by {user.username}",
+                via_in_app=True,
+            )
+            return Response(self.get_serializer(instance).data)
+
+        if status_val == Negotiation.Status.REJECTED:
+            instance.status = Negotiation.Status.REJECTED
+            instance.save()
+
+            is_withdrawal = instance.last_offer_by == user
+            msg = f"Offer withdrawn: {message}" if is_withdrawal else f"Offer rejected: {message}"
+
+            NegotiationHistory.objects.create(
+                negotiation=instance,
+                offer_by=user,
+                price=instance.proposed_price,
+                quantity=instance.proposed_quantity,
+                message=msg,
+            )
+            # Notify the other party
+            target_user = instance.buyer if user == instance.seller else instance.seller
+            from .utils import notify_event
+
+            notify_event(
+                user=target_user,
+                notif_type=Notification.Type.MARKETPLACE,
+                message=f"Negotiation for {instance.product.product.name} has been {'WITHDRAWN' if is_withdrawal else 'REJECTED'} by {user.username}",
+                via_in_app=True,
+            )
+            return Response(self.get_serializer(instance).data)
+
+        if status_val == Negotiation.Status.COUNTER_OFFER or proposed_price or proposed_quantity:
+            if is_last_offer_by_me:
+                return Response({"error": "It is not your turn to make an offer"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not proposed_price or not proposed_quantity:
+                return Response(
+                    {"error": "Price and quantity are required for a counter offer"}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Convert to Decimal for comparison
+            p_price = Decimal(str(proposed_price))
+            p_qty = int(proposed_quantity)
+            listed_price = Decimal(str(instance.product.discounted_price or instance.product.listed_price))
+
+            # Counter-offer validation
+            if p_price > listed_price:
+                return Response(
+                    {"error": f"Counter-offer price cannot exceed listed price ({listed_price})"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Floor price (50% of listed price)
+            floor_price = listed_price * Decimal("0.5")
+            if p_price < floor_price:
+                return Response(
+                    {"error": f"Counter-offer price is too low. Minimum allowed is {floor_price}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if instance.product.min_order and p_qty < instance.product.min_order:
+                return Response(
+                    {"error": f"Quantity cannot be less than minimum order ({instance.product.min_order})"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if p_qty > instance.product.product.stock:
+                return Response(
+                    {"error": f"Quantity exceeds available stock ({instance.product.product.stock})"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            instance.status = Negotiation.Status.COUNTER_OFFER
+            instance.proposed_price = p_price
+            instance.proposed_quantity = p_qty
+            instance.last_offer_by = user
+            instance.save()
+
+            NegotiationHistory.objects.create(
+                negotiation=instance,
+                offer_by=user,
+                price=p_price,
+                quantity=p_qty,
+                message=message,
+            )
+            # Notify the other party
+            target_user = instance.buyer if user == instance.seller else instance.seller
+            from .utils import notify_event
+
+            notify_event(
+                user=target_user,
+                notif_type=Notification.Type.MARKETPLACE,
+                message=f"New counter-offer received for {instance.product.product.name} from {user.username}",
+                via_in_app=True,
+            )
+            return Response(self.get_serializer(instance).data)
+
+        return super().partial_update(request, *args, **kwargs)
+
+        return super().partial_update(request, *args, **kwargs)
