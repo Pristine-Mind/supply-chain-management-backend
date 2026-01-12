@@ -461,20 +461,6 @@ class CreatorProfile(models.Model):
     def __str__(self):
         return self.display_name or (self.handle or self.user.username)
 
-        actuals, forecast = [], []
-        window_vals = []
-        for i in range(days):
-            d = start + timedelta(days=i + 1)
-            sold = day_map.get(d, 0)
-            actuals.append({"day": d, "units_sold": sold})
-
-            window_vals.append(sold)
-            if len(window_vals) > window:
-                window_vals.pop(0)
-            f = sum(window_vals) / len(window_vals) if window_vals else 0
-            forecast.append({"day": d, "forecasted": round(f, 2)})
-
-        return actuals, forecast
 
     @property
     def projected_stockout_date(self):

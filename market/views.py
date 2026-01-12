@@ -1963,13 +1963,12 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         if not created:
             # If already liked, unlike it
             like.delete()
-            video.likes_count = models.F("likes_count") - 1
+            ShoppableVideo.objects.filter(pk=video.pk).update(likes_count=models.F("likes_count") - 1)
             liked = False
         else:
-            video.likes_count = models.F("likes_count") + 1
+            ShoppableVideo.objects.filter(pk=video.pk).update(likes_count=models.F("likes_count") + 1)
             liked = True
 
-        video.save()
         video.refresh_from_db()
 
         return Response({"status": "success", "liked": liked, "likes_count": video.likes_count})
@@ -2033,8 +2032,7 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         Track video shares.
         """
         video = self.get_object()
-        video.shares_count = models.F("shares_count") + 1
-        video.save()
+        ShoppableVideo.objects.filter(pk=video.pk).update(shares_count=models.F("shares_count") + 1)
         video.refresh_from_db()
 
         return Response({"status": "success", "shares_count": video.shares_count})
@@ -2154,15 +2152,15 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         Increment the view count for a video.
         """
         video = self.get_object()
-        video.views_count = models.F("views_count") + 1
-        video.save()
+        ShoppableVideo.objects.filter(pk=video.pk).update(views_count=models.F("views_count") + 1)
         video.refresh_from_db()
+
         # Also increment uploader's creator profile views_count if present
         try:
-            cp = video.uploader.creator_profile
-            cp.views_count = models.F("views_count") + 1
-            cp.save()
-            cp.refresh_from_db()
+            # We use an update on the queryset to avoid triggering validation/save hooks
+            from producer.models import CreatorProfile
+
+            CreatorProfile.objects.filter(user=video.uploader).update(views_count=models.F("views_count") + 1)
         except Exception:
             pass
         return Response({"status": "success", "views_count": video.views_count})
