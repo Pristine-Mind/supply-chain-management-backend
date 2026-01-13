@@ -96,3 +96,71 @@ class DailySalesReportItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity}×{self.product} @ {self.unit_price} on {self.date}"
+
+
+class WeeklyBusinessHealthDigest(models.Model):
+    """
+    Weekly summary for Producers/Business Owners.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="weekly_digests")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    total_revenue = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_orders = models.PositiveIntegerField(default=0)
+    new_customers = models.PositiveIntegerField(default=0)
+    top_product = models.ForeignKey(MarketplaceProduct, on_delete=models.SET_NULL, null=True, blank=True)
+
+    inventory_health_score = models.FloatField(default=0.0, help_text="0-100 score based on stockouts vs demand")
+    growth_rate = models.FloatField(default=0.0, help_text="Percentage growth compared to last week")
+
+    report_file = models.FileField(upload_to="reports/weekly_digests/pdf/", null=True, blank=True)
+    excel_report = models.FileField(upload_to="reports/weekly_digests/excel/", null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    notification_sent = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-end_date"]
+        verbose_name = "Weekly Business health Digest"
+        indexes = [
+            models.Index(fields=["user", "end_date"]),
+            models.Index(fields=["generated_at"]),
+            models.Index(fields=["is_archived"]),
+        ]
+
+    def __str__(self):
+        return f"Weekly Digest {self.start_date} to {self.end_date} for {self.user.username}"
+
+
+class CustomerRFMSegment(models.Model):
+    """
+    RFM (Recency, Frequency, Monetary) segmentation for customers.
+    """
+
+    SEGMENT_CHOICES = [
+        ("champions", "Champions"),
+        ("loyal", "Loyal Customers"),
+        ("potential_loyalist", "Potential Loyalist"),
+        ("at_risk", "At Risk"),
+        ("hibernating", "Hibernating"),
+        ("lost", "Lost"),
+    ]
+
+    customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="rfm_segments")
+    shop_owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="managed_customer_segments")
+    recency_score = models.IntegerField(default=0)
+    frequency_score = models.IntegerField(default=0)
+    monetary_score = models.IntegerField(default=0)
+    segment = models.CharField(max_length=50, choices=SEGMENT_CHOICES)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("customer", "shop_owner")
+        verbose_name = "Customer RFM Segment"
+        indexes = [
+            models.Index(fields=["shop_owner", "segment"]),
+            models.Index(fields=["recency_score", "frequency_score", "monetary_score"]),
+        ]
