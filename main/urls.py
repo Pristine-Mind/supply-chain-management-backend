@@ -32,6 +32,7 @@ from market.views import (
     MarketplaceSaleViewSet,
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
+    NegotiationViewSet,
     NotificationListView,
     OrderTrackingEventViewSet,
     ProductChatMessageViewSet,
@@ -60,7 +61,6 @@ from market.views import (
     shipping_address_form,
     verify_khalti_payment,
     verify_payment,
-    NegotiationViewSet,
 )
 from producer.views import (
     AuditLogViewSet,
@@ -300,6 +300,8 @@ urlpatterns = [
     path("api/v1/payments/", include("payment.urls")),
     # Notification URLs
     path("api/v1/notifications/", include("notification.urls")),
+    # Report URLs
+    path("api/v1/reports/", include("report.urls")),
     # Marketplace Orders URLs - matching frontend API calls exactly
     path("api/v1/marketplace/orders/my-orders/", my_marketplace_orders, name="my-marketplace-orders"),
     path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),

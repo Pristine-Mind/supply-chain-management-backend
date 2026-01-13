@@ -13,11 +13,11 @@ from django.db.models import (
     ExpressionWrapper,
     F,
     FloatField,
+    IntegerField,
     Prefetch,
     Q,
     Sum,
     When,
-    IntegerField,
 )
 from django.db.models.functions import TruncDate, TruncMonth
 from django.db.models.query import QuerySet
@@ -1189,31 +1189,28 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         cached_data = cache.get(cache_key)
         if cached_data:
             return Response(cached_data)
-        
+
         qs = self.filter_queryset(self.get_queryset())
-        
+
         pool_size = 200
         pool_ids = list(qs.order_by("-listed_date").values_list("id", flat=True)[:pool_size])
-        
+
         if pool_ids:
             random.shuffle(pool_ids)
-            
-            preserved_order = Case(
-                *[When(id=pk, then=pos) for pos, pk in enumerate(pool_ids)],
-                output_field=IntegerField()
-            )
+
+            preserved_order = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(pool_ids)], output_field=IntegerField())
             shuffled_pool = list(qs.filter(id__in=pool_ids).order_by(preserved_order))
             remaining_items = qs.exclude(id__in=pool_ids).order_by("-listed_date")
-            
+
             combined_items = shuffled_pool + list(remaining_items)
-            
+
             page = self.paginate_queryset(combined_items)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
                 response_data = self.get_paginated_response(serializer.data).data
                 cache.set(cache_key, response_data, 300)
                 return Response(response_data)
-            
+
             serializer = self.get_serializer(combined_items, many=True)
             return Response(serializer.data)
         else:
@@ -1223,7 +1220,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 response_data = self.get_paginated_response(serializer.data).data
                 cache.set(cache_key, response_data, 300)
                 return Response(response_data)
-            
+
             serializer = self.get_serializer(qs, many=True)
             return Response(serializer.data)
 
