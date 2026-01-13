@@ -1,15 +1,16 @@
 from datetime import timedelta
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from producer.models import Product, Sale
+from producer.models import Product
 
-from .models import CustomerRFMSegment, DailySalesReport, WeeklyBusinessHealthDigest
+from .models import CustomerRFMSegment, WeeklyBusinessHealthDigest
+from .serializers import WeeklyBusinessHealthDigestSerializer, CustomerRFMSegmentSerializer
 
 
 class CommandPaletteView(APIView):
@@ -61,18 +62,13 @@ class ERPHealthDashboardView(APIView):
         if not shop_id:
             return Response({"error": "Shop ID not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # 1. Lost Sales Calculation (Predictive)
-        # We estimate lost sales as: (Avg Daily Demand * Days Out of Stock)
         out_of_stock_products = Product.objects.filter(user__user_profile__shop_id=shop_id, stock=0, avg_daily_demand__gt=0)
 
         lost_sales_revenue = 0
         for p in out_of_stock_products:
-            # Edge Case: Dynamic Lost Sales based on lead time
-            # If lead_time is 14 days, we lose 14 days of average demand
             lost_days = p.lead_time_days or 7
             lost_sales_revenue += p.avg_daily_demand * lost_days * float(p.price)
 
-        # 2. Segment Distribution
         segments = CustomerRFMSegment.objects.filter(shop_owner=user).values("segment").annotate(count=Count("id"))
 
         return Response(
@@ -88,6 +84,59 @@ class ERPHealthDashboardView(APIView):
 class RFMReportViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = CustomerRFMSegment.objects.all()
+    serializer_class = CustomerRFMSegmentSerializer
 
     def get_queryset(self):
         return self.queryset.filter(shop_owner=self.request.user)
+
+
+class LostSalesView(APIView):
+    """
+    Detailed report on lost sales due to stockouts.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        shop_id = getattr(user.user_profile, "shop_id", None)
+
+        if not shop_id:
+            return Response({"error": "Shop ID not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        out_of_stock = Product.objects.filter(user__user_profile__shop_id=shop_id, stock=0, avg_daily_demand__gt=0)
+
+        results = []
+        total_lost_revenue = 0
+
+        for p in out_of_stock:
+            lost_days = p.lead_time_days or 7
+            potential_lost_units = p.avg_daily_demand * lost_days
+            potential_lost_rev = potential_lost_units * float(p.price)
+
+            results.append(
+                {
+                    "product_id": p.id,
+                    "product_name": p.name,
+                    "avg_daily_demand": p.avg_daily_demand,
+                    "lead_time_days": lost_days,
+                    "potential_units_lost": round(potential_lost_units, 2),
+                    "potential_revenue_lost": round(potential_lost_rev, 2),
+                }
+            )
+            total_lost_revenue += potential_lost_rev
+
+        return Response({"detailed_lost_sales": results, "total_potential_lost_revenue": round(total_lost_revenue, 2)})
+
+
+class WeeklyDigestViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Access to generated weekly business digests.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = WeeklyBusinessHealthDigestSerializer
+    queryset = WeeklyBusinessHealthDigest.objects.all()
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
