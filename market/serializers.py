@@ -14,6 +14,7 @@ from market.utils import notify_event
 from producer.models import MarketplaceProduct, Product, Sale
 from producer.serializers import MarketplaceProductSerializer
 
+from .locks import lock_manager, view_manager
 from .models import (
     Bid,
     Cart,
@@ -1248,21 +1249,77 @@ class UserFollowSerializer(serializers.ModelSerializer):
 
 
 class NegotiationHistorySerializer(serializers.ModelSerializer):
+    """Serializer for negotiation history with price masking"""
+
     offer_by_username = serializers.CharField(source="offer_by.username", read_only=True)
+
+    # Price field that will be masked based on permissions
+    masked_price = serializers.SerializerMethodField()
 
     class Meta:
         model = NegotiationHistory
-        fields = ["id", "offer_by", "offer_by_username", "price", "quantity", "message", "timestamp"]
-        read_only_fields = ["id", "offer_by", "timestamp"]
+        fields = ["id", "offer_by", "offer_by_username", "price", "masked_price", "quantity", "message", "timestamp"]
+        read_only_fields = ["id", "offer_by", "timestamp", "price"]
+
+    def get_masked_price(self, obj):
+        """Get masked price based on user's view permissions"""
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            try:
+                # Get the negotiation object
+                negotiation = obj.negotiation
+
+                # Check if user can view price
+                can_view, viewable_price = view_manager.can_view_price(negotiation.id, request.user.id)
+
+                if can_view:
+                    # User can view price - return actual price
+                    return obj.price
+                else:
+                    # User cannot view price - mask it
+                    # Determine mask type based on negotiation status
+                    if negotiation.status in [Negotiation.Status.PENDING, Negotiation.Status.LOCKED]:
+                        # Initial offers show to both parties
+                        if obj.id == negotiation.history.first().id:
+                            return obj.price
+                    # Mask subsequent counter offers
+                    return "****"
+
+            except Exception as e:
+                raise e
+
+        # Default: mask the price
+        return "****"
+
+    def to_representation(self, instance):
+        """Override representation to use masked price"""
+        data = super().to_representation(instance)
+
+        # Replace price with masked_price for display
+        data["price"] = data.pop("masked_price")
+
+        return data
 
 
 class NegotiationSerializer(serializers.ModelSerializer):
+    """Serializer for negotiations with locking and price masking"""
+
     history = NegotiationHistorySerializer(many=True, read_only=True)
     product_name = serializers.CharField(source="product.product.name", read_only=True)
     buyer_username = serializers.CharField(source="buyer.username", read_only=True)
     seller_username = serializers.CharField(source="seller.username", read_only=True)
     last_offer_by_username = serializers.CharField(source="last_offer_by.username", read_only=True)
     message = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    # Lock-related fields
+    is_locked = serializers.BooleanField(read_only=True)
+    lock_owner_username = serializers.CharField(source="lock_owner.username", read_only=True, allow_null=True)
+    lock_expires_in = serializers.SerializerMethodField(read_only=True)
+    can_user_negotiate = serializers.SerializerMethodField(read_only=True)
+
+    # Price field that will be masked based on permissions
+    masked_price = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Negotiation
@@ -1274,11 +1331,17 @@ class NegotiationSerializer(serializers.ModelSerializer):
             "seller_username",
             "product",
             "product_name",
-            "proposed_price",
+            "proposed_price",  # Original price field (for internal use)
+            "masked_price",  # Masked price field (for display)
             "proposed_quantity",
             "status",
             "last_offer_by",
             "last_offer_by_username",
+            "lock_owner",
+            "lock_owner_username",
+            "is_locked",
+            "lock_expires_in",
+            "can_user_negotiate",
             "created_at",
             "updated_at",
             "history",
@@ -1290,16 +1353,124 @@ class NegotiationSerializer(serializers.ModelSerializer):
             "seller",
             "last_offer_by",
             "status",
+            "lock_owner",
             "created_at",
             "updated_at",
+            "history",
+            "is_locked",
         ]
+        extra_kwargs = {"proposed_price": {"write_only": True}}  # Hide original price in responses
+
+    def get_masked_price(self, obj):
+        """Get the price that the current user can view"""
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            try:
+                # Check if user can view price
+                can_view, viewable_price = view_manager.can_view_price(obj.id, request.user.id)
+
+                if can_view:
+                    return viewable_price
+                else:
+                    # Check if user is part of this negotiation
+                    if request.user.id in [obj.buyer_id, obj.seller_id]:
+                        # User is part of negotiation but can't view price
+                        # This means it's not their turn to see the current offer
+                        return "****"
+
+            except Exception as e:
+                raise e
+        # Default: mask the price
+        return "****"
+
+    def get_lock_expires_in(self, obj):
+        """Calculate remaining lock time in seconds"""
+        if obj.lock_expires_at and obj.is_locked:
+            remaining = (obj.lock_expires_at - timezone.now()).total_seconds()
+            return max(0, int(remaining))
+        return None
+
+    def get_can_user_negotiate(self, obj):
+        """Check if current user can negotiate (has lock or can acquire)"""
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            # Check if user is part of this negotiation
+            user_id = request.user.id
+            if user_id not in [obj.buyer_id, obj.seller_id]:
+                return False
+
+            # Check if negotiation is locked
+            if obj.is_locked:
+                # Check if user owns the lock
+                is_owner, _ = lock_manager.check_lock_ownership(obj.id, user_id)
+                return is_owner
+            else:
+                # Not locked - check if it's user's turn
+                # Logic: The user who didn't make the last offer can negotiate
+                return user_id != obj.last_offer_by_id
+
+        return False
+
+    def to_representation(self, instance):
+        """Custom representation to handle price masking and lock status"""
+        data = super().to_representation(instance)
+
+        # Remove the original price field from response
+        # It's already write-only, but ensure it's not in the response
+        data.pop("proposed_price", None)
+
+        # Add lock status message if applicable
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            user_id = request.user.id
+
+            # Add lock status information
+            if instance.is_locked:
+                is_owner, lock_data = lock_manager.check_lock_ownership(instance.id, user_id)
+
+                if is_owner:
+                    data["lock_status"] = "You currently hold the lock"
+                    data["lock_expires_at"] = instance.lock_expires_at.isoformat() if instance.lock_expires_at else None
+                else:
+                    lock_owner_name = lock_data.get("user_display_name") if lock_data else "Another user"
+                    data["lock_status"] = f"Currently locked by {lock_owner_name}"
+                    data["lock_expires_at"] = None
+            else:
+                data["lock_status"] = "Available for negotiation"
+
+        return data
 
     def validate(self, data):
-        buyer = self.context["request"].user
+        """Enhanced validation with lock checking"""
+        request = self.context["request"]
+        user = request.user
         product = data.get("product")
         proposed_price = data.get("proposed_price")
         proposed_quantity = data.get("proposed_quantity")
 
+        # For updates (counter offers), check lock status
+        if self.instance:
+            negotiation = self.instance
+
+            # Check if negotiation is locked
+            if negotiation.is_locked:
+                # Verify user owns the lock
+                is_owner, _ = lock_manager.check_lock_ownership(negotiation.id, user.id)
+                if not is_owner:
+                    raise serializers.ValidationError(
+                        "This negotiation is currently locked by another user. "
+                        "Please wait for them to finish or the lock to expire."
+                    )
+            else:
+                # Check if it's user's turn to negotiate
+                if user.id == negotiation.last_offer_by_id:
+                    raise serializers.ValidationError(
+                        "It's not your turn to make an offer. Please wait for the other party to respond."
+                    )
+
+        # Original validation logic (unchanged)
         # 1. Product availability
         if not product.is_available:
             raise serializers.ValidationError("This product is not currently available for negotiation.")
@@ -1309,7 +1480,7 @@ class NegotiationSerializer(serializers.ModelSerializer):
 
         # 2. User verification
         try:
-            profile = buyer.user_profile
+            profile = user.user_profile
             if not profile.b2b_verified:
                 raise serializers.ValidationError("Your account must be B2B verified to start a negotiation.")
         except Exception:
@@ -1332,12 +1503,19 @@ class NegotiationSerializer(serializers.ModelSerializer):
         if proposed_quantity > product.product.stock:
             raise serializers.ValidationError(f"Requested quantity exceeds current stock ({product.product.stock}).")
 
+        # 5. For counter offers, ensure price is different
+        if self.instance:
+            if proposed_price == self.instance.proposed_price:
+                raise serializers.ValidationError("New price must be different from the current price.")
+
         return data
 
     def create(self, validated_data):
+        """Create a new negotiation with initial view permissions"""
         message = validated_data.pop("message", "")
         buyer = self.context["request"].user
         product = validated_data["product"]
+        proposed_price = validated_data["proposed_price"]
 
         # Determine seller from product
         try:
@@ -1357,16 +1535,18 @@ class NegotiationSerializer(serializers.ModelSerializer):
         if existing:
             raise serializers.ValidationError("An active negotiation already exists for this product.")
 
+        # Create negotiation
         negotiation = Negotiation.objects.create(
             buyer=buyer,
             seller=seller,
             product=product,
-            proposed_price=validated_data["proposed_price"],
+            proposed_price=proposed_price,
             proposed_quantity=validated_data["proposed_quantity"],
             last_offer_by=buyer,
             status=Negotiation.Status.PENDING,
         )
 
+        # Create history entry
         NegotiationHistory.objects.create(
             negotiation=negotiation,
             offer_by=buyer,
@@ -1374,6 +1554,11 @@ class NegotiationSerializer(serializers.ModelSerializer):
             quantity=negotiation.proposed_quantity,
             message=message,
         )
+
+        # Set initial view permissions
+        # Both parties can see the initial offer
+        view_manager.grant_view_permission(negotiation.id, buyer.id, float(proposed_price), duration=3600)  # 1 hour
+        view_manager.grant_view_permission(negotiation.id, seller.id, float(proposed_price), duration=3600)
 
         # Notify seller
         from market.utils import notify_event
@@ -1386,4 +1571,182 @@ class NegotiationSerializer(serializers.ModelSerializer):
         )
 
         return negotiation
-        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        """Update negotiation for counter offers with lock management"""
+        request = self.context["request"]
+        user = request.user
+        new_price = validated_data.get("proposed_price", instance.proposed_price)
+        new_quantity = validated_data.get("proposed_quantity", instance.proposed_quantity)
+        message = validated_data.get("message", "")
+
+        # Check if user has lock
+        is_locked, lock_data = lock_manager.check_lock_ownership(instance.id, user.id)
+
+        if not is_locked:
+            # Try to acquire lock
+            lock_id = lock_manager.acquire_lock(instance.id, user.id, timeout=300)  # 5 minutes
+
+            if not lock_id:
+                raise serializers.ValidationError(
+                    "Failed to acquire lock. Please try again or wait for the other party to finish."
+                )
+
+            lock_data = {"lock_id": lock_id}
+
+        try:
+            # Update negotiation
+            old_price = instance.proposed_price
+            instance.proposed_price = new_price
+            instance.proposed_quantity = new_quantity
+            instance.status = Negotiation.Status.COUNTER_OFFER
+            instance.last_offer_by = user
+
+            # Update lock ownership in model
+            instance.lock_owner = user
+            instance.lock_expires_at = timezone.now() + timezone.timedelta(seconds=300)
+            instance.save()
+
+            # Create history entry
+            history = NegotiationHistory.objects.create(
+                negotiation=instance,
+                offer_by=user,
+                price=new_price,
+                quantity=new_quantity,
+                message=message,
+            )
+
+            # Update view permissions
+            # Only the other party can see the new price
+            other_party = instance.seller if user == instance.buyer else instance.buyer
+            view_manager.update_view_permission_on_counter(instance.id, user.id, float(new_price))
+
+            # Release lock after making counter offer
+            if lock_data.get("lock_id"):
+                lock_manager.release_lock(instance.id, user.id, lock_data["lock_id"])
+
+            # Reset lock fields in model
+            instance.lock_owner = None
+            instance.lock_expires_at = None
+            instance.save(update_fields=["lock_owner", "lock_expires_at"])
+
+            # Notify other party
+            from market.utils import notify_event
+
+            notify_event(
+                user=other_party,
+                notif_type=Notification.Type.MARKETPLACE,
+                message=f"New counter offer for {instance.product.product.name} from {user.username}",
+                via_in_app=True,
+            )
+
+            return instance
+
+        except Exception as e:
+            logger.error(f"Error updating negotiation: {e}")
+
+            # Release lock on error
+            if lock_data.get("lock_id"):
+                try:
+                    lock_manager.release_lock(instance.id, user.id, lock_data["lock_id"])
+                except:
+                    pass
+
+            raise serializers.ValidationError(f"Error making counter offer: {str(e)}")
+
+
+class NegotiationLockSerializer(serializers.Serializer):
+    """Serializer for lock operations"""
+
+    lock_id = serializers.CharField(read_only=True)
+    timeout = serializers.IntegerField(
+        required=False, default=300, min_value=60, max_value=1800, help_text="Lock timeout in seconds (60-1800)"
+    )
+
+    def create(self, validated_data):
+        """Acquire a lock for negotiation"""
+        request = self.context["request"]
+        user = request.user
+        negotiation = self.context["negotiation"]
+        timeout = validated_data.get("timeout", 300)
+
+        # Check if negotiation is already locked
+        if negotiation.is_locked:
+            # Check if user already owns the lock
+            is_owner, lock_data = lock_manager.check_lock_ownership(negotiation.id, user.id)
+            if is_owner:
+                return {"lock_id": lock_data.get("lock_id"), "message": "You already hold the lock"}
+
+            # Locked by someone else
+            raise serializers.ValidationError(
+                "Negotiation is currently locked by another user. " f"Lock expires at {negotiation.lock_expires_at}"
+            )
+
+        # Check if it's user's turn to negotiate
+        if user.id == negotiation.last_offer_by_id:
+            raise serializers.ValidationError("It's not your turn to negotiate. Please wait for the other party to respond.")
+
+        # Acquire lock
+        lock_id = lock_manager.acquire_lock(negotiation.id, user.id, timeout)
+
+        if not lock_id:
+            raise serializers.ValidationError("Failed to acquire lock. Please try again.")
+
+        # Update negotiation model
+        negotiation.status = Negotiation.Status.LOCKED
+        negotiation.lock_owner = user
+        negotiation.lock_expires_at = timezone.now() + timezone.timedelta(seconds=timeout)
+        negotiation.save()
+
+        # Grant view permission to lock holder
+        view_manager.grant_view_permission(negotiation.id, user.id, float(negotiation.proposed_price), duration=timeout)
+
+        return {
+            "lock_id": lock_id,
+            "expires_at": negotiation.lock_expires_at.isoformat(),
+            "timeout": timeout,
+            "message": "Lock acquired successfully",
+        }
+
+
+class NegotiationReleaseLockSerializer(serializers.Serializer):
+    """Serializer for releasing locks"""
+
+    lock_id = serializers.CharField(required=True)
+
+    def validate(self, data):
+        """Validate lock ownership"""
+        request = self.context["request"]
+        user = request.user
+        negotiation = self.context["negotiation"]
+        lock_id = data["lock_id"]
+
+        # Verify lock ownership
+        is_owner, lock_data = lock_manager.check_lock_ownership(negotiation.id, user.id)
+
+        if not is_owner or lock_data.get("lock_id") != lock_id:
+            raise serializers.ValidationError("Invalid lock ID or you don't own this lock")
+
+        return data
+
+    def create(self, validated_data):
+        """Release the lock"""
+        request = self.context["request"]
+        user = request.user
+        negotiation = self.context["negotiation"]
+        lock_id = validated_data["lock_id"]
+
+        # Release lock
+        released = lock_manager.release_lock(negotiation.id, user.id, lock_id)
+
+        if not released:
+            raise serializers.ValidationError("Failed to release lock")
+
+        # Update negotiation model
+        if negotiation.status == Negotiation.Status.LOCKED:
+            negotiation.status = Negotiation.Status.COUNTER_OFFER
+        negotiation.lock_owner = None
+        negotiation.lock_expires_at = None
+        negotiation.save()
+
+        return {"message": "Lock released successfully", "negotiation_status": negotiation.status}

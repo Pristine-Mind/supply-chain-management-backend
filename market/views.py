@@ -35,11 +35,13 @@ from market.models import (
     OrderTrackingEvent,
     UserInteraction,
 )
+from market.utils import notify_event
 from producer.models import MarketplaceProduct, MarketplaceProductReview
 from producer.serializers import MarketplaceProductReviewSerializer
 
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
+from .locks import lock_manager, view_manager
 from .models import (
     AffiliateClick,
     Bid,
@@ -80,12 +82,13 @@ from .serializers import (
     ChatMessageSerializer,
     CreateDeliveryFromSaleSerializer,
     CreateOrderSerializer,
-    DeliveryInfoSerializer,
     DeliverySerializer,
     FeedbackSerializer,
     MarketplaceOrderSerializer,
     MarketplaceSaleSerializer,
     MarketplaceUserProductSerializer,
+    NegotiationLockSerializer,
+    NegotiationReleaseLockSerializer,
     NegotiationSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
@@ -100,7 +103,6 @@ from .serializers import (
     ShoppableVideoSerializer,
     UserFollowSerializer,
     VideoCommentSerializer,
-    VideoLikeSerializer,
     VideoReportSerializer,
 )
 from .services import PDF_AVAILABLE, InvoiceGenerationService
@@ -2415,6 +2417,7 @@ def affiliate_redirect(request):
 class NegotiationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for handling buyer-seller price and quantity negotiations.
+    Now with distributed locking and price masking.
     """
 
     serializer_class = NegotiationSerializer
@@ -2423,7 +2426,11 @@ class NegotiationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter negotiations for the authenticated user."""
         user = self.request.user
-        queryset = Negotiation.objects.filter(Q(buyer=user) | Q(seller=user)).prefetch_related("history")
+        queryset = (
+            Negotiation.objects.filter(Q(buyer=user) | Q(seller=user))
+            .select_related("buyer", "seller", "product", "last_offer_by", "lock_owner")
+            .prefetch_related("history")
+        )
 
         status_val = self.request.query_params.get("status")
         if status_val:
@@ -2435,8 +2442,25 @@ class NegotiationViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def get_serializer_context(self):
+        """Add request to serializer context for price masking."""
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
     def perform_create(self, serializer):
-        serializer.save()
+        """Create negotiation with initial view permissions."""
+        negotiation = serializer.save()
+
+        # Grant initial view permissions to both parties
+        view_manager.grant_view_permission(
+            negotiation.id, negotiation.buyer_id, float(negotiation.proposed_price), duration=3600
+        )
+        view_manager.grant_view_permission(
+            negotiation.id, negotiation.seller_id, float(negotiation.proposed_price), duration=3600
+        )
+
+        logger.info(f"Negotiation {negotiation.id} created with initial view permissions")
 
     @action(detail=False, methods=["get"])
     @extend_schema(
@@ -2456,7 +2480,7 @@ class NegotiationViewSet(viewsets.ModelViewSet):
             Negotiation.objects.filter(
                 Q(buyer=user) | Q(seller=user),
                 product_id=product_id,
-                status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER],
+                status__in=[Negotiation.Status.PENDING, Negotiation.Status.COUNTER_OFFER, Negotiation.Status.LOCKED],
             )
             .order_by("-updated_at")
             .first()
@@ -2467,13 +2491,155 @@ class NegotiationViewSet(viewsets.ModelViewSet):
 
         # Check for expiration on the fly
         if negotiation.mark_as_expired():
+            # Clean up any locks
+            lock_data = lock_manager.get_lock_owner(negotiation.id)
+            if lock_data:
+                lock_manager.release_lock(negotiation.id, lock_data["user_id"], lock_data["lock_id"])
             return Response({"detail": "The negotiation for this product has expired"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = self.get_serializer(negotiation)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"])
+    @extend_schema(
+        summary="Acquire negotiation lock",
+        description="Acquire a lock to make a counter offer. Only one user can hold the lock at a time.",
+        request=NegotiationLockSerializer,
+        responses={200: NegotiationLockSerializer},
+    )
+    def acquire_lock(self, request, pk=None):
+        """Acquire a lock for making a counter offer."""
+        negotiation = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Check if negotiation is in a final state
+        if negotiation.status in [Negotiation.Status.ACCEPTED, Negotiation.Status.REJECTED]:
+            return Response({"error": "Cannot acquire lock on a closed negotiation"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = NegotiationLockSerializer(data=request.data, context={"request": request, "negotiation": negotiation})
+
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response(result)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(
+        summary="Release negotiation lock",
+        description="Release a held lock before making an offer.",
+        request=NegotiationReleaseLockSerializer,
+        responses={200: NegotiationReleaseLockSerializer},
+    )
+    def release_lock(self, request, pk=None):
+        """Release a held negotiation lock."""
+        negotiation = get_object_or_404(self.get_queryset(), pk=pk)
+
+        serializer = NegotiationReleaseLockSerializer(
+            data=request.data, context={"request": request, "negotiation": negotiation}
+        )
+
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response(result)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"])
+    @extend_schema(summary="Check lock status", description="Check the current lock status of a negotiation.")
+    def lock_status(self, request, pk=None):
+        """Get current lock status of a negotiation."""
+        negotiation = get_object_or_404(self.get_queryset(), pk=pk)
+
+        lock_data = lock_manager.get_lock_owner(pk)
+        current_user_id = str(request.user.id)
+
+        response_data = {
+            "is_locked": negotiation.is_locked,
+            "lock_owner_id": lock_data.get("user_id") if lock_data else None,
+            "lock_acquired_at": lock_data.get("acquired_at") if lock_data else None,
+            "lock_expires_at": negotiation.lock_expires_at.isoformat() if negotiation.lock_expires_at else None,
+            "current_user_has_lock": lock_data.get("user_id") == current_user_id if lock_data else False,
+            "can_acquire_lock": self._can_acquire_lock(negotiation, request.user),
+        }
+
+        return Response(response_data)
+
+    def _can_acquire_lock(self, negotiation, user):
+        """Check if user can acquire lock on this negotiation."""
+        # Check if negotiation is in a valid state
+        if negotiation.status in [Negotiation.Status.ACCEPTED, Negotiation.Status.REJECTED]:
+            return False
+
+        # Check if already locked by another user
+        if negotiation.is_locked:
+            is_owner, _ = lock_manager.check_lock_ownership(negotiation.id, user.id)
+            return is_owner  # Can only "acquire" if already owner (for renewal)
+
+        # Check if it's user's turn
+        return user.id != negotiation.last_offer_by_id
+
+    def _check_and_acquire_lock(self, negotiation, user):
+        """
+        Helper method to check lock status and acquire if needed.
+        Returns (success, lock_id, error_message)
+        """
+        # Check if negotiation is locked
+        if negotiation.is_locked:
+            # Check if user owns the lock
+            is_owner, lock_data = lock_manager.check_lock_ownership(negotiation.id, user.id)
+            if not is_owner:
+                return False, None, "Negotiation is currently locked by another user"
+            return True, lock_data.get("lock_id"), None
+        else:
+            # Try to acquire lock
+            lock_id = lock_manager.acquire_lock(negotiation.id, user.id, timeout=300)
+            if not lock_id:
+                return False, None, "Failed to acquire lock for negotiation"
+            return True, lock_id, None
+
+    def _validate_counter_offer(self, negotiation, user, proposed_price, proposed_quantity, message):
+        """Validate counter offer with locking."""
+        # Check if it's user's turn
+        if negotiation.last_offer_by == user:
+            return False, "It is not your turn to make an offer"
+
+        # Check lock status and acquire if needed
+        success, lock_id, error_msg = self._check_and_acquire_lock(negotiation, user)
+        if not success:
+            return False, error_msg
+
+        try:
+            # Convert to Decimal for comparison
+            p_price = Decimal(str(proposed_price))
+            p_qty = int(proposed_quantity)
+            listed_price = Decimal(str(negotiation.product.discounted_price or negotiation.product.listed_price))
+
+            # Counter-offer validation
+            if p_price > listed_price:
+                return False, f"Counter-offer price cannot exceed listed price ({listed_price})"
+
+            # Floor price (50% of listed price)
+            floor_price = listed_price * Decimal("0.5")
+            if p_price < floor_price:
+                return False, f"Counter-offer price is too low. Minimum allowed is {floor_price}"
+
+            if negotiation.product.min_order and p_qty < negotiation.product.min_order:
+                return False, f"Quantity cannot be less than minimum order ({negotiation.product.min_order})"
+
+            if p_qty > negotiation.product.product.stock:
+                return False, f"Quantity exceeds available stock ({negotiation.product.product.stock})"
+
+            # Price must be different from current
+            if p_price == negotiation.proposed_price:
+                return False, "New price must be different from the current price"
+
+            return True, lock_id
+
+        except Exception as e:
+            return False, str(e)
+
     def partial_update(self, request, *args, **kwargs):
-        """Handle status updates and counter-offers."""
+        """Handle status updates and counter-offers with locking support."""
         instance = self.get_object()
         user = request.user
         data = request.data
@@ -2491,6 +2657,11 @@ class NegotiationViewSet(viewsets.ModelViewSet):
 
         # 0.1 Check product availability
         if not instance.product.is_available:
+            # Release any locks
+            lock_data = lock_manager.get_lock_owner(instance.id)
+            if lock_data:
+                lock_manager.release_lock(instance.id, lock_data["user_id"], lock_data["lock_id"])
+
             return Response(
                 {"error": "The product is no longer available for negotiation."}, status=status.HTTP_400_BAD_REQUEST
             )
@@ -2498,6 +2669,11 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         # 0.2 Check B2B verification status
         try:
             if not instance.buyer.user_profile.b2b_verified:
+                # Release any locks
+                lock_data = lock_manager.get_lock_owner(instance.id)
+                if lock_data:
+                    lock_manager.release_lock(instance.id, lock_data["user_id"], lock_data["lock_id"])
+
                 return Response(
                     {"error": "Buyer is not B2B verified. Negotiation cannot proceed."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -2505,10 +2681,9 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         except Exception:
             return Response({"error": "Buyer profile not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Turn-based validation
-        is_last_offer_by_me = instance.last_offer_by == user
-
+        # Handle ACCEPTED status
         if status_val == Negotiation.Status.ACCEPTED:
+            is_last_offer_by_me = instance.last_offer_by == user
             if is_last_offer_by_me:
                 return Response({"error": "You cannot accept your own offer"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2519,30 +2694,56 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Release any active locks
+            lock_data = lock_manager.get_lock_owner(instance.id)
+            if lock_data:
+                lock_manager.release_lock(instance.id, lock_data["user_id"], lock_data["lock_id"])
+
+            # Clear view permissions
+            view_manager.revoke_view_permission(instance.id, instance.buyer_id)
+            view_manager.revoke_view_permission(instance.id, instance.seller_id)
+
+            # Update negotiation
             instance.status = Negotiation.Status.ACCEPTED
+            instance.lock_owner = None
+            instance.lock_expires_at = None
             instance.save()
+
             # Create history record for acceptance
             NegotiationHistory.objects.create(
                 negotiation=instance,
                 offer_by=user,
                 price=instance.proposed_price,
                 quantity=instance.proposed_quantity,
-                message="Offer accepted",
+                message="Offer accepted" + (f": {message}" if message else ""),
             )
+
             # Notify the other party
             target_user = instance.buyer if user == instance.seller else instance.seller
-            from .utils import notify_event
-
             notify_event(
                 user=target_user,
                 notif_type=Notification.Type.MARKETPLACE,
                 message=f"Negotiation offer for {instance.product.product.name} has been ACCEPTED by {user.username}",
                 via_in_app=True,
             )
+
             return Response(self.get_serializer(instance).data)
 
+        # Handle REJECTED status
         if status_val == Negotiation.Status.REJECTED:
+            # Release any active locks
+            lock_data = lock_manager.get_lock_owner(instance.id)
+            if lock_data:
+                lock_manager.release_lock(instance.id, lock_data["user_id"], lock_data["lock_id"])
+
+            # Clear view permissions
+            view_manager.revoke_view_permission(instance.id, instance.buyer_id)
+            view_manager.revoke_view_permission(instance.id, instance.seller_id)
+
+            # Update negotiation
             instance.status = Negotiation.Status.REJECTED
+            instance.lock_owner = None
+            instance.lock_expires_at = None
             instance.save()
 
             is_withdrawal = instance.last_offer_by == user
@@ -2555,82 +2756,164 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                 quantity=instance.proposed_quantity,
                 message=msg,
             )
+
             # Notify the other party
             target_user = instance.buyer if user == instance.seller else instance.seller
-            from .utils import notify_event
-
             notify_event(
                 user=target_user,
                 notif_type=Notification.Type.MARKETPLACE,
                 message=f"Negotiation for {instance.product.product.name} has been {'WITHDRAWN' if is_withdrawal else 'REJECTED'} by {user.username}",
                 via_in_app=True,
             )
+
             return Response(self.get_serializer(instance).data)
 
+        # Handle COUNTER_OFFER
         if status_val == Negotiation.Status.COUNTER_OFFER or proposed_price or proposed_quantity:
-            if is_last_offer_by_me:
-                return Response({"error": "It is not your turn to make an offer"}, status=status.HTTP_400_BAD_REQUEST)
-
             if not proposed_price or not proposed_quantity:
                 return Response(
                     {"error": "Price and quantity are required for a counter offer"}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Convert to Decimal for comparison
-            p_price = Decimal(str(proposed_price))
-            p_qty = int(proposed_quantity)
-            listed_price = Decimal(str(instance.product.discounted_price or instance.product.listed_price))
+            # Validate counter offer with locking
+            is_valid, result = self._validate_counter_offer(instance, user, proposed_price, proposed_quantity, message)
 
-            # Counter-offer validation
-            if p_price > listed_price:
-                return Response(
-                    {"error": f"Counter-offer price cannot exceed listed price ({listed_price})"},
-                    status=status.HTTP_400_BAD_REQUEST,
+            if not is_valid:
+                return Response({"error": result}, status=status.HTTP_400_BAD_REQUEST)
+
+            lock_id = result  # The lock_id from successful validation
+
+            try:
+                # Convert to Decimal
+                p_price = Decimal(str(proposed_price))
+                p_qty = int(proposed_quantity)
+
+                # Update negotiation with lock
+                instance.status = Negotiation.Status.COUNTER_OFFER
+                instance.proposed_price = p_price
+                instance.proposed_quantity = p_qty
+                instance.last_offer_by = user
+                instance.lock_owner = user
+                instance.lock_expires_at = timezone.now() + timezone.timedelta(seconds=300)
+                instance.save()
+
+                # Create history entry
+                NegotiationHistory.objects.create(
+                    negotiation=instance,
+                    offer_by=user,
+                    price=p_price,
+                    quantity=p_qty,
+                    message=message,
                 )
 
-            # Floor price (50% of listed price)
-            floor_price = listed_price * Decimal("0.5")
-            if p_price < floor_price:
-                return Response(
-                    {"error": f"Counter-offer price is too low. Minimum allowed is {floor_price}"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                # Update view permissions - only the other party can see the new price
+                other_party = instance.buyer if user == instance.seller else instance.seller
+                view_manager.update_view_permission_on_counter(instance.id, user.id, float(p_price))
+
+                # Release lock after making counter offer
+                if lock_id:
+                    lock_manager.release_lock(instance.id, user.id, lock_id)
+
+                # Reset lock fields in model
+                instance.lock_owner = None
+                instance.lock_expires_at = None
+                instance.save(update_fields=["lock_owner", "lock_expires_at"])
+
+                # Notify the other party
+                notify_event(
+                    user=other_party,
+                    notif_type=Notification.Type.MARKETPLACE,
+                    message=f"New counter-offer received for {instance.product.product.name} from {user.username}",
+                    via_in_app=True,
                 )
 
-            if instance.product.min_order and p_qty < instance.product.min_order:
+                return Response(self.get_serializer(instance).data)
+
+            except Exception as e:
+                logger.error(f"Error making counter offer: {e}")
+
+                # Release lock on error
+                if lock_id:
+                    try:
+                        lock_manager.release_lock(instance.id, user.id, lock_id)
+                    except Exception as lock_error:
+                        logger.error(f"Error releasing lock: {lock_error}")
+
                 return Response(
-                    {"error": f"Quantity cannot be less than minimum order ({instance.product.min_order})"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": f"Error making counter offer: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            if p_qty > instance.product.product.stock:
-                return Response(
-                    {"error": f"Quantity exceeds available stock ({instance.product.product.stock})"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            instance.status = Negotiation.Status.COUNTER_OFFER
-            instance.proposed_price = p_price
-            instance.proposed_quantity = p_qty
-            instance.last_offer_by = user
-            instance.save()
-
-            NegotiationHistory.objects.create(
-                negotiation=instance,
-                offer_by=user,
-                price=p_price,
-                quantity=p_qty,
-                message=message,
-            )
-            # Notify the other party
-            target_user = instance.buyer if user == instance.seller else instance.seller
-            from .utils import notify_event
-
-            notify_event(
-                user=target_user,
-                notif_type=Notification.Type.MARKETPLACE,
-                message=f"New counter-offer received for {instance.product.product.name} from {user.username}",
-                via_in_app=True,
-            )
-            return Response(self.get_serializer(instance).data)
-
+        # Handle other updates (if any)
         return super().partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(
+        summary="Force release lock",
+        description="Force release a lock (admin/seller only when lock is stuck)",
+        responses={200: {"message": "Lock released successfully"}},
+    )
+    def force_release_lock(self, request, pk=None):
+        """Force release a lock (admin/seller only)."""
+        negotiation = get_object_or_404(self.get_queryset(), pk=pk)
+        user = request.user
+
+        # Only seller or admin can force release
+        if user != negotiation.seller and not user.is_staff:
+            return Response({"error": "Only the seller or admin can force release locks"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get current lock owner
+        lock_data = lock_manager.get_lock_owner(pk)
+
+        if not lock_data:
+            return Response({"message": "No active lock found"})
+
+        # Force release the lock
+        lock_manager.release_lock(pk, lock_data["user_id"], lock_data.get("lock_id", ""))
+
+        # Update negotiation model
+        negotiation.lock_owner = None
+        negotiation.lock_expires_at = None
+        if negotiation.status == Negotiation.Status.LOCKED:
+            negotiation.status = Negotiation.Status.COUNTER_OFFER
+        negotiation.save()
+
+        return Response({"message": "Lock force released successfully", "previous_lock_owner": lock_data.get("user_id")})
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(
+        summary="Extend lock",
+        description="Extend the current lock duration",
+        request={"type": "object", "properties": {"additional_seconds": {"type": "integer"}}},
+        responses={200: {"message": "Lock extended successfully"}},
+    )
+    def extend_lock(self, request, pk=None):
+        """Extend the current lock duration."""
+        negotiation = get_object_or_404(self.get_queryset(), pk=pk)
+        user = request.user
+
+        # Check if user owns the lock
+        is_owner, lock_data = lock_manager.check_lock_ownership(negotiation.id, user.id)
+        if not is_owner:
+            return Response({"error": "You don't own the lock on this negotiation"}, status=status.HTTP_403_FORBIDDEN)
+
+        additional_seconds = request.data.get("additional_seconds", 300)
+
+        # Extend lock in Redis
+        lock_key = f"negotiation:{negotiation.id}:lock"
+        self.redis_client.expire(lock_key, additional_seconds)
+
+        # Extend user lock
+        user_lock_key = f"negotiation:{negotiation.id}:lock:{user.id}"
+        self.redis_client.expire(user_lock_key, additional_seconds)
+
+        # Update model
+        negotiation.lock_expires_at = timezone.now() + timezone.timedelta(seconds=additional_seconds)
+        negotiation.save(update_fields=["lock_expires_at"])
+
+        return Response(
+            {
+                "message": "Lock extended successfully",
+                "new_expires_at": negotiation.lock_expires_at.isoformat(),
+                "additional_seconds": additional_seconds,
+            }
+        )

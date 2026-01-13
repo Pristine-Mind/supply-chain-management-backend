@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import WeeklyBusinessHealthDigest, CustomerRFMSegment
+
+from .models import CustomerRFMSegment, WeeklyBusinessHealthDigest
 
 
 class WeeklyBusinessHealthDigestSerializer(serializers.ModelSerializer):

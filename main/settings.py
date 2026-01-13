@@ -463,6 +463,30 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 21600.0,  # Every 6 hours
         "args": (100,),  # Cache 100 popular queries
     },
+    "weekly-business-health-digest": {
+        "task": "report.tasks.generate_weekly_business_digests",
+        "schedule": crontab(hour=0, minute=0, day_of_week="monday"),
+    },
+    "daily-inventory-monitor": {
+        "task": "report.tasks.check_inventory_and_alert",
+        "schedule": crontab(hour=9, minute=0),  # Check every morning at 9 AM
+    },
+    "weekly-customer-segmentation": {
+        "task": "report.tasks.automated_rfm_segmentation",
+        "schedule": crontab(hour=1, minute=0, day_of_week="monday"),
+    },
+    "recalc-inventory-params": {
+        "task": "producer.tasks.recalc_inventory_parameters",
+        "schedule": crontab(hour=2, minute=0),  # Sync EOQ/Safety Stock daily
+    },
+    "cleanup-reports": {
+        "task": "report.tasks.cleanup_old_reports",
+        "schedule": crontab(hour=3, minute=0, day_of_month="1"),  # Monthly cleanup
+    },
+    "cleanup-expired-locks": {
+        "task": "negotiation.tasks.cleanup_expired_locks",
+        "schedule": 60.0,  # Run every minute
+    },
 }
 
 SITE_URL = "https://appmulyabazzar.com"
@@ -819,30 +843,6 @@ FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="https://yourapp.com")
 WEBHOOK_TIMEOUT = 30
 WEBHOOK_MAX_RETRIES = 3
 
-# ============================================================================
-# CELERY BEAT SCHEDULE (ERP OS AUTOMATION)
-# ============================================================================
-from celery.schedules import crontab
-
-CELERY_BEAT_SCHEDULE = {
-    "weekly-business-health-digest": {
-        "task": "report.tasks.generate_weekly_business_digests",
-        "schedule": crontab(hour=0, minute=0, day_of_week="monday"),
-    },
-    "daily-inventory-monitor": {
-        "task": "report.tasks.check_inventory_and_alert",
-        "schedule": crontab(hour=9, minute=0),  # Check every morning at 9 AM
-    },
-    "weekly-customer-segmentation": {
-        "task": "report.tasks.automated_rfm_segmentation",
-        "schedule": crontab(hour=1, minute=0, day_of_week="monday"),
-    },
-    "recalc-inventory-params": {
-        "task": "producer.tasks.recalc_inventory_parameters",
-        "schedule": crontab(hour=2, minute=0),  # Sync EOQ/Safety Stock daily
-    },
-    "cleanup-reports": {
-        "task": "report.tasks.cleanup_old_reports",
-        "schedule": crontab(hour=3, minute=0, day_of_month="1"),  # Monthly cleanup
-    },
-}
+NEGOTIATION_LOCK_TIMEOUT = 300  # 5 minutes
+NEGOTIATION_EXPIRY_DAYS = 7
+NEGOTIATION_VIEW_PERMISSION_DURATION = 3600  # 1 hour

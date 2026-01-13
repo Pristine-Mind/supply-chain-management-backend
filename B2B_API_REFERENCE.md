@@ -397,6 +397,41 @@ X-RateLimit-Reset: 1672531200
 
 ---
 
+## Negotiation System APIs
+
+### 1. List/Initiate Negotiations
+**Endpoint:** `GET/POST /negotiations/`
+- **GET**: Returns ongoing negotiations. Includes `masked_price` and `is_locked` status.
+- **POST**: Initiates a new deal. Buyer must be B2B verified.
+
+### 2. Negotiation Actions (PATCH)
+**Endpoint:** `PATCH /negotiations/{id}/`
+Perform `ACCEPT`, `REJECT`, or `COUNTER_OFFER`. 
+Integrated with **Distributed Locking** and **Price Masking** to ensure high-concurrency safety.
+
+### 3. Concurrency Management
+- **Force Release Lock**: `POST /negotiations/{id}/force_release_lock/` (Admin/Seller only)
+- **Extend Lock**: `POST /negotiations/{id}/extend_lock/` (Current lock owner only)
+
+---
+
+## Analytics & Reporting APIs
+
+### 1. Customer RFM Segments
+**Endpoint:** `GET /report/rfm-segments/`
+Returns RFM (Recency, Frequency, Monetary) analysis for buyer-seller relationships. 
+Categories include: `Champions`, `Loyal Customers`, `At Risk`, `Hibernating`, `Lost`.
+
+### 2. Weekly Business Digests
+**Endpoint:** `GET /report/weekly-digests/`
+Access to generated `WeeklyBusinessHealthDigest` reports containing total revenue, growth rate, and inventory health scores.
+
+### 3. Predictive Lost Sales
+**Endpoint:** `GET /report/lost-sales/`
+Provides detailed analysis of potential revenue lost due to out-of-stock items, based on `avg_daily_demand` and `lead_time`.
+
+---
+
 ## Pagination
 
 List endpoints support pagination with the following parameters:

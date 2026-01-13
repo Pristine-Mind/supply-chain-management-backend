@@ -29,6 +29,8 @@ except ImportError:
 
 from producer.models import City, MarketplaceProduct, Sale
 
+from .locks import lock_manager, view_manager
+
 
 class Purchase(models.Model):
     """
@@ -2357,6 +2359,7 @@ class Negotiation(models.Model):
         REJECTED = "REJECTED", _("Rejected")
         COUNTER_OFFER = "COUNTER_OFFER", _("Counter Offer")
         ORDERED = "ORDERED", _("Ordered")
+        LOCKED = "LOCKED", _("Locked for Negotiation")
 
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="buyer_negotiations", verbose_name=_("Buyer"))
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name="seller_negotiations", verbose_name=_("Seller"))
@@ -2369,6 +2372,15 @@ class Negotiation(models.Model):
     last_offer_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="last_negotiation_offers", verbose_name=_("Last Offer By")
     )
+    lock_owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="locked_negotiations",
+        verbose_name=_("Lock Owner"),
+    )
+    lock_expires_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Lock Expires At"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
 
@@ -2376,6 +2388,11 @@ class Negotiation(models.Model):
         verbose_name = _("Negotiation")
         verbose_name_plural = _("Negotiations")
         ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["status", "updated_at"]),
+            models.Index(fields=["buyer", "status"]),
+            models.Index(fields=["seller", "status"]),
+        ]
 
     def __str__(self):
         return f"Negotiation {self.id} for {self.product.product.name} ({self.status})"
@@ -2386,15 +2403,176 @@ class Negotiation(models.Model):
         expiry_days = getattr(settings, "NEGOTIATION_EXPIRY_DAYS", 7)
         return timezone.now() > self.updated_at + timedelta(days=expiry_days)
 
+    @property
+    def is_locked(self):
+        """Check if negotiation is currently locked."""
+        if not self.lock_owner or not self.lock_expires_at:
+            return False
+        return timezone.now() < self.lock_expires_at and self.status == self.Status.LOCKED
+
+    @property
+    def lock_owner_id(self):
+        """Get current lock owner ID from Redis."""
+        lock_data = lock_manager.get_lock_owner(self.id)
+        return lock_data.get("user_id") if lock_data else None
+
+    def acquire_negotiation_lock(self, user_id, timeout=300):
+        """
+        Acquire a lock for this negotiation.
+
+        Args:
+            user_id: ID of the user acquiring the lock
+            timeout: Lock timeout in seconds
+
+        Returns:
+            tuple: (success, lock_id, message)
+        """
+        # Check if already locked by another user
+        if self.is_locked and self.lock_owner_id != str(user_id):
+            return False, None, "Negotiation is currently locked by another user"
+
+        # Acquire distributed lock
+        lock_id = lock_manager.acquire_lock(self.id, user_id, timeout)
+
+        if lock_id:
+            # Update model
+            self.status = self.Status.LOCKED
+            self.lock_owner_id = user_id
+            self.lock_expires_at = timezone.now() + timedelta(seconds=timeout)
+            self.save(update_fields=["status", "lock_owner", "lock_expires_at", "updated_at"])
+
+            # Grant initial view permission
+            view_manager.grant_view_permission(self.id, user_id, float(self.proposed_price))
+
+            return True, lock_id, "Lock acquired successfully"
+
+        return False, None, "Failed to acquire lock"
+
+    def release_negotiation_lock(self, user_id, lock_id):
+        """
+        Release the lock for this negotiation.
+
+        Args:
+            user_id: ID of the user releasing the lock
+            lock_id: Lock identifier
+
+        Returns:
+            bool: True if released successfully
+        """
+        # Verify lock ownership
+        is_owner, _ = lock_manager.check_lock_ownership(self.id, user_id)
+        if not is_owner:
+            return False
+
+        # Release lock
+        released = lock_manager.release_lock(self.id, user_id, lock_id)
+
+        if released:
+            # Update model
+            if self.status == self.Status.LOCKED:
+                self.status = self.Status.COUNTER_OFFER
+            self.lock_owner = None
+            self.lock_expires_at = None
+            self.save(update_fields=["status", "lock_owner", "lock_expires_at", "updated_at"])
+
+            return True
+
+        return False
+
+    def make_counter_offer(self, user_id, new_price, new_quantity, message=None, lock_id=None):
+        """
+        Make a counter offer with proper locking.
+
+        Args:
+            user_id: ID of the user making the offer
+            new_price: New proposed price
+            new_quantity: New proposed quantity
+            message: Optional message
+            lock_id: Optional lock identifier (if user holds the lock)
+
+        Returns:
+            tuple: (success, negotiation_history, error_message)
+        """
+        from .models import NegotiationHistory
+
+        # Check if user has lock or can acquire it
+        if not lock_id:
+            is_owner, _ = lock_manager.check_lock_ownership(self.id, user_id)
+            if not is_owner:
+                # Try to acquire lock
+                success, lock_id, msg = self.acquire_negotiation_lock(user_id)
+                if not success:
+                    return False, None, msg
+
+        try:
+            # Update negotiation
+            old_price = self.proposed_price
+            self.proposed_price = new_price
+            self.proposed_quantity = new_quantity
+            self.status = self.Status.COUNTER_OFFER
+            self.last_offer_by_id = user_id
+            self.save()
+
+            # Create history entry
+            history = NegotiationHistory.objects.create(
+                negotiation=self, offer_by_id=user_id, price=new_price, quantity=new_quantity, message=message
+            )
+
+            # Update view permissions - only the other party can see the new price
+            other_party = self.seller if user_id == self.buyer.id else self.buyer
+            view_manager.update_view_permission_on_counter(self.id, user_id, float(new_price))
+
+            # Release lock so other party can respond
+            if lock_id:
+                self.release_negotiation_lock(user_id, lock_id)
+
+            return True, history, "Counter offer made successfully"
+
+        except Exception as e:
+            return False, None, str(e)
+
+    def get_viewable_price(self, user_id):
+        """
+        Get the price that a specific user can view.
+
+        Args:
+            user_id: ID of the user requesting the price
+
+        Returns:
+            float: Price that the user can view, or None if not permitted
+        """
+        can_view, price = view_manager.can_view_price(self.id, user_id)
+
+        if can_view:
+            return price
+
+        # If no view permission, check if user is part of negotiation
+        if user_id in [self.buyer_id, self.seller_id]:
+            # User is part of negotiation but has no view permission
+            # This happens when it's not their turn to see the price
+            return None
+
+        # User is not part of negotiation
+        raise PermissionError("User is not part of this negotiation")
+
     def mark_as_expired(self):
         """Transition negotiation to REJECTED if it has expired."""
-        if self.status in [self.Status.PENDING, self.Status.COUNTER_OFFER] and self.is_expired:
+        if self.status in [self.Status.PENDING, self.Status.COUNTER_OFFER, self.Status.LOCKED] and self.is_expired:
+            # Release any active locks
+            lock_data = lock_manager.get_lock_owner(self.id)
+            if lock_data:
+                lock_manager.release_lock(self.id, lock_data["user_id"], lock_data["lock_id"])
+
+            # Update negotiation
             self.status = self.Status.REJECTED
+            self.lock_owner = None
+            self.lock_expires_at = None
             self.save()
+
             # Log in history
             NegotiationHistory.objects.create(
                 negotiation=self,
-                offer_by=self.seller,  # Or system user
+                offer_by=self.seller,
                 price=self.proposed_price,
                 quantity=self.proposed_quantity,
                 message="Negotiation expired due to inactivity.",

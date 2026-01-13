@@ -10,7 +10,10 @@ from rest_framework.views import APIView
 from producer.models import Product
 
 from .models import CustomerRFMSegment, WeeklyBusinessHealthDigest
-from .serializers import WeeklyBusinessHealthDigestSerializer, CustomerRFMSegmentSerializer
+from .serializers import (
+    CustomerRFMSegmentSerializer,
+    WeeklyBusinessHealthDigestSerializer,
+)
 
 
 class CommandPaletteView(APIView):
