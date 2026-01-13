@@ -49,7 +49,15 @@
   - Credit integration with orders
   - Order balance tracking
 
-### ✅ 6. Backward Compatibility
+### ✅ 6. B2B Analytics & Reporting
+- **Implementation:** Data-driven insights for business health and customer segmentation
+- **Files Modified:** `report/models.py`, `report/views.py`, `report/tasks.py`
+- **Key Features:**
+  - **Weekly Business Health Digest**: Automated PDF/Excel reports with revenue, growth, and inventory metrics.
+  - **Customer RFM Segmentation**: Analytics-driven classification (Champions, At Risk, Loyal, etc.) to inform negotiation strategies.
+  - **Predictive Lost Sales Analysis**: Estimates potential revenue lost due to stockouts based on lead times and demand.
+
+### ✅ 7. Backward Compatibility
 - **Implementation:** All existing functionality preserved
 - **Approach:** Optional fields and graceful fallbacks
 - **Verification:** All new fields have appropriate defaults

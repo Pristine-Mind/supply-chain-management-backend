@@ -4,11 +4,16 @@ import requests
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db.models import Q
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.html import strip_tags
 from requests.exceptions import RequestException
 
 from producer.models import Order, Sale
+
+from .locks import lock_manager
+from .models import Negotiation
 
 logger = logging.getLogger(__name__)
 
@@ -185,3 +190,39 @@ def update_recent_purchases():
     except Exception as e:
         logger.error(f"Failed to update recent purchases: {e}")
         return f"Error updating recent purchases: {e}"
+
+
+@shared_task
+def cleanup_expired_locks():
+    """
+    Clean up expired locks and update negotiation status.
+    Runs periodically via Celery.
+    """
+    try:
+        # Find negotiations with expired locks
+        expired_negotiations = Negotiation.objects.filter(
+            Q(status=Negotiation.Status.LOCKED) & Q(lock_expires_at__lt=timezone.now())
+        )
+
+        for negotiation in expired_negotiations:
+            # Release lock in Redis
+            lock_data = lock_manager.get_lock_owner(negotiation.id)
+            if lock_data:
+                lock_manager.release_lock(negotiation.id, lock_data["user_id"], lock_data["lock_id"])
+
+            # Update negotiation status
+            negotiation.status = Negotiation.Status.COUNTER_OFFER
+            negotiation.lock_owner = None
+            negotiation.lock_expires_at = None
+            negotiation.save()
+
+            logger.info(f"Released expired lock for negotiation {negotiation.id}")
+
+        # Clean up expired view permissions (optional)
+        # This would require scanning Redis keys - consider using Redis TTL instead
+
+        return f"Cleaned up {expired_negotiations.count()} expired locks"
+
+    except Exception as e:
+        logger.error(f"Error cleaning up expired locks: {e}")
+        return f"Error: {e}"

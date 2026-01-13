@@ -12,7 +12,6 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Count, F, Sum
 from django.utils import timezone
-
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
