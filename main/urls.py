@@ -37,6 +37,7 @@ from market.views import (
     OrderTrackingEventViewSet,
     ProductChatMessageViewSet,
     ProductFeedbackView,
+    RelatedProductsView,
     SellerChatMessageViewSet,
     SellerProductsView,
     ShoppableVideoCategoryViewSet,
@@ -324,6 +325,7 @@ urlpatterns = [
     ),
     path("api/v1/suggestions/", SearchSuggestionsAPIView.as_view(), name="search-suggestions"),
     path("api/v1/suggestions/click/", SuggestionClickAPIView.as_view(), name="suggestion-click"),
+    path("api/v1/products/<int:product_id>/related/", RelatedProductsView.as_view(), name="related-products"),
 ]
 
 # Add API documentation URLs only in DEBUG mode
