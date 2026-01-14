@@ -7,7 +7,20 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.db import models, transaction
-from django.db.models import Avg, Count, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
+from django.db.models import (
+    Avg,
+    Case,
+    Count,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -37,7 +50,10 @@ from market.models import (
 )
 from market.utils import notify_event
 from producer.models import MarketplaceProduct, MarketplaceProductReview
-from producer.serializers import MarketplaceProductReviewSerializer
+from producer.serializers import (
+    MarketplaceProductReviewSerializer,
+    MarketplaceProductSerializer,
+)
 
 from .filters import BidFilter, ChatFilter, UserBidFilter
 from .forms import ShippingAddressForm
@@ -1824,9 +1840,6 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         context = super().get_serializer_context()
         if self.request.user.is_authenticated:
-            # Avoid N+1 for is_liked and is_saved
-            # For the current batch of videos being serialized, pre-fetch user's likes/saves
-            # Note: This is an optimization for small batches (like pagination size)
             pass
         return context
 
@@ -1838,27 +1851,20 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         category_id = request.query_params.get("category")
         user = request.user if request.user.is_authenticated else None
 
-        # Capture session-based interests for real-time reactivity
-        # Stores recent category interactions in the user session
         session_interests = request.session.get("video_session_interests", {"categories": {}, "tags": {}})
 
         if category_id:
-            # When user specifically browses a category, boost it in their session interests
-            # Convert to string for JSON session consistency
             cat_id_str = str(category_id)
             session_interests["categories"][cat_id_str] = session_interests["categories"].get(cat_id_str, 0) + 1
             request.session["video_session_interests"] = session_interests
             videos = self.get_queryset().filter(category_id=category_id)
         else:
-            # Get recommended videos
             service = VideoRecommendationService()
             videos = service.generate_feed(user, feed_size=100, session_interests=session_interests)
 
-        # Optimize: Pre-fetch engagement status for the user
         liked_ids = set()
         saved_ids = set()
         if user:
-            # Get IDs of all videos in the current list
             video_ids = [v.id for v in videos]
             liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
             saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
@@ -1881,7 +1887,6 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         service = VideoRecommendationService()
         videos = service.get_similar_videos(pk)
 
-        # Optimize engagement statuses for 'more like this'
         user = request.user if request.user.is_authenticated else None
         liked_ids = set()
         saved_ids = set()
@@ -2917,3 +2922,80 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                 "additional_seconds": additional_seconds,
             }
         )
+
+
+class RelatedProductsView(views.APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={200: MarketplaceProductSerializer(many=True)})
+    def get(self, request, product_id):
+        current_mp = (
+            MarketplaceProduct.objects.select_related(
+                "product__category", "product__subcategory", "product__sub_subcategory", "product__brand"
+            )
+            .filter(id=product_id)
+            .first()
+        )
+
+        if not current_mp:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        base = current_mp.product
+
+        relevance_score = Case(
+            When(product__sub_subcategory=base.sub_subcategory, then=Value(10)),
+            When(product__subcategory=base.subcategory, then=Value(5)),
+            When(product__category=base.category, then=Value(2)),
+            When(product__brand=base.brand, then=Value(1)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+
+        related_products = (
+            MarketplaceProduct.objects.filter(is_available=True)
+            .exclude(id=current_mp.id)
+            .annotate(relevance=relevance_score)
+            .select_related("product", "product__category")
+            .order_by("-relevance", "-view_count", "-rank_score")
+        )
+
+        results = list(related_products.filter(relevance__gt=0)[:4])
+
+        if len(results) < 4:
+            already_included = [p.id for p in results] + [current_mp.id]
+            backfill_needed = 4 - len(results)
+
+            backfill = (
+                MarketplaceProduct.objects.filter(is_available=True)
+                .exclude(id__in=already_included)
+                .order_by("-view_count", "-rank_score")[:backfill_needed]
+            )
+            results.extend(list(backfill))
+
+        serializer = MarketplaceProductSerializer(results, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+class MoreFromSellerView(views.APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={200: MarketplaceProductSerializer(many=True)})
+    def get(self, request, product_id):
+        current_mp = MarketplaceProduct.objects.filter(id=product_id).select_related("product__user").first()
+
+        if not current_mp:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        seller = current_mp.product.user
+        if not seller:
+            return Response([], status=status.HTTP_200_OK)
+
+        more_products = (
+            MarketplaceProduct.objects.filter(product__user=seller, is_available=True)
+            .exclude(id=current_mp.id)
+            .select_related("product")
+            .order_by("-view_count")[:4]
+        )
+
+        serializer = MarketplaceProductSerializer(more_products, many=True, context={"request": request})
+        return Response(serializer.data)
