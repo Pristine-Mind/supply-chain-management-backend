@@ -1,4 +1,5 @@
 import logging
+import random
 from decimal import Decimal
 
 import requests
@@ -2925,6 +2926,11 @@ class NegotiationViewSet(viewsets.ModelViewSet):
 
 
 class RelatedProductsView(views.APIView):
+    """
+    API endpoint to show 4 related products when viewing a single product.
+    Incorporates randomization for variety.
+    """
+
     permission_classes = [AllowAny]
 
     @extend_schema(responses={200: MarketplaceProductSerializer(many=True)})
@@ -2951,32 +2957,44 @@ class RelatedProductsView(views.APIView):
             output_field=IntegerField(),
         )
 
+        # Get a larger pool for variety
+        pool_size = 12
         related_products = (
             MarketplaceProduct.objects.filter(is_available=True)
             .exclude(id=current_mp.id)
             .annotate(relevance=relevance_score)
+            .filter(relevance__gt=0)
             .select_related("product", "product__category")
-            .order_by("-relevance", "-view_count", "-rank_score")
+            .order_by("-relevance", "-view_count", "-rank_score")[:pool_size]
         )
 
-        results = list(related_products.filter(relevance__gt=0)[:4])
+        pool = list(related_products)
+        random.shuffle(pool)
+        results = pool[:4]
 
         if len(results) < 4:
             already_included = [p.id for p in results] + [current_mp.id]
             backfill_needed = 4 - len(results)
 
-            backfill = (
+            backfill_pool = (
                 MarketplaceProduct.objects.filter(is_available=True)
                 .exclude(id__in=already_included)
-                .order_by("-view_count", "-rank_score")[:backfill_needed]
+                .order_by("-view_count", "-rank_score")[:pool_size]
             )
-            results.extend(list(backfill))
+            bp_list = list(backfill_pool)
+            random.shuffle(bp_list)
+            results.extend(bp_list[:backfill_needed])
 
         serializer = MarketplaceProductSerializer(results, many=True, context={"request": request})
         return Response(serializer.data)
 
 
 class MoreFromSellerView(views.APIView):
+    """
+    API endpoint to show 4 more products from the same seller.
+    Includes randomization for variety.
+    """
+
     permission_classes = [AllowAny]
 
     @extend_schema(responses={200: MarketplaceProductSerializer(many=True)})
@@ -2990,12 +3008,17 @@ class MoreFromSellerView(views.APIView):
         if not seller:
             return Response([], status=status.HTTP_200_OK)
 
+        pool_size = 12
         more_products = (
             MarketplaceProduct.objects.filter(product__user=seller, is_available=True)
             .exclude(id=current_mp.id)
             .select_related("product")
-            .order_by("-view_count")[:4]
+            .order_by("-view_count")[:pool_size]
         )
 
-        serializer = MarketplaceProductSerializer(more_products, many=True, context={"request": request})
+        pool = list(more_products)
+        random.shuffle(pool)
+        results = pool[:4]
+
+        serializer = MarketplaceProductSerializer(results, many=True, context={"request": request})
         return Response(serializer.data)
