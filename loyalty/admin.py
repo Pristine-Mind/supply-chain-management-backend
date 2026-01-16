@@ -127,7 +127,7 @@ class UserLoyaltyAdmin(admin.ModelAdmin):
     ]
     list_filter = ["tier", "is_active", "created_at", "tier_updated_at"]
     search_fields = ["user__username", "user__email", "user__first_name", "user__last_name"]
-    readonly_fields = ["points", "lifetime_points", "tier", "created_at", "updated_at", "tier_updated_at", "next_tier_info"]
+    readonly_fields = ["points", "lifetime_points", "created_at", "updated_at", "tier_updated_at", "next_tier_info"]
     inlines = [LoyaltyTransactionInline]
 
     fieldsets = (
