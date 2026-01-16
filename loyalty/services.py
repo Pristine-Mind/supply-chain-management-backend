@@ -31,15 +31,11 @@ class DuplicateTransactionError(LoyaltyError):
 class LoyaltyService:
     """
     Optimized Service for handling loyalty operations.
-    Features: Request-caching, Bulk Expiry, and Atomic Integrity.
+    Converted to static methods for direct access without instantiation.
     """
 
-    @cached_property
-    def config(self) -> LoyaltyConfiguration:
-        """Cache configuration for the duration of the request/service instance."""
-        return LoyaltyConfiguration.get_config()
-
-    def _validate_amount(self, amount: Union[Decimal, int, float]) -> Decimal:
+    @staticmethod
+    def _validate_amount(amount: Union[Decimal, int, float]) -> Decimal:
         try:
             amount_decimal = Decimal(str(amount))
         except (ValueError, TypeError) as e:
@@ -48,8 +44,9 @@ class LoyaltyService:
             raise InvalidTransactionError("Amount cannot be negative")
         return amount_decimal
 
-    def _calculate_points(self, amount: Decimal, multiplier: Decimal = Decimal("1.00")) -> int:
-        conf = self.config
+    @staticmethod
+    def _calculate_points(amount: Decimal, multiplier: Decimal = Decimal("1.00")) -> int:
+        conf = LoyaltyConfiguration.get_config()
         if conf.unit_amount <= 0:
             raise InvalidTransactionError("Invalid unit_amount configuration")
 
@@ -58,17 +55,19 @@ class LoyaltyService:
         final_points = (base_points * multiplier).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         return int(final_points)
 
-    def _get_or_create_locked_profile(self, user) -> UserLoyalty:
+    @staticmethod
+    def _get_or_create_locked_profile(user) -> UserLoyalty:
         """Thread-safe acquisition of the loyalty profile."""
         profile, created = UserLoyalty.objects.get_or_create(user=user, defaults={"is_active": True})
         return UserLoyalty.objects.select_for_update().get(pk=profile.pk)
 
+    @staticmethod
     @transaction.atomic
     def award_points(
-        self, user, amount: Union[Decimal, int, float], description: str, reference_id: Optional[str] = None, **kwargs
+        user, amount: Union[Decimal, int, float], description: str, reference_id: Optional[str] = None, **kwargs
     ) -> Tuple[int, LoyaltyTransaction]:
 
-        amount_decimal = self._validate_amount(amount)
+        amount_decimal = LoyaltyService._validate_amount(amount)
         if amount_decimal == 0:
             raise InvalidTransactionError("Cannot award points for zero amount")
 
@@ -76,12 +75,12 @@ class LoyaltyService:
         if reference_id and LoyaltyTransaction.objects.filter(reference_id=reference_id).exists():
             raise DuplicateTransactionError(f"Ref {reference_id} already processed.")
 
-        profile = self._get_or_create_locked_profile(user)
+        profile = LoyaltyService._get_or_create_locked_profile(user)
         if not profile.is_active:
             raise InvalidTransactionError("Profile inactive")
 
         multiplier = profile.tier.point_multiplier if (profile.tier and profile.tier.is_active) else Decimal("1.00")
-        points = self._calculate_points(amount_decimal, multiplier)
+        points = LoyaltyService._calculate_points(amount_decimal, multiplier)
 
         UserLoyalty.objects.filter(pk=profile.pk).update(
             points=F("points") + points, lifetime_points=F("lifetime_points") + points
@@ -101,22 +100,23 @@ class LoyaltyService:
         profile.update_tier()
         return points, txn
 
+    @staticmethod
     @transaction.atomic
     def redeem_points(
-        self, user, points: int, description: str, reference_id: Optional[str] = None, **kwargs
+        user, points: int, description: str, reference_id: Optional[str] = None, **kwargs
     ) -> Tuple[bool, str, Optional[LoyaltyTransaction]]:
 
         if points <= 0:
             return False, "Points must be positive", None
 
-        conf = self.config
+        conf = LoyaltyConfiguration.get_config()
         if points < conf.min_redemption_points:
             return False, f"Min redemption is {conf.min_redemption_points}", None
 
         if reference_id and LoyaltyTransaction.objects.filter(reference_id=reference_id).exists():
             return False, "Duplicate transaction", None
 
-        profile = self._get_or_create_locked_profile(user)
+        profile = LoyaltyService._get_or_create_locked_profile(user)
 
         if profile.points < points:
             return False, "Insufficient balance", None
@@ -135,12 +135,14 @@ class LoyaltyService:
         )
         return True, "Success", txn
 
-    def expire_old_points(self) -> int:
+    @staticmethod
+    def expire_old_points(days_override: Optional[int] = None) -> int:
         """
         High-performance bulk expiry.
         Uses a 'Sweep and Aggregate' approach to avoid N+1 queries.
         """
-        days = self.config.points_expiry_days
+        config = LoyaltyConfiguration.get_config()
+        days = days_override or config.points_expiry_days
         if not days:
             return 0
 
@@ -175,15 +177,50 @@ class LoyaltyService:
                     processed_count += 1
         return processed_count
 
-    def get_user_summary(self, user) -> dict:
-        """Optimized summary using select_related to reduce SQL hits."""
+    @staticmethod
+    def get_user_perks(user):
+        """Get all active perks for a user."""
         profile = UserLoyalty.objects.select_related("tier").filter(user=user).first()
+        if not profile or not profile.tier:
+            return []
+        return profile.tier.perks.filter(is_active=True)
+
+    @staticmethod
+    def get_user_summary(user) -> dict:
+        """Optimized summary using select_related and prefetch_related."""
+        profile = (
+            UserLoyalty.objects.select_related("tier")
+            .prefetch_related("tier__perks")
+            .filter(user=user)
+            .first()
+        )
+
         if not profile:
-            return {"points": 0, "tier": "None"}
+            return {
+                "has_profile": False,
+                "is_active": False,
+                "points": 0,
+                "lifetime_points": 0,
+                "tier": "Standard",
+                "tier_multiplier": 1.0,
+                "perks": [],
+                "points_to_next_tier": None,
+                "transaction_count": 0,
+                "member_since": None,
+            }
 
         return {
-            "points": profile.points,
-            "tier": profile.tier.name if profile.tier else "Standard",
-            "next_tier_progress": profile.get_points_to_next_tier(),
+            "has_profile": True,
             "is_active": profile.is_active,
+            "points": profile.points,
+            "lifetime_points": profile.lifetime_points,
+            "tier": profile.tier.name if profile.tier else "Standard",
+            "tier_multiplier": float(profile.tier.point_multiplier) if profile.tier else 1.0,
+            "perks": [
+                {"name": perk.name, "description": perk.description, "code": perk.code}
+                for perk in (profile.tier.perks.filter(is_active=True) if profile.tier else [])
+            ],
+            "points_to_next_tier": profile.get_points_to_next_tier(),
+            "transaction_count": profile.transactions.count(),
+            "member_since": profile.created_at,
         }
