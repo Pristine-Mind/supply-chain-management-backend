@@ -1,4 +1,3 @@
-# management/commands/create_marketplace_sales.py
 import random
 import string
 from datetime import timedelta

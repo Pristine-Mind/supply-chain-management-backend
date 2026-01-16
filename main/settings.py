@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "notification.apps.NotificationConfig",
     "external_delivery.apps.ExternalDeliveryConfig",
     "recommendations",
+    "loyalty",
 ]
 
 MIDDLEWARE = [
@@ -486,6 +487,19 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-expired-locks": {
         "task": "negotiation.tasks.cleanup_expired_locks",
         "schedule": 60.0,  # Run every minute
+    },
+    "expire-old-points": {
+        "task": "loyalty.tasks.expire_old_points",
+        "schedule": crontab(hour=2, minute=0),  # Daily at 2 AM
+    },
+    "recalculate-all-tiers": {
+        "task": "loyalty.tasks.recalculate_all_tiers",
+        "schedule": crontab(hour=3, minute=0, day_of_week=0),  # Weekly on Sunday
+    },
+    "send-points-expiry-warnings": {
+        "task": "loyalty.tasks.send_points_expiry_warning",
+        "schedule": crontab(hour=10, minute=0),  # Daily at 10 AM
+        "kwargs": {"days_before": 7},
     },
 }
 
