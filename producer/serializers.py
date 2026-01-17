@@ -109,7 +109,6 @@ class ProducerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Registration number must be alphanumeric.")
         return value
 
-
 class MiniCategorySerializer(serializers.ModelSerializer):
 
     class Meta:

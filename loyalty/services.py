@@ -188,12 +188,7 @@ class LoyaltyService:
     @staticmethod
     def get_user_summary(user) -> dict:
         """Optimized summary using select_related and prefetch_related."""
-        profile = (
-            UserLoyalty.objects.select_related("tier")
-            .prefetch_related("tier__perks")
-            .filter(user=user)
-            .first()
-        )
+        profile = UserLoyalty.objects.select_related("tier").prefetch_related("tier__perks").filter(user=user).first()
 
         if not profile:
             return {

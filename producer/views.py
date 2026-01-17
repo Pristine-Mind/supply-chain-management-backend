@@ -705,7 +705,7 @@ class ProducerViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        producer = serializer.save()
+        producer = serializer.save(user=request.user)
         return Response(self.get_serializer(producer).data, status=status.HTTP_201_CREATED)
 
 
@@ -729,6 +729,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Customer.objects.select_related("user").filter(user__user_profile__shop_id=user_profile.shop_id)
         else:
             return Customer.objects.none()
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
