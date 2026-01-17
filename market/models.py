@@ -1,4 +1,6 @@
+import random
 import re
+import string
 import uuid
 from datetime import timedelta
 from decimal import Decimal
@@ -15,7 +17,7 @@ from django.core.validators import (
     validate_email,
 )
 from django.db import models, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -1143,7 +1145,13 @@ class MarketplaceOrderManager(models.Manager):
 
     @transaction.atomic
     def create_order_from_cart(
-        self, cart, delivery_info, payment_method=None, is_first_order=None, shipping_cost=Decimal("0")
+        self,
+        cart,
+        delivery_info,
+        payment_method=None,
+        is_first_order=None,
+        shipping_cost=Decimal("0"),
+        coupon=None,
     ):
         """
         Create a new order from cart items.
@@ -1152,6 +1160,7 @@ class MarketplaceOrderManager(models.Manager):
             cart: Cart instance with items
             delivery_info: DeliveryInfo instance
             payment_method: Optional payment method
+            coupon: Optional Coupon instance
 
         Returns:
             MarketplaceOrder instance
@@ -1217,7 +1226,16 @@ class MarketplaceOrderManager(models.Manager):
 
         if is_first_order:
             shipping_cost = Decimal("0")
-        total_amount = items_total + (shipping_cost or Decimal("0"))
+
+        # Apply coupon if provided
+        discount_amount = Decimal("0")
+        if coupon:
+            is_valid, error_msg = coupon.is_valid(cart.user, items_total)
+            if not is_valid:
+                raise ValidationError(error_msg)
+            discount_amount = coupon.calculate_discount(items_total)
+
+        total_amount = items_total + (shipping_cost or Decimal("0")) - discount_amount
 
         # Create the order
         order = self.create(
@@ -1226,9 +1244,16 @@ class MarketplaceOrderManager(models.Manager):
             total_amount=total_amount,
             payment_method=payment_method,
             shipping_cost=shipping_cost,
+            discount_amount=discount_amount,
+            coupon=coupon,
             is_first_order=is_first_order,
             is_b2b_order=has_negotiated_item,
         )
+
+        # Update coupon used count if applicable
+        if coupon:
+            coupon.used_count = F("used_count") + 1
+            coupon.save(update_fields=["used_count"])
 
         # Create order items from cart items
         for cart_item in cart.items.all():
@@ -1296,6 +1321,148 @@ class DeliveryInfo(models.Model):
         return f"{self.address}, {self.city}, {self.state} {self.zip_code}"
 
 
+class Coupon(models.Model):
+    """
+    Enhanced Model for store coupons with concurrency protection
+    and strict validation.
+    """
+
+    class DiscountType(models.TextChoices):
+        PERCENTAGE = "percentage", _("Percentage")
+        FIXED = "fixed", _("Fixed Amount")
+
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name=_("Coupon Code"),
+        help_text=_("Case-insensitive unique code (e.g., SUMMER2024)"),
+    )
+    description = models.TextField(blank=True, null=True, verbose_name=_("Description"))
+    discount_type = models.CharField(
+        max_length=20, choices=DiscountType.choices, default=DiscountType.FIXED, verbose_name=_("Discount Type")
+    )
+    discount_value = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name=_("Discount Value"), validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    min_purchase_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        verbose_name=_("Minimum Purchase Amount"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    max_discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Maximum Discount Amount"),
+        help_text=_("Cap the discount if using percentage type"),
+    )
+    start_date = models.DateTimeField(verbose_name=_("Start Date"))
+    end_date = models.DateTimeField(verbose_name=_("End Date"))
+
+    usage_limit = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Total Usage Limit"),
+        help_text=_("Total times this coupon can be used across all users"),
+    )
+    user_limit = models.PositiveIntegerField(
+        default=1, verbose_name=_("User Limit"), help_text=_("Times a single user can use this coupon")
+    )
+    used_count = models.PositiveIntegerField(default=0, verbose_name=_("Used Count"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Coupon")
+        verbose_name_plural = _("Coupons")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["code", "is_active"]),
+            models.Index(fields=["start_date", "end_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.code} ({self.get_discount_type_display()})"
+
+    def clean(self):
+        """Logic validation for the admin and model forms."""
+        if self.start_date and self.end_date and self.start_date >= self.end_date:
+            raise ValidationError(_("Start date must be before end date."))
+
+        if self.discount_type == self.DiscountType.PERCENTAGE and self.discount_value > 100:
+            raise ValidationError(_("Percentage discount cannot exceed 100%."))
+
+    def save(self, *args, **kwargs):
+        """Force uppercase codes and run full validation."""
+        self.code = self.code.upper()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def is_valid(self, user, amount):
+        """
+        Check if the coupon is valid. Returns (bool, message).
+        """
+        now = timezone.now()
+
+        if not self.is_active:
+            return False, _("This coupon is no longer active.")
+
+        if not (self.start_date <= now <= self.end_date):
+            return False, _("This coupon is not valid at this time.")
+
+        if self.usage_limit and self.used_count >= self.usage_limit:
+            return False, _("This coupon has reached its maximum usage limit.")
+
+        if amount < self.min_purchase_amount:
+            return False, _(f"Minimum purchase of {self.min_purchase_amount} is required.")
+
+        user_usage = self.orders.filter(customer=user).count()
+        if user_usage >= self.user_limit:
+            return False, _("You have already used this coupon maximum times.")
+
+        return True, ""
+
+    def calculate_discount(self, amount):
+        """Calculate discount ensuring it doesn't exceed order total."""
+        if self.discount_type == self.DiscountType.PERCENTAGE:
+            discount = amount * (self.discount_value / Decimal("100"))
+            if self.max_discount_amount:
+                discount = min(discount, self.max_discount_amount)
+        else:
+            discount = self.discount_value
+
+        # Ensure we don't discount more than the actual price
+        final_discount = min(discount, amount)
+        return final_discount.quantize(Decimal("0.01"))
+
+    @transaction.atomic
+    def use_coupon(self):
+        """
+        Atomic method to increment usage.
+        Call this ONLY when the order is successfully placed.
+        """
+        coupon = Coupon.objects.select_for_update().get(pk=self.pk)
+
+        if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+            raise ValidationError(_("Coupon usage limit reached during processing."))
+
+        coupon.used_count = F("used_count") + 1
+        coupon.save()
+
+    @classmethod
+    def generate_code(cls, length=8):
+        chars = string.ascii_uppercase + string.digits
+        while True:
+            code = "".join(random.choice(chars) for _ in range(length))
+            if not cls.objects.filter(code=code).exists():
+                return code
+
+
 class MarketplaceOrder(models.Model):
     """
     Main order model for marketplace purchases supporting multiple items per order.
@@ -1326,6 +1493,17 @@ class MarketplaceOrder(models.Model):
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_("Total Amount"))
     shipping_cost = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
+    )
+    discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0"), verbose_name=_("Discount Amount")
+    )
+    coupon = models.ForeignKey(
+        "Coupon",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+        verbose_name=_("Applied Coupon"),
     )
     currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.NPR, verbose_name=_("Currency"))
 

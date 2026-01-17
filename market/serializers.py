@@ -834,6 +834,31 @@ class DeliveryInfoSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "full_address"]
 
 
+class CouponSerializer(serializers.ModelSerializer):
+    """Serializer for Coupon model."""
+
+    class Meta:
+        from .models import Coupon
+
+        model = Coupon
+        fields = [
+            "id",
+            "code",
+            "description",
+            "discount_type",
+            "discount_value",
+            "min_purchase_amount",
+            "max_discount_amount",
+            "start_date",
+            "end_date",
+            "is_active",
+            "usage_limit",
+            "user_limit",
+            "used_count",
+        ]
+        read_only_fields = ["used_count"]
+
+
 class MarketplaceOrderItemSerializer(serializers.ModelSerializer):
     """Serializer for marketplace order items."""
 
@@ -915,6 +940,7 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
     can_refund = serializers.ReadOnlyField()
     is_paid = serializers.ReadOnlyField()
     is_delivered = serializers.ReadOnlyField()
+    coupon_code = serializers.CharField(source="coupon.code", read_only=True)
 
     class Meta:
         model = MarketplaceOrder
@@ -927,6 +953,8 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
             "payment_status",
             "payment_status_display",
             "total_amount",
+            "discount_amount",
+            "coupon_code",
             "formatted_total",
             "currency",
             "payment_method",
@@ -953,6 +981,8 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
             "order_status_display",
             "payment_status_display",
             "formatted_total",
+            "discount_amount",
+            "coupon_code",
             "can_cancel",
             "can_refund",
             "is_paid",
@@ -966,6 +996,7 @@ class CreateOrderSerializer(serializers.Serializer):
     cart_id = serializers.IntegerField()
     delivery_info = DeliveryInfoSerializer()
     payment_method = serializers.CharField(max_length=50, required=False)
+    coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
     def validate_cart_id(self, value):
         """Validate that the cart exists and belongs to the user."""
@@ -981,18 +1012,40 @@ class CreateOrderSerializer(serializers.Serializer):
         except Cart.DoesNotExist:
             raise serializers.ValidationError("Cart not found")
 
+    def validate_coupon_code(self, value):
+        """Validate coupon code if provided."""
+        if not value:
+            return value
+
+        from .models import Coupon
+
+        try:
+            coupon = Coupon.objects.get(code=value)
+            # Basic existence check here, full validation happens in create_order_from_cart
+            return value
+        except Coupon.DoesNotExist:
+            raise serializers.ValidationError("Invalid coupon code")
+
     def create(self, validated_data):
         """Create order from cart."""
         request = self.context.get("request")
         cart_id = validated_data["cart_id"]
         delivery_data = validated_data["delivery_info"]
         payment_method = validated_data.get("payment_method")
+        coupon_code = validated_data.get("coupon_code")
 
         # Get the cart
         cart = Cart.objects.get(id=cart_id, user=request.user)
 
         # Create delivery info
+        from .models import Coupon, DeliveryInfo, MarketplaceOrder
+
         delivery_info = DeliveryInfo.objects.create(**delivery_data)
+
+        # Get Coupon if code provided
+        coupon = None
+        if coupon_code:
+            coupon = Coupon.objects.filter(code=coupon_code).first()
 
         # Auto-detect first order for this customer and create order
         try:
@@ -1001,7 +1054,11 @@ class CreateOrderSerializer(serializers.Serializer):
             is_first_order = False
 
         order = MarketplaceOrder.objects.create_order_from_cart(
-            cart=cart, delivery_info=delivery_info, payment_method=payment_method, is_first_order=is_first_order
+            cart=cart,
+            delivery_info=delivery_info,
+            payment_method=payment_method,
+            is_first_order=is_first_order,
+            coupon=coupon,
         )
 
         # Clear the cart after successful order creation

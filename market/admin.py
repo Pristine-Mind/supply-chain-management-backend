@@ -2,8 +2,9 @@ import logging
 import tempfile
 import zipfile
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ from .models import (
     Cart,
     CartItem,
     ChatMessage,
+    Coupon,
     Delivery,
     DeliveryInfo,
     Feedback,
@@ -920,3 +922,91 @@ class InvoiceLineItemAdmin(RoleBasedModelAdminMixin, admin.ModelAdmin):
     add_roles = ["admin", "manager", "accountant"]
     change_roles = ["admin", "manager", "accountant"]
     delete_roles = ["admin", "manager"]
+
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "discount_display",
+        "validity_status",
+        "usage_progress",
+        "is_active",
+        "start_date",
+        "end_date",
+    )
+
+    list_filter = ("discount_type", "is_active", "start_date", "end_date")
+    search_fields = ("code__iexact", "description")
+    readonly_fields = ("used_count", "created_at", "updated_at")
+
+    fieldsets = (
+        (None, {"fields": ("code", "description", "is_active")}),
+        (
+            _("Discount Rules"),
+            {
+                "fields": ("discount_type", "discount_value", "min_purchase_amount", "max_discount_amount"),
+                "description": _("Define how much value this coupon subtracts."),
+            },
+        ),
+        (
+            _("Usage Limits"),
+            {
+                "fields": ("usage_limit", "user_limit", "used_count"),
+            },
+        ),
+        (
+            _("Validity"),
+            {
+                "fields": ("start_date", "end_date", "created_at", "updated_at"),
+            },
+        ),
+    )
+
+    @admin.display(description=_("Discount"))
+    def discount_display(self, obj):
+        if obj.discount_type == obj.DiscountType.PERCENTAGE:
+            return f"{obj.discount_value}%"
+        return f"${obj.discount_value}"
+
+    @admin.display(description=_("Status"))
+    def validity_status(self, obj):
+        now = timezone.now()
+        if not obj.is_active:
+            return "❌ Inactive"
+        if obj.start_date > now:
+            return "⏳ Scheduled"
+        if obj.end_date < now:
+            return "⌛ Expired"
+        if obj.usage_limit and obj.used_count >= obj.usage_limit:
+            return "🚫 Depleted"
+        return "✅ Active"
+
+    @admin.display(description=_("Usage"))
+    def usage_progress(self, obj):
+        if obj.usage_limit:
+            return f"{obj.used_count} / {obj.usage_limit}"
+        return f"{obj.used_count} / ∞"
+
+    def save_model(self, request, obj, form, change):
+        """
+        Handle code generation and ensure the code is saved in a clean state.
+        """
+        if not obj.code:
+            obj.code = Coupon.generate_code()
+
+        obj.code = obj.code.upper().strip()
+
+        super().save_model(request, obj, form, change)
+
+    actions = ["make_active", "make_inactive"]
+
+    @admin.action(description=_("Activate selected coupons"))
+    def make_active(self, request, queryset):
+        queryset.update(is_active=True)
+        self.message_user(request, _("Selected coupons have been activated."))
+
+    @admin.action(description=_("Deactivate selected coupons"))
+    def make_inactive(self, request, queryset):
+        queryset.update(is_active=False)
+        self.message_user(request, _("Selected coupons have been deactivated."), messages.WARNING)

@@ -21,6 +21,7 @@ from market.views import (
     CartItemDeleteView,
     CartItemUpdateView,
     ChatMessageViewSet,
+    CouponViewSet,
     DeliveryCreateView,
     DeliveryViewSet,
     DistributorOrderInvoiceView,
@@ -162,6 +163,7 @@ router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
 router.register(r"b2b-verified-users-products", B2BVerifiedUsersProductsView, basename="b2b-verified-users-products")
 router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, basename="shoppable-video-categories")
 router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
+router.register(r"coupons", CouponViewSet, basename="coupons")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
