@@ -18,6 +18,7 @@ from market.views import (
     CartItemDeleteView,
     CartItemUpdateView,
     ChatMessageViewSet,
+    CouponViewSet,
     DeliveryCreateView,
     DeliveryViewSet,
     DistributorOrderInvoiceView,
@@ -145,7 +146,6 @@ router.register(r"user-follows", UserFollowViewSet, basename="user-follows")
 router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
 router.register(r"transporters/documents", transport_views.TransporterDocumentViewSet, basename="transporter-document")
 router.register(r"order-tracking-events", OrderTrackingEventViewSet, basename="order-tracking-event")
-
 
 urlpatterns = [
     path("admin/", admin.site.urls),

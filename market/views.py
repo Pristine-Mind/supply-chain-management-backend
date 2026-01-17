@@ -12,6 +12,7 @@ from django.db.models import (
     Avg,
     Case,
     Count,
+    F,
     IntegerField,
     OuterRef,
     Prefetch,
@@ -34,6 +35,7 @@ from rest_framework import generics, serializers, status, views, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import (
     AllowAny,
+    IsAdminUser,
     IsAuthenticated,
 )
 from rest_framework.response import Response
@@ -65,6 +67,7 @@ from .models import (
     Cart,
     CartItem,
     ChatMessage,
+    Coupon,
     Delivery,
     DeliveryInfo,
     Feedback,
@@ -97,6 +100,7 @@ from .serializers import (
     CartItemSerializer,
     CartSerializer,
     ChatMessageSerializer,
+    CouponSerializer,
     CreateDeliveryFromSaleSerializer,
     CreateOrderSerializer,
     DeliverySerializer,
@@ -3022,3 +3026,68 @@ class MoreFromSellerView(views.APIView):
 
         serializer = MarketplaceProductSerializer(results, many=True, context={"request": request})
         return Response(serializer.data)
+
+
+class CouponViewSet(viewsets.ModelViewSet):
+
+    queryset = Coupon.objects.all()
+    serializer_class = CouponSerializer
+    lookup_field = "code"
+
+    def get_permissions(self):
+        if self.action == "validate":
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def _get_cart_total(self, cart):
+        total_data = cart.items.aggregate(
+            total=Sum(
+                F("quantity")
+                * models.functions.Coalesce(
+                    "product__discounted_price", "product__listed_price", output_field=models.DecimalField()
+                )
+            )
+        )
+        return total_data["total"] or Decimal("0.00")
+
+    @action(detail=False, methods=["post"])
+    def validate(self, request):
+        """Validate a coupon code for the current user and cart."""
+        code = request.data.get("code")
+        cart_id = request.data.get("cart_id")
+
+        if not code or not cart_id:
+            return Response({"error": "Both coupon code and cart_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        coupon = Coupon.objects.filter(code__iexact=code.strip()).first()
+
+        if not coupon:
+            return Response({"valid": False, "message": "Invalid coupon code"}, status=status.HTTP_404_NOT_FOUND)
+
+        cart = get_object_or_404(Cart, id=cart_id, user=request.user)
+
+        items_total = self._get_cart_total(cart)
+
+        if items_total <= 0:
+            return Response({"valid": False, "message": "Cart is empty."}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_valid, message = coupon.is_valid(request.user, items_total)
+
+        if not is_valid:
+            return Response({"valid": False, "message": message}, status=status.HTTP_200_OK)
+
+        discount = coupon.calculate_discount(items_total)
+        return Response(
+            {
+                "valid": True,
+                "message": "Coupon applied successfully",
+                "data": {
+                    "original_amount": str(items_total),
+                    "discount_amount": str(discount),
+                    "final_amount": str(items_total - discount),
+                    "coupon_code": coupon.code,
+                    "discount_type": coupon.discount_type,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

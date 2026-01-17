@@ -109,6 +109,7 @@ class ProducerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Registration number must be alphanumeric.")
         return value
 
+
 class MiniCategorySerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -143,7 +144,6 @@ class SubSubcategorySerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
-# Light version for Product serialization - no nested objects
 class SubSubcategoryLightSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="subcategory.category.name", read_only=True)
     category_code = serializers.CharField(source="subcategory.category.code", read_only=True)
@@ -210,7 +210,6 @@ class BrandSerializer(serializers.ModelSerializer):
 
     logo_url = serializers.SerializerMethodField()
     products_count = serializers.SerializerMethodField()
-    # Expose brand category hierarchy
     category = serializers.IntegerField(source="category_id", read_only=True)
     subcategory = serializers.IntegerField(source="subcategory_id", read_only=True)
     sub_subcategory = serializers.IntegerField(source="sub_subcategory_id", read_only=True)
@@ -392,20 +391,16 @@ class ProductSerializer(serializers.ModelSerializer):
     category_details = serializers.CharField(source="get_old_category_display", read_only=True)
     deleted_images = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
 
-    # New category hierarchy fields - using light serializers for better performance
     category_info = CategorySerializer(source="category", read_only=True)
     subcategory_info = SubcategoryLightSerializer(source="subcategory", read_only=True)
     sub_subcategory_info = SubSubcategoryLightSerializer(source="sub_subcategory", read_only=True)
 
-    # Brand information
     brand_info = BrandLightSerializer(source="brand", read_only=True)
     brand_name = serializers.CharField(source="get_brand_name", read_only=True)
     brand_details = serializers.SerializerMethodField()
 
-    # MarketplaceProduct id
     marketplace_id = serializers.SerializerMethodField()
 
-    # Choice field display methods
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
 
@@ -493,8 +488,6 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class MiniProductSerializer(serializers.ModelSerializer):
-    """Small/lightweight serializer for Product used in compact listings."""
-
     brand_name = serializers.CharField(source="get_brand_name", read_only=True)
     thumbnail = serializers.SerializerMethodField()
     category_info = MiniCategorySerializer(source="category", read_only=True)
@@ -750,20 +743,16 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_made_in_nepal = serializers.BooleanField(read_only=False)
     made_for_you = serializers.BooleanField(read_only=False)
 
-    # B2B Fields
     effective_price = serializers.SerializerMethodField()
     is_b2b_eligible = serializers.SerializerMethodField()
 
-    # Brand information from product
     brand_name = serializers.CharField(read_only=True)
     brand_info = serializers.SerializerMethodField()
     is_branded_product = serializers.BooleanField(read_only=True)
 
-    # Choice field display methods
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
 
-    # Inherited values from product
     effective_size = serializers.SerializerMethodField()
     effective_color = serializers.SerializerMethodField()
     effective_additional_information = serializers.SerializerMethodField()
@@ -905,50 +894,6 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
         return super().validate(data)
 
-    # def to_representation(self, instance):
-    #     """
-    #     Override to conditionally include B2B fields based on user eligibility
-    #     """
-    #     data = super().to_representation(instance)
-
-    #     # Check if user is eligible for B2B pricing
-    #     user = self.context.get("request", {}).user if self.context.get("request") else None
-    #     show_b2b_fields = False
-
-    #     # Debug information (remove in production)
-    #     debug_info = {
-    #         "user_authenticated": False,
-    #         "user_has_profile": False,
-    #         "user_b2b_verified": False,
-    #         "product_enable_b2b": instance.enable_b2b_sales,
-    #     }
-
-    #     if user and user.is_authenticated:
-    #         debug_info["user_authenticated"] = True
-    #         try:
-    #             profile = getattr(user, "user_profile", None)
-    #             if profile:
-    #                 debug_info["user_has_profile"] = True
-    #                 b2b_verified = getattr(profile, "b2b_verified", False)
-    #                 debug_info["user_b2b_verified"] = b2b_verified
-
-    #                 if b2b_verified and instance.enable_b2b_sales:
-    #                     show_b2b_fields = True
-    #         except AttributeError:
-    #             pass
-
-    #     # Add debug info to response (remove in production)
-    #     data["_debug_b2b"] = debug_info
-    #     data["_show_b2b_fields"] = show_b2b_fields
-
-    #     # Remove B2B fields if user is not eligible
-    #     if not show_b2b_fields:
-    #         data.pop("b2b_price", None)
-    #         data.pop("b2b_min_quantity", None)
-    #         data.pop("b2b_price_tiers", None)
-
-    #     return data
-
 
 class CitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -979,7 +924,6 @@ class CreateMarketplaceProductFromProductSerializer(serializers.Serializer):
     is_made_in_nepal = serializers.BooleanField(required=False, default=False)
     made_for_you = serializers.BooleanField(required=False, default=False)
 
-    # Read-only fields for confirmation
     source_brand_name = serializers.SerializerMethodField(read_only=True)
     source_brand_verified = serializers.SerializerMethodField(read_only=True)
 
