@@ -377,7 +377,7 @@ class PhoneOTP(models.Model):
         return f"{self.phone_number} - {self.otp}"
 
     def is_expired(self):
-        return (timezone.now() - self.created_at).total_seconds() > 300
+        return (timezone.now() - self.created_at).total_seconds() > 120
 
     @classmethod
     def generate_otp_for_phone(cls, phone_number):
