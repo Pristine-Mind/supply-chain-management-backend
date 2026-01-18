@@ -1,11 +1,13 @@
+import hashlib
 import json
 import logging
-import random
-from collections import Counter, defaultdict
-from typing import Dict, List, Optional, Tuple
+import math
+import re
+from datetime import timedelta
+from typing import Any, Dict, List, Optional, Set
 
-import redis
-from django.db.models import Count, F, Q, Value
+from django.db.models import F, Q, Value
+from django.utils import timezone
 from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
@@ -13,292 +15,18 @@ logger = logging.getLogger(__name__)
 
 class SearchSuggestionService:
     """
-    Main service for generating 'Customers Also Searched For' suggestions
+    Complete Search Suggestion Engine.
+    Integrates Collaborative Filtering (Co-occurrence), Manual Curations,
+    and Performance Metrics.
     """
 
-    def __init__(self, redis_host="localhost", redis_port=6379, redis_db=1):
+    def __init__(self):
         self.redis_client = get_redis_connection("default")
-        self.cache_ttl = 3600  # 1 hour
+        self.cache_ttl = 3600
         self.min_cooccurrence = 3
-        self.max_suggestions = 10
 
-    def get_suggestions(
-        self, query: str, user_id: Optional[str] = None, limit: int = 5, use_cache: bool = True
-    ) -> List[Dict]:
-        """
-        Get suggestions for a search query
-        """
-        try:
-            # Normalize query
-            normalized_query = self.normalize_query(query)
-            if len(normalized_query) < 2:
-                return []
-
-            # Check cache
-            cache_key = f"search_suggestions:{self.get_query_hash(normalized_query)}"
-            if use_cache:
-                cached = self.redis_client.get(cache_key)
-                if cached:
-                    suggestions = json.loads(cached)
-                    # Update cache hit stats using pipeline
-                    pipeline = self.redis_client.pipeline()
-                    pipeline.zincrby("suggestion_cache:hits", 1, cache_key)
-                    pipeline.expire("suggestion_cache:hits", 86400)  # 1 day
-                    pipeline.execute()
-                    return suggestions[:limit]
-
-            # Generate fresh suggestions
-            suggestions = self._generate_suggestions(normalized_query, user_id)
-
-            # Cache results
-            if use_cache and suggestions:
-                self.redis_client.setex(cache_key, self.cache_ttl, json.dumps(suggestions))
-
-            return suggestions[:limit]
-
-        except Exception as e:
-            logger.error(f"Error getting suggestions for '{query}': {e}")
-            return self._get_fallback_suggestions(query, limit)
-
-    def _generate_suggestions(self, query: str, user_id: Optional[str] = None) -> List[Dict]:
-        """
-        Generate suggestions using multiple strategies
-        """
-        from ..models import (
-            ManualQueryAssociation,
-            QueryAssociation,
-            QueryPerformacePopularity,
-        )
-
-        all_suggestions = {}
-
-        # 1. Get co-search suggestions (main algorithm)
-        co_search_suggestions = self._get_co_search_suggestions(query)
-        self._merge_suggestions(all_suggestions, co_search_suggestions, weight=1.0)
-
-        # 2. Get manual associations (high priority)
-        manual_suggestions = self._get_manual_suggestions(query)
-        self._merge_suggestions(all_suggestions, manual_suggestions, weight=1.5)
-
-        # 3. Get category-based suggestions
-        category_suggestions = self._get_category_suggestions(query)
-        self._merge_suggestions(all_suggestions, category_suggestions, weight=0.8)
-
-        # 4. Get attribute-based suggestions
-        attribute_suggestions = self._get_attribute_suggestions(query)
-        self._merge_suggestions(all_suggestions, attribute_suggestions, weight=0.7)
-
-        # 5. Get complementary product suggestions
-        complementary_suggestions = self._get_complementary_suggestions(query)
-        self._merge_suggestions(all_suggestions, complementary_suggestions, weight=0.9)
-
-        # 6. Add trending queries if we need more suggestions
-        if len(all_suggestions) < 3:
-            trending_suggestions = self._get_trending_suggestions(query)
-            self._merge_suggestions(all_suggestions, trending_suggestions, weight=0.5)
-
-        # Convert to list and sort
-        suggestions_list = []
-        for query_text, data in all_suggestions.items():
-            suggestions_list.append(
-                {
-                    "query": query_text,
-                    "score": data["score"],
-                    "type": data["type"],
-                    "confidence": data.get("confidence", 0.5),
-                    "reason": data.get("reason", "customers_also_searched"),
-                    "metrics": data.get("metrics", {}),
-                }
-            )
-
-        # Sort by score descending
-        suggestions_list.sort(key=lambda x: x["score"], reverse=True)
-
-        # Attach marketplace product id where possible to allow frontend deep-links
-        try:
-            self._attach_product_ids(suggestions_list)
-        except Exception:
-            logger.exception("Failed to attach product ids to suggestions")
-
-        return suggestions_list
-
-    def _attach_product_ids(self, suggestions_list: List[Dict]):
-        """Try to attach a MarketplaceProduct id for each suggestion if a good match exists."""
-        try:
-            from producer.models import MarketplaceProduct
-        except Exception:
-            return
-        import re
-
-        for suggestion in suggestions_list:
-            if suggestion.get("product_id"):
-                continue
-
-            query_text = (suggestion.get("query") or "").strip()
-            if not query_text:
-                continue
-
-            # 1) Try exact phrase match on product name/description
-            mp = (
-                MarketplaceProduct.objects.filter(
-                    (Q(product__name__icontains=query_text) | Q(product__description__icontains=query_text)),
-                    is_available=True,
-                )
-                .only("id")
-                .first()
-            )
-            if mp:
-                suggestion["product_id"] = mp.id
-                continue
-
-            # 2) Tokenized AND match (all significant tokens must appear)
-            tokens = [t for t in re.findall(r"\w+", query_text.lower()) if len(t) > 2]
-            if tokens:
-                q_and = Q()
-                for t in tokens:
-                    q_and &= Q(product__name__icontains=t) | Q(product__description__icontains=t)
-
-                mp = MarketplaceProduct.objects.filter(q_and, is_available=True).only("id").first()
-                if mp:
-                    suggestion["product_id"] = mp.id
-                    continue
-
-            # 3) Fallback: match any token (prefer products matching more tokens could be optimized later)
-            if tokens:
-                q_or = Q()
-                for t in tokens[:4]:
-                    q_or |= Q(product__name__icontains=t) | Q(product__description__icontains=t)
-
-                mp = MarketplaceProduct.objects.filter(q_or, is_available=True).only("id").first()
-                if mp:
-                    suggestion["product_id"] = mp.id
-
-    def _get_co_search_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get queries that are frequently searched together
-        """
-        from ..models import QueryAssociation
-
-        query_hash = self.get_query_hash(query)
-
-        associations = (
-            QueryAssociation.objects.filter(
-                source_query_hash=query_hash, is_active=True, co_occurrence_count__gte=self.min_cooccurrence
-            )
-            .select_related()
-            .order_by("-co_occurrence_count", "-confidence_score")[:20]
-        )
-
-        suggestions = []
-        for assoc in associations:
-            score = self._calculate_association_score(assoc)
-            suggestions.append(
-                {
-                    "query": assoc.target_query,
-                    "score": score,
-                    "type": "co_search",
-                    "confidence": assoc.confidence_score,
-                    "reason": "frequently_searched_together",
-                    "metrics": {
-                        "co_occurrence": assoc.co_occurrence_count,
-                        "ctr": assoc.source_to_target_ctr,
-                        "conversion": assoc.conversion_rate,
-                    },
-                }
-            )
-
-        return suggestions
-
-    def _get_manual_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get manually curated suggestions
-        """
-        from ..models import ManualQueryAssociation
-
-        manual_associations = ManualQueryAssociation.objects.filter(
-            Q(source_query=query) | Q(source_query__icontains=query), is_active=True
-        ).order_by("-priority", "-strength")[:10]
-
-        suggestions = []
-        for manual in manual_associations:
-            suggestions.append(
-                {
-                    "query": manual.target_query,
-                    "score": manual.strength * 10,  # Convert to score scale
-                    "type": "manual",
-                    "confidence": min(manual.strength / 10, 1.0),
-                    "reason": manual.relationship_type,
-                    "metrics": {"strength": manual.strength, "priority": manual.priority, "description": manual.description},
-                }
-            )
-
-        return suggestions
-
-    def _get_category_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get suggestions based on category matching
-        """
-        from producer.models import Category
-
-        from ..models import QueryPerformacePopularity
-
-        suggestions = []
-
-        # Try to find category for this query
-        try:
-            # Check if query contains category names
-            categories = Category.objects.filter(Q(name__icontains=query) | Q(code__icontains=query))[:3]
-
-            if not categories:
-                # Try to find by query popularity
-                popularity = QueryPerformacePopularity.objects.filter(query__icontains=query).first()
-
-                if popularity and popularity.primary_category:
-                    categories = Category.objects.filter(name__icontains=popularity.primary_category)[:3]
-
-            for category in categories:
-                # Get other popular queries in same category
-                category_queries = (
-                    QueryPerformacePopularity.objects.filter(
-                        Q(primary_category__icontains=category.name) | Q(detected_categories__contains=[category.name]),
-                        query__icontains=query[:3] if len(query) > 3 else query,  # Partial match
-                    )
-                    .exclude(query=query)
-                    .order_by("-total_searches", "-trending_score")[:5]
-                )
-
-                for cat_query in category_queries:
-                    score = self._calculate_category_score(cat_query, query)
-                    suggestions.append(
-                        {
-                            "query": cat_query.query,
-                            "score": score,
-                            "type": "category",
-                            "confidence": 0.6,
-                            "reason": f"same_category_{category.name}",
-                            "metrics": {
-                                "category": category.name,
-                                "popularity": cat_query.total_searches,
-                                "trending": cat_query.trending_score,
-                            },
-                        }
-                    )
-        except Exception as e:
-            logger.debug(f"Error in category suggestions: {e}")
-
-        return suggestions
-
-    def _get_attribute_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get suggestions based on size/color attributes
-        """
-        from producer.models import MarketplaceProduct
-
-        suggestions = []
-
-        # Check for size/color keywords
-        size_keywords = {"xs", "s", "small", "m", "medium", "l", "large", "xl", "xxl", "xxxl", "size", "extra"}
-        color_keywords = {
+        self.size_keywords = {"xs", "s", "small", "m", "medium", "l", "large", "xl", "xxl", "xxxl", "size"}
+        self.color_keywords = {
             "red",
             "blue",
             "green",
@@ -314,231 +42,261 @@ class SearchSuggestionService:
             "beige",
             "gold",
             "silver",
-            "color",
-            "colour",
         }
 
-        query_words = set(query.lower().split())
+    def get_suggestions(
+        self, query: str, user_id: Optional[str] = None, limit: int = 5, use_cache: bool = True
+    ) -> List[Dict]:
+        """Entry point to get suggestions for a user query."""
+        try:
+            normalized_query = self.normalize_query(query)
+            if len(normalized_query) < 2:
+                return []
 
-        has_size = bool(query_words & size_keywords)
-        has_color = bool(query_words & color_keywords)
+            query_hash = self.get_query_hash(normalized_query)
+            cache_key = f"suggestions:v2:{query_hash}"
 
-        if has_size or has_color:
-            # Try to find alternative attributes
+            if use_cache:
+                cached = self.redis_client.get(cache_key)
+                if cached:
+                    self.redis_client.zincrby("suggestion_stats:hits", 1, query_hash)
+                    return json.loads(cached)[:limit]
+
+            suggestions = self._generate_suggestions(normalized_query, user_id)
+
+            if use_cache and suggestions:
+                self.redis_client.setex(cache_key, self.cache_ttl, json.dumps(suggestions))
+
+            return suggestions[:limit]
+
+        except Exception as e:
+            logger.exception(f"Error fetching suggestions for '{query}': {e}")
+            return self._get_fallback_suggestions(query, limit)
+
+    def _generate_suggestions(self, query: str, user_id: Optional[str] = None) -> List[Dict]:
+        """Combines multiple strategies into a single ranked list."""
+        all_suggestions = {}
+
+        strategies = [
+            (self._get_manual_suggestions, 1.8),
+            (self._get_co_search_suggestions, 1.2),
+            (self._get_complementary_suggestions, 1.0),
+            (self._get_category_suggestions, 0.8),
+            (self._get_attribute_suggestions, 0.7),
+        ]
+
+        for strategy_fn, weight in strategies:
             try:
-                # Find products that match the query (excluding size/color)
-                base_query = " ".join(
-                    [w for w in query.split() if w.lower() not in size_keywords and w.lower() not in color_keywords]
-                )
-
-                if base_query:
-                    products = MarketplaceProduct.objects.filter(
-                        Q(product__name__icontains=base_query) | Q(product__description__icontains=base_query),
-                        is_available=True,
-                    )[:10]
-
-                    for product in products:
-                        # Suggest alternative size
-                        if has_color and product.size:
-                            alt_query = f"{base_query} {product.size}"
-                            suggestions.append(
-                                {
-                                    "query": alt_query.lower(),
-                                    "score": 0.6,
-                                    "type": "attribute",
-                                    "confidence": 0.5,
-                                    "reason": "alternative_size",
-                                    "metrics": {"attribute": "size", "value": product.size},
-                                }
-                            )
-
-                        # Suggest alternative color
-                        if has_size and product.color:
-                            alt_query = f"{base_query} {product.color}"
-                            suggestions.append(
-                                {
-                                    "query": alt_query.lower(),
-                                    "score": 0.6,
-                                    "type": "attribute",
-                                    "confidence": 0.5,
-                                    "reason": "alternative_color",
-                                    "metrics": {"attribute": "color", "value": product.color},
-                                }
-                            )
+                results = strategy_fn(query)
+                self._merge_suggestions(all_suggestions, results, weight)
             except Exception as e:
-                logger.debug(f"Error in attribute suggestions: {e}")
+                logger.error(f"Strategy {strategy_fn.__name__} failed: {e}")
+
+        if len(all_suggestions) < 3:
+            trending = self._get_trending_suggestions(query)
+            self._merge_suggestions(all_suggestions, trending, 0.5)
+
+        suggestions_list = sorted(all_suggestions.values(), key=lambda x: x["score"], reverse=True)
+
+        self._attach_product_ids_batched(suggestions_list[:10])
+
+        return suggestions_list
+
+    def _get_co_search_suggestions(self, query: str) -> List[Dict]:
+        """Uses QueryAssociation model to find search patterns."""
+        from .models import QueryAssociation
+
+        q_hash = self.get_query_hash(query)
+        associations = QueryAssociation.objects.filter(
+            source_query_hash=q_hash, is_active=True, co_occurrence_count__gte=self.min_cooccurrence
+        ).order_by("-co_occurrence_count", "-confidence_score")[:15]
+
+        return [
+            {
+                "query": a.target_query,
+                "score": self._calculate_association_score(a),
+                "type": "co_search",
+                "confidence": a.confidence_score,
+                "reason": "frequently_searched_together",
+                "metrics": {"ctr": a.source_to_target_ctr, "conv": a.conversion_rate},
+            }
+            for a in associations
+        ]
+
+    def _get_manual_suggestions(self, query: str) -> List[Dict]:
+        """Uses ManualQueryAssociation model for business-driven overrides."""
+        from .models import ManualQueryAssociation
+
+        manuals = ManualQueryAssociation.objects.filter(
+            Q(source_query__iexact=query) | Q(source_query__icontains=query), is_active=True
+        ).order_by("-priority", "-strength")[:5]
+
+        return [
+            {
+                "query": m.target_query,
+                "score": m.strength * 10,
+                "type": "manual",
+                "confidence": 1.0,
+                "reason": m.relationship_type,
+                "metrics": {"priority": m.priority},
+            }
+            for m in manuals
+        ]
+
+    def _get_category_suggestions(self, query: str) -> List[Dict]:
+        """Leverages QueryPerformacePopularity to find popular queries in same category."""
+        from .models import QueryPerformacePopularity
+
+        current_perf = QueryPerformacePopularity.objects.filter(query__iexact=query).first()
+        if not current_perf or not current_perf.primary_category:
+            return []
+
+        related_cat_queries = (
+            QueryPerformacePopularity.objects.filter(primary_category=current_perf.primary_category)
+            .exclude(query__iexact=query)
+            .order_by("-trending_score", "-total_searches")[:5]
+        )
+
+        return [
+            {
+                "query": rp.query,
+                "score": math.log1p(rp.total_searches) * 2 + (rp.trending_score * 5),
+                "type": "category",
+                "reason": f"popular_in_{rp.primary_category}",
+            }
+            for rp in related_cat_queries
+        ]
+
+    def _get_attribute_suggestions(self, query: str) -> List[Dict]:
+        """Swaps colors/sizes if the query contains them."""
+        from producer.models import MarketplaceProduct
+
+        words = query.lower().split()
+        found_colors = [w for w in words if w in self.color_keywords]
+        found_sizes = [w for w in words if w in self.size_keywords]
+
+        if not (found_colors or found_sizes):
+            return []
+
+        base_name = " ".join([w for w in words if w not in self.color_keywords and w not in self.size_keywords])
+
+        variations = (
+            MarketplaceProduct.objects.filter(product__name__icontains=base_name, is_available=True)
+            .only("color", "size")
+            .distinct()[:5]
+        )
+
+        suggestions = []
+        for var in variations:
+            if found_colors and var.color and var.color not in found_colors:
+                suggestions.append(
+                    {"query": f"{base_name} {var.color}", "score": 5.0, "type": "attribute", "reason": "different_color"}
+                )
+            if found_sizes and var.size and var.size not in found_sizes:
+                suggestions.append(
+                    {"query": f"{base_name} {var.size}", "score": 5.0, "type": "attribute", "reason": "different_size"}
+                )
 
         return suggestions
 
     def _get_complementary_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get complementary product suggestions
-        """
-        from ..models import QueryAssociation
+        """Specifically filters for 'complementary' type associations."""
+        from .models import QueryAssociation
 
-        query_hash = self.get_query_hash(query)
+        comps = QueryAssociation.objects.filter(
+            source_query_hash=self.get_query_hash(query), association_type="complementary", is_active=True
+        ).order_by("-confidence_score")[:5]
 
-        complementary = QueryAssociation.objects.filter(
-            Q(source_query_hash=query_hash) | Q(source_query__icontains=query),
-            association_type="complementary",
-            is_active=True,
-            co_occurrence_count__gte=2,
-        ).order_by("-co_occurrence_count")[:10]
-
-        suggestions = []
-        for comp in complementary:
-            score = self._calculate_complementary_score(comp)
-            suggestions.append(
-                {
-                    "query": comp.target_query,
-                    "score": score,
-                    "type": "complementary",
-                    "confidence": comp.confidence_score,
-                    "reason": "complementary_product",
-                    "metrics": {"co_occurrence": comp.co_occurrence_count, "association_type": comp.association_type},
-                }
-            )
-
-        return suggestions
+        return [
+            {
+                "query": c.target_query,
+                "score": c.confidence_score * 50,
+                "type": "complementary",
+                "reason": "customers_also_bought",
+            }
+            for c in comps
+        ]
 
     def _get_trending_suggestions(self, query: str) -> List[Dict]:
-        """
-        Get trending queries as fallback
-        """
-        from ..models import QueryPerformacePopularity
+        """Uses Redis ZSet for real-time trending or QueryPerformacePopularity for historical."""
+        hot_queries = self.redis_client.zrevrange("global:trending_searches", 0, 5, withscores=True)
+        if hot_queries:
+            return [
+                {"query": q.decode(), "score": score, "type": "trending", "reason": "trending_now"}
+                for q, score in hot_queries
+            ]
+
+        from .models import QueryPerformacePopularity
 
         trending = (
-            QueryPerformacePopularity.objects.filter(trending_score__gt=1.5, total_searches__gte=20)
-            .exclude(query=query)
-            .order_by("-trending_score", "-total_searches")[:10]
+            QueryPerformacePopularity.objects.filter(trending_score__gt=0)
+            .exclude(query__iexact=query)
+            .order_by("-trending_score")[:5]
         )
+        return [
+            {"query": t.query, "score": t.trending_score * 10, "type": "trending", "reason": "trending_this_week"}
+            for t in trending
+        ]
 
-        suggestions = []
-        for trend in trending:
-            suggestions.append(
-                {
-                    "query": trend.query,
-                    "score": trend.trending_score * 0.5,
-                    "type": "trending",
-                    "confidence": 0.4,
-                    "reason": "trending_now",
-                    "metrics": {"trending_score": trend.trending_score, "searches_today": trend.searches_today},
-                }
-            )
+    def _calculate_association_score(self, assoc) -> float:
+        """
+        Custom algorithm to rank associations.
+        Score = (log(Volume) + CTR_Bonus + Conv_Bonus) * Time_Decay
+        """
+        volume_factor = math.log1p(assoc.co_occurrence_count) * 10
+        performance_factor = (assoc.source_to_target_ctr * 25) + (assoc.conversion_rate * 40)
+        return (volume_factor + performance_factor) * assoc.decay_score
 
-        return suggestions
+    def _merge_suggestions(self, all_suggestions: dict, new_items: list, weight: float):
+        """Merges new suggestions into the main map using weighted averages."""
+        for item in new_items:
+            q = item["query"].lower().strip()
+            weighted_score = item["score"] * weight
+
+            if q in all_suggestions:
+                all_suggestions[q]["score"] = (all_suggestions[q]["score"] + weighted_score) / 1.5
+                all_suggestions[q]["types"] = list(set(all_suggestions[q].get("types", []) + [item["type"]]))
+            else:
+                item["types"] = [item["type"]]
+                item["score"] = weighted_score
+                all_suggestions[q] = item
+
+    def _attach_product_ids_batched(self, suggestions_list: List[Dict]):
+        """
+        Fetches relevant Product IDs in ONE database query.
+        Prevents N+1 query issues in the suggestion loop.
+        """
+        from producer.models import MarketplaceProduct
+
+        queries = [s["query"] for s in suggestions_list]
+        if not queries:
+            return
+
+        filter_q = Q()
+        for q_text in queries[:5]:
+            filter_q |= Q(product__name__icontains=q_text)
+
+        products = MarketplaceProduct.objects.filter(filter_q, is_available=True).only("id", "product__name")
+
+        for s in suggestions_list:
+            for p in products:
+                if s["query"].lower() in p.product.name.lower():
+                    s["product_id"] = p.id
+                    break
 
     def _get_fallback_suggestions(self, query: str, limit: int) -> List[Dict]:
-        """
-        Fallback when no other suggestions work
-        """
-        from ..models import QueryPerformacePopularity
+        """Last resort: return global popular queries."""
+        from .models import QueryPerformacePopularity
 
-        # Get popular queries
-        popular = (
-            QueryPerformacePopularity.objects.filter(total_searches__gte=10)
-            .exclude(query=query)
-            .order_by("-total_searches")[: limit * 2]
-        )
+        popular = QueryPerformacePopularity.objects.order_by("-total_searches")[:limit]
+        return [{"query": p.query, "score": 1.0, "type": "fallback", "reason": "popular_search"} for p in popular]
 
-        suggestions = []
-        for i, pop in enumerate(popular):
-            suggestions.append(
-                {
-                    "query": pop.query,
-                    "score": 1.0 / (i + 2),  # Decreasing scores
-                    "type": "fallback",
-                    "confidence": 0.3,
-                    "reason": "popular_query",
-                    "metrics": {"total_searches": pop.total_searches},
-                }
-            )
-
-        return suggestions[:limit]
-
-    # Helper methods
     @staticmethod
     def normalize_query(query: str) -> str:
-        """Normalize search query"""
-        import re
-
         if not query:
             return ""
-        normalized = query.lower().strip()
-        normalized = re.sub(r"\s+", " ", normalized)
-        normalized = re.sub(r"[^\w\s\-\.]", "", normalized)
-        return normalized
+        return re.sub(r"\s+", " ", re.sub(r"[^\w\s\-\.]", "", query.lower())).strip()
 
     @staticmethod
     def get_query_hash(query: str) -> str:
-        """Generate hash for query"""
-        import hashlib
-
-        normalized = SearchSuggestionService.normalize_query(query)
-        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:32]
-
-    def _calculate_association_score(self, association) -> float:
-        """Calculate score for a query association"""
-        import math
-
-        # Base score from co-occurrence
-        base_score = math.log1p(association.co_occurrence_count) * 10
-
-        # Boost by CTR
-        ctr_boost = association.source_to_target_ctr * 20
-
-        # Boost by conversion rate
-        conversion_boost = association.conversion_rate * 30
-
-        # Apply confidence and decay
-        confidence_multiplier = association.confidence_score
-        decay_multiplier = association.decay_score
-
-        return (base_score + ctr_boost + conversion_boost) * confidence_multiplier * decay_multiplier
-
-    def _calculate_category_score(self, query_pop, original_query) -> float:
-        """Calculate score for category-based suggestion"""
-        import math
-
-        # Base on popularity
-        popularity_score = math.log1p(query_pop.total_searches) * 5
-
-        # Boost if trending
-        trending_boost = query_pop.trending_score * 3
-
-        # Penalize if query is very different
-        original_words = set(original_query.split())
-        target_words = set(query_pop.query.split())
-        similarity = len(original_words & target_words) / max(len(original_words | target_words), 1)
-        similarity_penalty = similarity * 2
-
-        return popularity_score + trending_boost + similarity_penalty
-
-    def _calculate_complementary_score(self, association) -> float:
-        """Calculate score for complementary suggestion"""
-        return association.co_occurrence_count * 0.5 + association.confidence_score * 20 + association.decay_score * 10
-
-    def _merge_suggestions(self, all_suggestions: dict, new_suggestions: list, weight: float = 1.0):
-        """Merge new suggestions into existing map"""
-        for suggestion in new_suggestions:
-            query = suggestion["query"]
-            weighted_score = suggestion["score"] * weight
-
-            if query in all_suggestions:
-                # Average the scores
-                existing = all_suggestions[query]
-                combined_score = (existing["score"] + weighted_score) / 2
-                all_suggestions[query] = {
-                    **existing,
-                    "score": combined_score,
-                    "types": existing.get("types", []) + [suggestion["type"]],
-                }
-            else:
-                all_suggestions[query] = {
-                    "score": weighted_score,
-                    "type": suggestion["type"],
-                    "confidence": suggestion.get("confidence", 0.5),
-                    "reason": suggestion.get("reason", ""),
-                    "metrics": suggestion.get("metrics", {}),
-                    "types": [suggestion["type"]],
-                }
+        return hashlib.sha256(query.encode("utf-8")).hexdigest()[:32]
