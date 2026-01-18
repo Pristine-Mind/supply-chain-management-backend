@@ -260,6 +260,12 @@ class RequestOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        import logging
+
+        from market.tasks import send_sms
+
+        logger = logging.getLogger(__name__)
+
         serializer = PhoneNumberSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -269,9 +275,27 @@ class RequestOTPView(APIView):
         # Generate and save OTP
         phone_otp = PhoneOTP.generate_otp_for_phone(phone_number)
 
-        # In production, you would send the OTP via SMS here
-        # For now, we'll return it in the response for testing
-        return Response({"message": "OTP sent successfully", "otp": phone_otp.otp})  # Remove this in production
+        # Send OTP via SMS using existing send_sms task
+        otp_message = f"Your OTP is: {phone_otp.otp}. Valid for 2 minutes. Do not share with anyone."
+        try:
+            send_sms.delay(phone_number, otp_message)
+            logger.info(f"OTP SMS queued for {phone_number}")
+        except Exception as e:
+            logger.error(f"Failed to queue OTP SMS: {str(e)}")
+            return Response(
+                {"error": "Failed to send OTP. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Return success message (OTP not included in production)
+        is_production = not settings.DEBUG
+        response_data = {"message": "OTP sent successfully to your phone number."}
+
+        # Include OTP only in development mode for testing
+        if not is_production:
+            response_data["otp"] = phone_otp.otp
+
+        return Response(response_data)
 
 
 class VerifyOTPView(APIView):
@@ -300,11 +324,21 @@ class VerifyOTPView(APIView):
 class PhoneLoginView(APIView):
     """
     Login with phone number and OTP
+
+    Flow:
+    1. POST with phone_number only -> sends OTP via SMS
+    2. POST with phone_number and otp -> verifies OTP and logs in user
     """
 
     permission_classes = [AllowAny]
 
     def post(self, request):
+        import logging
+
+        from market.tasks import send_email, send_sms
+
+        logger = logging.getLogger(__name__)
+
         # Get client IP address
         ip_address = self.get_client_ip(request)
         user_agent = request.META.get("HTTP_USER_AGENT", "")
@@ -381,11 +415,31 @@ class PhoneLoginView(APIView):
 
             try:
                 # Get the user profile with this phone number
-                user_profile = UserProfile.objects.get(phone_number=phone_number)
+                user_profile = UserProfile.objects.select_related("user").get(phone_number=phone_number)
                 user = user_profile.user
 
                 # Get or create auth token
                 token, created = Token.objects.get_or_create(user=user)
+
+                # Send login confirmation email asynchronously
+                if user.email:
+                    try:
+                        email_context = {
+                            "user_name": user.get_full_name() or user.username,
+                            "phone_number": phone_number,
+                            "timestamp": timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        send_email.delay(
+                            to_email=user.email,
+                            subject="Login Confirmation",
+                            template_name="email/login_confirmation.html",
+                            context=email_context,
+                        )
+                        logger.info(f"Login confirmation email queued for {user.email}")
+                    except Exception as e:
+                        logger.warning(f"Failed to queue login confirmation email: {str(e)}")
+
+                logger.info(f"User {user.id} logged in via phone OTP from IP {ip_address}")
 
                 return Response(
                     {
@@ -400,12 +454,33 @@ class PhoneLoginView(APIView):
             except UserProfile.DoesNotExist:
                 # Record failed attempt for non-existent user
                 LoginAttempt.record_failed_attempt(ip_address=ip_address, username=phone_number, user_agent=user_agent)
+                logger.warning(f"Login attempt for non-existent phone number: {phone_number}")
                 return Response({"error": "No user found with this phone number."}, status=status.HTTP_404_NOT_FOUND)
 
         else:
-            # Generate and send OTP
+            # Step 1: Generate and send OTP
             phone_otp = PhoneOTP.generate_otp_for_phone(phone_number)
-            return Response({"message": "OTP sent successfully", "otp": phone_otp.otp})
+            otp_message = f"Your OTP is: {phone_otp.otp}. Valid for 2 minutes. Do not share with anyone."
+
+            try:
+                send_sms.delay(phone_number, otp_message)
+                logger.info(f"OTP SMS queued for {phone_number}")
+            except Exception as e:
+                logger.error(f"Failed to queue OTP SMS: {str(e)}")
+                return Response(
+                    {"error": "Failed to send OTP. Please try again later."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            # Return success message (OTP not included in production)
+            is_production = not settings.DEBUG
+            response_data = {"message": "OTP sent successfully to your phone number. Please enter it to login."}
+
+            # Include OTP only in development mode for testing
+            if not is_production:
+                response_data["otp"] = phone_otp.otp
+
+            return Response(response_data)
 
     def get_client_ip(self, request):
         """Get the client's IP address from the request."""
