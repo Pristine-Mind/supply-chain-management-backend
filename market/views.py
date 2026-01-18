@@ -1905,19 +1905,23 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         )
         return Response(serializer.data)
 
-    @action(detail=True, methods=["get"], url_path="also-watched")
-    def also_watched(self, request, pk=None):
-        """Collaborative filtering: People who watched this also watched..."""
+    @action(detail=True, methods=["get"], url_path="more-like-this")
+    def more_like_this(self, request, pk=None):
+        """Return videos similar to the one being viewed."""
         service = VideoRecommendationService()
-        videos = service.get_social_proof_videos(pk)
+        videos = service.get_similar_videos(pk)
 
-        user = request.user if request.user.is_authenticated else None
+        user = request.user
         liked_ids = set()
         saved_ids = set()
-        if user:
+
+        if user.is_authenticated:
             video_ids = [v.id for v in videos]
             liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
             saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
+
+        if user.is_authenticated:
+            service.update_user_embedding_realtime(user, pk, alpha=0.95)
 
         serializer = self.get_serializer(
             videos, many=True, context={"request": request, "liked_ids": liked_ids, "saved_ids": saved_ids}
@@ -1931,8 +1935,7 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         following_ids = UserFollow.objects.filter(follower=user).values_list("following_id", flat=True)
         qs = self.get_queryset().filter(uploader__id__in=following_ids)
 
-        # Optimized engagement fetch
-        video_ids = list(qs.values_list("id", flat=True)[:100])  # Limit for optimization
+        video_ids = list(qs.values_list("id", flat=True)[:100])
         liked_ids = set(VideoLike.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
         saved_ids = set(VideoSave.objects.filter(user=user, video_id__in=video_ids).values_list("video_id", flat=True))
 
