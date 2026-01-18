@@ -19,11 +19,9 @@ def update_query_associations():
     try:
         logger.info("Starting query associations update...")
 
-        # Get recent searches (last 7 days for initial, then last 24 hours)
         cutoff_time = timezone.now() - timedelta(days=7)
 
         with connection.cursor() as cursor:
-            # Create or update query associations from search sessions
             cursor.execute(
                 """
                 WITH session_pairs AS (

@@ -19,7 +19,7 @@ class CatalogBootstrapService:
     def __init__(self):
         self.min_cooccurrence = 5
         self.default_ctr = 0.15
-        self.redis_client = get_redis_connection("default")  # Changed
+        self.redis_client = get_redis_connection("default")
 
     def warmup_cache(self, limit: int = 100):
         """

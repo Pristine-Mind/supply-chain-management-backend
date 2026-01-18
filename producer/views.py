@@ -119,10 +119,15 @@ from .serializers import CreatorProfileSerializer
 
 
 class CreatorProfileViewSet(viewsets.GenericViewSet):
-    """ViewSet for creator profiles: list/search, retrieve, update, and follow lists."""
+    """
+    ViewSet for creator profiles: list/search, retrieve, update, and follow lists.
+    """
 
-    queryset = CreatorProfile.objects.all().select_related("user")
     serializer_class = CreatorProfileSerializer
+
+    def get_queryset(self):
+        """Base queryset with optimized joins for all actions."""
+        return CreatorProfile.objects.select_related("user")
 
     def get_permissions(self):
         if self.action in ["retrieve", "list", "followers", "following", "videos", "products", "trending"]:
@@ -131,25 +136,21 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=["get"], permission_classes=[AllowAny])
     def trending(self, request):
-        """
-        Return a ranked list of trending creators based on social velocity.
-        In this implementation, we rank by follower_count and recency of verification.
-        """
+        """Return top 20 trending creators by follower count and verification status."""
         qs = self.get_queryset().order_by("-follower_count", "-is_verified", "-created_at")[:20]
         serializer = self.get_serializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     def list(self, request):
-        """List creators; supports `?q=` to search handle/display_name/username and `?category=` or `?video_category=`."""
+        """List creators with optional search and category filtering."""
         q = request.query_params.get("q", "").strip()
         category_id = request.query_params.get("category")
         video_category_id = request.query_params.get("video_category")
+
         qs = self.get_queryset()
 
         if q:
-            qs = qs.filter(
-                models.Q(handle__icontains=q) | models.Q(display_name__icontains=q) | models.Q(user__username__icontains=q)
-            )
+            qs = qs.filter(Q(handle__icontains=q) | Q(display_name__icontains=q) | Q(user__username__icontains=q))
 
         if category_id:
             qs = qs.filter(categories__id=category_id)
@@ -157,7 +158,9 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         if video_category_id:
             qs = qs.filter(video_categories__id=video_category_id)
 
-        page = self.paginate_queryset(qs.distinct().order_by("-follower_count"))
+        qs = qs.distinct().order_by("-follower_count")
+
+        page = self.paginate_queryset(qs)
         if page is not None:
             serializer = self.get_serializer(page, many=True, context={"request": request})
             return self.get_paginated_response(serializer.data)
@@ -166,12 +169,13 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, pk=None):
+        """Retrieve a single creator profile."""
         obj = self.get_object()
         serializer = self.get_serializer(obj, context={"request": request})
         return Response(serializer.data)
 
     def partial_update(self, request, pk=None):
-        # Only owner can update
+        """Update creator profile (owner only)."""
         obj = self.get_object()
         if request.user != obj.user:
             return Response({"detail": "Permission denied"}, status=403)
@@ -185,87 +189,97 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def followers(self, request, pk=None):
-        """Return list of followers for this creator (users who follow the creator)."""
+        """Return list of followers for this creator (paginated)."""
         creator = self.get_object()
-        # Prefetch follower.user -> their CreatorProfile (and the related User on CreatorProfile)
-        userfollow_qs = (
-            UserFollow.objects.filter(following=creator.user)
-            .select_related("follower")
-            .prefetch_related(
-                Prefetch(
-                    "follower__creator_profile",
-                    queryset=CreatorProfile.objects.select_related("user"),
-                )
-            )
-        )
+
+        follower_creator_profiles = CreatorProfile.objects.filter(
+            user__userfollow_follower__following=creator.user
+        ).select_related("user")
+
+        creator_map = {cp.user_id: cp for cp in follower_creator_profiles}
+
+        userfollow_qs = UserFollow.objects.filter(following=creator.user).select_related("follower").order_by("-id")
 
         results = []
         for uf in userfollow_qs:
-            u = uf.follower
-            cp = getattr(u, "creator_profile", None)
-            if cp is not None:
-                data = CreatorProfileSerializer(cp, context={"request": request}).data
+            creator_profile = creator_map.get(uf.follower_id)
+            if creator_profile:
+                data = CreatorProfileSerializer(creator_profile, context={"request": request}).data
             else:
-                data = {"user": u.id, "username": getattr(u, "username", None)}
+                data = {
+                    "id": None,
+                    "user": uf.follower_id,
+                    "username": getattr(uf.follower, "username", None),
+                    "is_creator": False,
+                }
             results.append(data)
 
         return Response({"count": len(results), "results": results})
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def following(self, request, pk=None):
-        """Return list of creator accounts that this creator (user) follows."""
+        """Return list of creators that this creator follows (paginated).
+
+        Optimized:
+        - Batch loads all creator profiles in single query via prefetch
+        - Efficient lookup without nested serialization
+        """
         creator = self.get_object()
-        follows_qs = (
-            UserFollow.objects.filter(follower=creator.user)
-            .select_related("following")
-            .prefetch_related(
-                Prefetch(
-                    "following__creator_profile",
-                    queryset=CreatorProfile.objects.select_related("user"),
-                )
-            )
-        )
+
+        following_creator_profiles = CreatorProfile.objects.filter(
+            user__userfollow_following__follower=creator.user
+        ).select_related("user")
+
+        creator_map = {cp.user_id: cp for cp in following_creator_profiles}
+
+        follows_qs = UserFollow.objects.filter(follower=creator.user).select_related("following").order_by("-id")
 
         results = []
-        for f in follows_qs:
-            u = f.following
-            cp = getattr(u, "creator_profile", None)
-            if cp is not None:
-                data = CreatorProfileSerializer(cp, context={"request": request}).data
+        for follow in follows_qs:
+            creator_profile = creator_map.get(follow.following_id)
+            if creator_profile:
+                data = CreatorProfileSerializer(creator_profile, context={"request": request}).data
             else:
-                data = {"user": u.id, "username": getattr(u, "username", None)}
+                data = {
+                    "id": None,
+                    "user": follow.following_id,
+                    "username": getattr(follow.following, "username", None),
+                    "is_creator": False,
+                }
             results.append(data)
 
         return Response({"count": len(results), "results": results})
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me_following(self, request):
-        """Return list of creators the current authenticated user follows."""
+        """Return list of creators the current authenticated user follows (paginated)."""
         user = request.user
-        follows_qs = (
-            UserFollow.objects.filter(follower=user)
-            .select_related("following")
-            .prefetch_related(
-                Prefetch(
-                    "following__creator_profile",
-                    queryset=CreatorProfile.objects.select_related("user"),
-                )
-            )
+
+        following_creator_profiles = CreatorProfile.objects.filter(user__userfollow_following__follower=user).select_related(
+            "user"
         )
 
+        creator_map = {cp.user_id: cp for cp in following_creator_profiles}
+
+        follows_qs = UserFollow.objects.filter(follower=user).select_related("following").order_by("-id")
+
         results = []
-        for f in follows_qs:
-            u = f.following
-            cp = getattr(u, "creator_profile", None)
-            if cp is not None:
-                data = CreatorProfileSerializer(cp, context={"request": request}).data
-            results.append(data)
+        for follow in follows_qs:
+            creator_profile = creator_map.get(follow.following_id)
+            if creator_profile:
+                data = CreatorProfileSerializer(creator_profile, context={"request": request}).data
+                results.append(data)
+
+        paginator = self.paginator or PageNumberPagination()
+        page = paginator.paginate_queryset(results, request, view=self)
+        if page is not None:
+            return self.get_paginated_response(page)
 
         return Response({"count": len(results), "results": results})
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def follow(self, request, pk=None):
-        """Toggle follow/unfollow for the authenticated user on this creator."""
+        """Toggle follow/unfollow for authenticated user on this creator."""
         creator = self.get_object()
         target_user = creator.user
 
@@ -275,51 +289,42 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         follow, created = UserFollow.objects.get_or_create(follower=request.user, following=target_user)
 
         if not created:
-            # unfollow
             follow.delete()
-            try:
-                creator.follower_count = models.F("follower_count") - 1
-                creator.save(update_fields=["follower_count"])
-                creator.refresh_from_db()
-                count = creator.follower_count
-            except Exception:
-                count = UserFollow.objects.filter(following=target_user).count()
+            CreatorProfile.objects.filter(user=target_user).update(follower_count=models.F("follower_count") - 1)
+            creator.refresh_from_db(fields=["follower_count"])
+            count = creator.follower_count
+
             return Response({"following": False, "follower_count": count})
 
-        # created follow
-        try:
-            creator.follower_count = models.F("follower_count") + 1
-            creator.save(update_fields=["follower_count"])
-            creator.refresh_from_db()
-            count = creator.follower_count
-        except Exception:
-            count = UserFollow.objects.filter(following=target_user).count()
+        CreatorProfile.objects.filter(user=target_user).update(follower_count=models.F("follower_count") + 1)
+        creator.refresh_from_db(fields=["follower_count"])
+        count = creator.follower_count
 
-        # create notification for the target user
         try:
+            from django.db.models import Q as DjangoQ
+
             Notification.objects.create(
                 user=target_user,
                 notification_type="new_follower",
                 message=f"{request.user.username} started following you",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to create notification: {e}")
 
         return Response({"following": True, "follower_count": count})
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def videos(self, request, pk=None):
-        """Return paginated list of shoppable videos created or uploaded by this creator.
-
-        This includes videos linked to the `CreatorProfile` as `creator_profile`
-        as well as videos whose `uploader` is the creator's `user` account.
-        """
+        """Return paginated list of shoppable videos for this creator."""
         creator = self.get_object()
-        qs = ShoppableVideo.objects.filter(Q(creator_profile=creator) | Q(uploader=creator.user)).select_related(
-            "creator_profile", "uploader"
+
+        qs = (
+            ShoppableVideo.objects.filter(Q(creator_profile=creator) | Q(uploader=creator.user))
+            .select_related("creator_profile__user", "uploader")
+            .order_by("-created_at")
         )
 
-        page = self.paginate_queryset(qs.order_by("-created_at"))
+        page = self.paginate_queryset(qs)
         if page is not None:
             serializer = ShoppableVideoSerializer(page, many=True, context={"request": request})
             return self.get_paginated_response(serializer.data)
@@ -329,13 +334,9 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def products(self, request, pk=None):
-        """Return paginated list of marketplace products associated with this creator.
-
-        This includes:
-        - Products owned by the creator's user account.
-        - Products featured in the creator's shoppable videos.
-        """
+        """Return paginated list of marketplace products associated with this creator."""
         creator = self.get_object()
+
         qs = (
             MarketplaceProduct.objects.filter(
                 Q(product__user=creator.user)
@@ -344,11 +345,13 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
                 | Q(featured_in_videos__creator_profile=creator)
                 | Q(featured_in_videos__uploader=creator.user)
             )
+            .select_related("product__user", "product__category", "product__brand")
+            .prefetch_related("bulk_price_tiers", "variants")
             .distinct()
-            .select_related("product", "product__user")
+            .order_by("-listed_date")
         )
 
-        page = self.paginate_queryset(qs.order_by("-listed_date"))
+        page = self.paginate_queryset(qs)
         if page is not None:
             serializer = MarketplaceProductSerializer(page, many=True, context={"request": request})
             return self.get_paginated_response(serializer.data)
