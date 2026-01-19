@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from decimal import Decimal
 from io import BytesIO
 
@@ -46,15 +47,15 @@ class Command(BaseCommand):
 
     def get_product_name(self, row):
         # Try English name first
-        english_name = row.get("Product Name ")
+        english_name = row.get("Product Name")
         print(english_name)
         if pd.notna(english_name) and str(english_name).strip() and str(english_name).strip().lower() != "nan":
-            return str(english_name).strip()
+            return str(english_name).strip()[:220]
         return None
 
     def get_color(self, row):
         """Extract color from the row"""
-        color = row.get("Color ")
+        color = row.get("Color")
         if pd.notna(color) and str(color).strip() and str(color).strip().lower() != "nan":
             return str(color).strip()
 
@@ -73,56 +74,68 @@ class Command(BaseCommand):
         return main_desc.strip() or None
 
     def download_and_save_image(self, url, product, alt_text=""):
-        """Download image from URL and save as ProductImage"""
-        try:
-            # Clean URL
-            url = str(url).strip()
-            if not url or url.lower() == "nan":
+        """Download image from URL and save as ProductImage with retry logic"""
+        # Clean URL
+        url = str(url).strip()
+        if not url or url.lower() == "nan":
+            return False
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Set headers to mimic a browser request
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                }
+
+                # Download image with timeout
+                response = requests.get(url, headers=headers, timeout=30, stream=True)
+                response.raise_for_status()
+
+                # Get file extension from URL or content type
+                content_type = response.headers.get("content-type", "")
+                if "jpeg" in content_type or "jpg" in content_type:
+                    ext = "jpg"
+                elif "png" in content_type:
+                    ext = "png"
+                elif "webp" in content_type:
+                    ext = "webp"
+                else:
+                    # Try to extract from URL
+                    ext = url.split(".")[-1].split("?")[0].lower()
+                    if ext not in ["jpg", "jpeg", "png", "webp", "gif"]:
+                        ext = "jpg"  # Default to jpg
+
+                # Create filename
+                filename = f"{product.sku}_{len(product.images.all()) + 1}.{ext}"
+
+                # Save image content
+                image_content = ContentFile(response.content)
+
+                # Create ProductImage instance
+                product_image = ProductImage(
+                    product=product, alt_text=alt_text or f"{product.name} - Image {len(product.images.all()) + 1}"
+                )
+                product_image.image.save(filename, image_content, save=True)
+
+                return True
+
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    # Calculate exponential backoff: 2, 4, 8 seconds
+                    wait_time = 2 ** (attempt + 1)
+                    self.stdout.write(
+                        self.style.WARNING(f"Attempt {attempt + 1} failed. Retrying in {wait_time}s... ({str(e)[:80]}...)")
+                    )
+                    time.sleep(wait_time)
+                else:
+                    self.stdout.write(
+                        self.style.WARNING(f"Failed to download image from {url} after {max_retries} attempts: {str(e)}")
+                    )
+                    return False
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"Error saving image from {url}: {str(e)}"))
                 return False
-
-            # Set headers to mimic a browser request
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            }
-
-            # Download image with timeout
-            response = requests.get(url, headers=headers, timeout=30, stream=True)
-            response.raise_for_status()
-
-            # Get file extension from URL or content type
-            content_type = response.headers.get("content-type", "")
-            if "jpeg" in content_type or "jpg" in content_type:
-                ext = "jpg"
-            elif "png" in content_type:
-                ext = "png"
-            elif "webp" in content_type:
-                ext = "webp"
-            else:
-                # Try to extract from URL
-                ext = url.split(".")[-1].split("?")[0].lower()
-                if ext not in ["jpg", "jpeg", "png", "webp", "gif"]:
-                    ext = "jpg"  # Default to jpg
-
-            # Create filename
-            filename = f"{product.sku}_{len(product.images.all()) + 1}.{ext}"
-
-            # Save image content
-            image_content = ContentFile(response.content)
-
-            # Create ProductImage instance
-            product_image = ProductImage(
-                product=product, alt_text=alt_text or f"{product.name} - Image {len(product.images.all()) + 1}"
-            )
-            product_image.image.save(filename, image_content, save=True)
-
-            return True
-
-        except requests.exceptions.RequestException as e:
-            self.stdout.write(self.style.WARNING(f"Failed to download image from {url}: {str(e)}"))
-            return False
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Error saving image from {url}: {str(e)}"))
-            return False
 
     def handle(self, *args, **options):
         excel_file_path = options["excel_file"]
@@ -156,7 +169,7 @@ class Command(BaseCommand):
 
                 # Create user with username "health_beauty_store"
                 username = f"habre_and_yeti"
-                user = User.objects.get(id=117)
+                user = User.objects.get(id=120)
                 # user, user_created = User.objects.get_or_create(
                 #     username=username,
                 #     defaults={
@@ -199,7 +212,7 @@ class Command(BaseCommand):
                 #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer = Producer.objects.get(id=130)
+                producer = Producer.objects.get(id=133)
                 # producer, producer_created = Producer.objects.get_or_create(
                 #     registration_number="HB1025",
                 #     defaults={
@@ -218,12 +231,12 @@ class Command(BaseCommand):
 
                 # # Get or create "Health & Beauty" category
                 try:
-                    pet_baby_care = Category.objects.get(code="PB")
+                    fashion_apparel = Category.objects.get(code="FA")
                 except Category.DoesNotExist:
-                    pet_baby_care = Category.objects.create(
-                        code="PB", name="Health & Beauty", description="Health and beauty products"
+                    fashion_apparel = Category.objects.create(
+                        code="FA", name="Fashion & Apparel", description="Fashion and apparel products"
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Created category: {pet_baby_care.name}"))
+                    self.stdout.write(self.style.SUCCESS(f"Created category: {fashion_apparel.name}"))
 
                 # Process each row in the Excel file
                 products_created = 0
@@ -265,9 +278,6 @@ class Command(BaseCommand):
                         description = self.get_description(row)
                         color = self.get_color(row)
                         additional_information = self.get_additional_information(row)
-                        # print(additional_information)
-                        # print(color)
-                        # Create or update product
                         product, product_created = Product.objects.get_or_create(
                             name=product_name,
                             producer=producer,
@@ -275,8 +285,8 @@ class Command(BaseCommand):
                             defaults={
                                 "description": description,
                                 "user": user,
-                                "category": pet_baby_care,
-                                "old_category": Product.ProductCategory.PET_BABY_CARE,
+                                "category": fashion_apparel,
+                                "old_category": Product.ProductCategory.FASHION_APPAREL,
                                 "additional_information": additional_information,
                                 "price": price,
                                 "cost_price": price,
@@ -297,12 +307,12 @@ class Command(BaseCommand):
                             product.description = description
                             product.price = price
                             product.cost_price = price
-                            product.category = pet_baby_care
-                            product.old_category = Product.ProductCategory.PET_BABY_CARE
+                            product.category = fashion_apparel
+                            product.old_category = Product.ProductCategory.FASHION_APPAREL
                             product.additional_information = additional_information
                             product.color = color
                             if not product.sku:
-                                product.sku = f'PB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
+                                product.sku = f'FA-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
                             product.save()
                             products_updated += 1
                             self.stdout.write(
