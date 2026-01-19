@@ -45,36 +45,32 @@ class Command(BaseCommand):
             return str(html_content).strip()
 
     def get_product_name(self, row):
-        """Extract product name from English column first, then Nepali column"""
         # Try English name first
-        english_name = row.get("Product Name(English)")
+        english_name = row.get("Product Name ")
+        print(english_name)
         if pd.notna(english_name) and str(english_name).strip() and str(english_name).strip().lower() != "nan":
             return str(english_name).strip()
+        return None
 
-        # Try Nepali name
-        nepali_name = row.get("Product Name(Nepali) look function")
-        if pd.notna(nepali_name) and str(nepali_name).strip() and str(nepali_name).strip().lower() != "nan":
-            return str(nepali_name).strip()
-
+    def get_color(self, row):
+        """Extract color from the row"""
+        color = row.get("Color ")
+        if pd.notna(color) and str(color).strip() and str(color).strip().lower() != "nan":
+            return str(color).strip()
+        
+        return None
+    
+    def get_additional_information(self, row):
+        """Extract additional information from the row"""
+        additional_info = row.get("Additional Details")
+        if pd.notna(additional_info) and str(additional_info).strip() and str(additional_info).strip().lower() != "nan":
+            return str(additional_info).strip()
         return None
 
     def get_description(self, row):
         """Combine Main Description and Highlights into a single description"""
-        main_desc = row.get("Main Description")
-        highlights = row.get("Highlights")
-
-        # Clean HTML from both fields
-        main_desc_text = self.clean_html_to_text(main_desc)
-        highlights_text = self.clean_html_to_text(highlights)
-
-        # Combine descriptions
-        parts = []
-        if main_desc_text:
-            parts.append(main_desc_text)
-        if highlights_text:
-            parts.append(f"Highlights: {highlights_text}")
-
-        return " | ".join(parts) if parts else "Health and Beauty Product"
+        main_desc = row.get("Description")
+        return main_desc.strip() or None
 
     def download_and_save_image(self, url, product, alt_text=""):
         """Download image from URL and save as ProductImage"""
@@ -149,83 +145,85 @@ class Command(BaseCommand):
 
             with transaction.atomic():
                 # Create or get business_owner role
-                business_owner_role, _ = Role.objects.get_or_create(
-                    code="business_owner",
-                    defaults={
-                        "name": "Business Owner",
-                        "level": 3,
-                        "description": "Owners of distributor/retailer businesses with full business access.",
-                    },
-                )
+                # business_owner_role, _ = Role.objects.get_or_create(
+                #     code="business_owner",
+                #     defaults={
+                #         "name": "Business Owner",
+                #         "level": 3,
+                #         "description": "Owners of distributor/retailer businesses with full business access.",
+                #     },
+                # )
 
                 # Create user with username "health_beauty_store"
-                username = "physio_nepal_surgical_house"
-                user, user_created = User.objects.get_or_create(
-                    username=username,
-                    defaults={
-                        "email": "test@gmail.com",
-                        "first_name": "Physio",
-                        "last_name": "Nepal Surgical House",
-                        "is_active": True,
-                    },
-                )
+                username = f"habre_and_yeti"
+                user = User.objects.get(id=117)
+                # user, user_created = User.objects.get_or_create(
+                #     username=username,
+                #     defaults={
+                #         "email": "test@gmail.com",
+                #         "first_name": "Habre",
+                #         "last_name": "And Yeti",
+                #         "is_active": True,
+                #     },
+                # )
 
-                if user_created:
-                    user.set_password("defaultpassword123")  # Set a default password
-                    user.save()
-                    self.stdout.write(self.style.SUCCESS(f"Created user: {username}"))
-                else:
-                    self.stdout.write(self.style.WARNING(f"User already exists: {username}"))
+                # if user_created:
+                #     user.set_password("defaultpassword123")  # Set a default password
+                #     user.save()
+                #     self.stdout.write(self.style.SUCCESS(f"Created user: {username}"))
+                # else:
+                #     self.stdout.write(self.style.WARNING(f"User already exists: {username}"))
 
                 # Create or update user profile with business_owner role
-                user_profile, profile_created = UserProfile.objects.get_or_create(
-                    user=user,
-                    defaults={
-                        "role": business_owner_role,
-                        "phone_number": "9800000002",
-                        "business_type": "distributor",
-                        "registered_business_name": "Physio Nepal Surgical House",
-                        "has_access_to_marketplace": True,
-                    },
-                )
+                # user_profile, profile_created = UserProfile.objects.get_or_create(
+                #     user=user,
+                #     defaults={
+                #         "role": business_owner_role,
+                #         "phone_number": "9800000002",
+                #         "business_type": "distributor",
+                #         "registered_business_name": "Habre And Yeti",
+                #         "has_access_to_marketplace": True,
+                #     },
+                # )
 
-                if profile_created:
-                    self.stdout.write(self.style.SUCCESS(f"Created user profile for: {username}"))
-                else:
-                    # Update existing profile
-                    user_profile.role = business_owner_role
-                    user_profile.phone_number = "9800000002"
-                    user_profile.business_type = "distributor"
-                    user_profile.registered_business_name = "Physio Nepal Surgical House"
-                    user_profile.has_access_to_marketplace = True
-                    user_profile.save()
-                    self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
+                # if profile_created:
+                #     self.stdout.write(self.style.SUCCESS(f"Created user profile for: {username}"))
+                # else:
+                #     # Update existing profile
+                #     user_profile.role = business_owner_role
+                #     user_profile.phone_number = "9800000002"
+                #     user_profile.business_type = "distributor"
+                #     user_profile.registered_business_name = "Habre And Yeti"
+                #     user_profile.has_access_to_marketplace = True
+                #     user_profile.save()
+                #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer, producer_created = Producer.objects.get_or_create(
-                    registration_number="HB2025",
-                    defaults={
-                        "name": "Health & Beauty Store",
-                        "contact": "9800000002",
-                        "email": "healthbeauty@gmail.com",
-                        "address": "Kathmandu, Nepal",
-                        "user": user,
-                    },
-                )
+                producer = Producer.objects.get(id=130)
+                # producer, producer_created = Producer.objects.get_or_create(
+                #     registration_number="HB1025",
+                #     defaults={
+                #         "name": "Habre And Yeti",
+                #         "contact": "9800000002",
+                #         "email": "healthbeauty@gmail.com",
+                #         "address": "Kathmandu, Nepal",
+                #         "user": user,
+                #     },
+                # )
 
-                if producer_created:
-                    self.stdout.write(self.style.SUCCESS(f"Created producer: {producer.name}"))
-                else:
-                    self.stdout.write(self.style.WARNING(f"Producer already exists: {producer.name}"))
+                # if producer_created:
+                #     self.stdout.write(self.style.SUCCESS(f"Created producer: {producer.name}"))
+                # else:
+                #     self.stdout.write(self.style.WARNING(f"Producer already exists: {producer.name}"))
 
-                # Get or create "Health & Beauty" category
+                # # Get or create "Health & Beauty" category
                 try:
-                    health_beauty_category = Category.objects.get(code="HB")
+                    pet_baby_care = Category.objects.get(code="PB")
                 except Category.DoesNotExist:
-                    health_beauty_category = Category.objects.create(
-                        code="HB", name="Health & Beauty", description="Health and beauty products"
+                    pet_baby_care = Category.objects.create(
+                        code="PB", name="Health & Beauty", description="Health and beauty products"
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Created category: {health_beauty_category.name}"))
+                    self.stdout.write(self.style.SUCCESS(f"Created category: {pet_baby_care.name}"))
 
                 # Process each row in the Excel file
                 products_created = 0
@@ -265,7 +263,10 @@ class Command(BaseCommand):
 
                         # Get description from Main Description and Highlights
                         description = self.get_description(row)
-
+                        color= self.get_color(row)
+                        additional_information = self.get_additional_information(row)
+                        # print(additional_information)
+                        # print(color)
                         # Create or update product
                         product, product_created = Product.objects.get_or_create(
                             name=product_name,
@@ -273,15 +274,15 @@ class Command(BaseCommand):
                             defaults={
                                 "description": description,
                                 "user": user,
-                                "category": health_beauty_category,
-                                "old_category": Product.ProductCategory.HEALTH_BEAUTY,
-                                "additional_information": "",
+                                "category": pet_baby_care,
+                                "old_category": Product.ProductCategory.PET_BABY_CARE,
+                                "additional_information": additional_information,
                                 "price": price,
                                 "cost_price": price,
                                 "stock": 20,
                                 "reorder_level": 10,
                                 "is_active": True,
-                                "sku": f'HB-{product_name[:10].upper().replace(" ", "")}-{int(price)}',
+                                "color": color,
                             },
                         )
 
@@ -295,10 +296,12 @@ class Command(BaseCommand):
                             product.description = description
                             product.price = price
                             product.cost_price = price
-                            product.category = health_beauty_category
-                            product.old_category = Product.ProductCategory.HEALTH_BEAUTY
+                            product.category = pet_baby_care
+                            product.old_category = Product.ProductCategory.PET_BABY_CARE
+                            product.additional_information = additional_information
+                            product.color= color
                             if not product.sku:
-                                product.sku = f'HB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
+                                product.sku = f'PB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
                             product.save()
                             products_updated += 1
                             self.stdout.write(
@@ -307,7 +310,7 @@ class Command(BaseCommand):
 
                         # Download and save product images
                         image_urls = []
-                        for col in ["Product Images1", "Product Images2", "Product Images3"]:
+                        for col in ["Product Image"]:
                             if col in row and pd.notna(row[col]):
                                 url = str(row[col]).strip()
                                 if url and url.lower() != "nan":
