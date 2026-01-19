@@ -149,16 +149,12 @@ class Command(BaseCommand):
                             logging.error(f"Error extracting image data for row {row_num}: {e}", exc_info=True)
                             pass
 
-            # Try to extract from drawing shapes (images inserted as shapes)
             if hasattr(worksheet, "_drawing") and worksheet._drawing:
-                logging.info(f"Found drawing in worksheet, attempting to extract images from shapes")
                 try:
-                    # Get all drawing elements
                     if hasattr(worksheet._drawing, "image_part"):
                         images = worksheet._drawing.image_part
                         if images:
                             for img in images.images:
-                                # Try to get image by row reference
                                 try:
                                     image_bytes = io.BytesIO(img.blob)
                                     pil_image = PILImage.open(image_bytes)
@@ -201,11 +197,9 @@ class Command(BaseCommand):
             return
 
         try:
-            # Load workbook to extract embedded images
             wb = load_workbook(excel_file_path, data_only=True)
-            ws = wb.active  # Use first worksheet
+            ws = wb.active
 
-            # Also read with pandas for data extraction
             df = pd.read_excel(excel_file_path)
 
             # Clean column names
@@ -300,7 +294,7 @@ class Command(BaseCommand):
                                 "description": description,
                                 "user": user,
                                 "category": category,
-                                "old_category": Product.ProductCategory.FASHION_APPAREL,
+                                "old_category": Product.ProductCategory.HOME_LIVING,
                                 "price": mrp,
                                 "cost_price": mrp,
                                 "stock": 10,
@@ -322,7 +316,7 @@ class Command(BaseCommand):
                             product.category = category
                             product.color = color
                             product.additional_information = additional_information
-                            product.old_category = Product.ProductCategory.FASHION_APPAREL
+                            product.old_category = Product.ProductCategory.HOME_LIVING
                             if not product.sku and product_id:
                                 product.sku = f"{category_code}-{product_id}"
                             product.save()
