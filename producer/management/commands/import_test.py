@@ -57,9 +57,9 @@ class Command(BaseCommand):
         color = row.get("Color ")
         if pd.notna(color) and str(color).strip() and str(color).strip().lower() != "nan":
             return str(color).strip()
-        
+
         return None
-    
+
     def get_additional_information(self, row):
         """Extract additional information from the row"""
         additional_info = row.get("Additional Details")
@@ -263,7 +263,7 @@ class Command(BaseCommand):
 
                         # Get description from Main Description and Highlights
                         description = self.get_description(row)
-                        color= self.get_color(row)
+                        color = self.get_color(row)
                         additional_information = self.get_additional_information(row)
                         # print(additional_information)
                         # print(color)
@@ -300,7 +300,7 @@ class Command(BaseCommand):
                             product.category = pet_baby_care
                             product.old_category = Product.ProductCategory.PET_BABY_CARE
                             product.additional_information = additional_information
-                            product.color= color
+                            product.color = color
                             if not product.sku:
                                 product.sku = f'PB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
                             product.save()

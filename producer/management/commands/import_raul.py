@@ -98,9 +98,7 @@ class Command(BaseCommand):
 
                         # Skip if no product name found
                         if not product_name:
-                            self.stdout.write(
-                                self.style.WARNING(f"Row {row_num}: Skipping - no product name found")
-                            )
+                            self.stdout.write(self.style.WARNING(f"Row {row_num}: Skipping - no product name found"))
                             products_skipped += 1
                             continue
 
