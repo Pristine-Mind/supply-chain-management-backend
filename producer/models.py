@@ -288,7 +288,7 @@ class Product(models.Model):
         CUSTOM = "CUSTOM", "Custom Color"
 
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, verbose_name=_("Producer"), null=True, blank=True)
-    name = models.CharField(max_length=100, verbose_name=_("Product Name"))
+    name = models.CharField(max_length=255, verbose_name=_("Product Name"))
 
     # Brand relationship
     brand = models.ForeignKey(
@@ -327,7 +327,7 @@ class Product(models.Model):
         "City", on_delete=models.CASCADE, verbose_name="Location", help_text="Location of the product", null=True, blank=True
     )
     size = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=SizeChoices.choices,
         verbose_name=_("Size"),
         null=True,
@@ -335,7 +335,7 @@ class Product(models.Model):
         help_text="Size of the product",
     )
     color = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=ColorChoices.choices,
         verbose_name=_("Color"),
         null=True,

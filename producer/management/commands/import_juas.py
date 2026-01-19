@@ -55,7 +55,7 @@ class Command(BaseCommand):
         """Extract product name from the row"""
         product_name = row.get("product_name")
         if pd.notna(product_name) and str(product_name).strip() and str(product_name).strip().lower() != "nan":
-            return str(product_name).strip()
+            return str(product_name).strip()[:250]
         return None
 
     def get_product_id(self, row):
@@ -71,7 +71,7 @@ class Command(BaseCommand):
     def get_mrp(self, row):
         """Extract and validate MRP from the row"""
         try:
-            mrp = row.get("mrp")
+            mrp = row.get("price")
             if pd.notna(mrp):
                 # Convert to string and clean
                 mrp_str = str(mrp).strip()
@@ -212,7 +212,7 @@ class Command(BaseCommand):
             df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("#", "id")
 
             # Check if required columns exist
-            required_columns = ["product_name", "mrp", "description"]
+            required_columns = ["product_name", "price", "description"]
             missing_columns = [col for col in required_columns if col not in df.columns]
 
             if missing_columns:
@@ -262,7 +262,7 @@ class Command(BaseCommand):
 
                 for index, row in df.iterrows():
                     try:
-                        row_num = int(index) + 2  # +1 for 0-index, +1 for header row
+                        row_num = int(index) + 2
 
                         # Get product data
                         product_name = self.get_product_name(row)
@@ -277,7 +277,12 @@ class Command(BaseCommand):
                         product_id = self.get_product_id(row)
                         mrp = self.get_mrp(row)
                         description = self.get_description(row)
-
+                        color = row.get("color", "").strip() if pd.notna(row.get("color")) else ""
+                        additional_information = (
+                            row.get("additional_information", "").strip()
+                            if pd.notna(row.get("additional_information"))
+                            else ""
+                        )
                         # Skip if MRP is 0 (optional, you can remove this if needed)
                         if mrp == Decimal("0"):
                             self.stdout.write(self.style.WARNING(f'Row {row_num}: Skipping "{product_name}" - MRP is 0'))
@@ -285,14 +290,17 @@ class Command(BaseCommand):
                             continue
 
                         # Create or update product
+                        # Use color and additional_information as differentiators if they exist
                         product, product_created = Product.objects.get_or_create(
                             name=product_name,
                             producer=producer,
+                            color=color if color else None,
+                            additional_information=additional_information if additional_information else None,
                             defaults={
                                 "description": description,
                                 "user": user,
                                 "category": category,
-                                "old_category": Product.ProductCategory.HEALTH_BEAUTY,
+                                "old_category": Product.ProductCategory.FASHION_APPAREL,
                                 "price": mrp,
                                 "cost_price": mrp,
                                 "stock": 10,
@@ -312,7 +320,9 @@ class Command(BaseCommand):
                             product.price = mrp
                             product.cost_price = mrp
                             product.category = category
-                            product.old_category = Product.ProductCategory.HEALTH_BEAUTY
+                            product.color = color
+                            product.additional_information = additional_information
+                            product.old_category = Product.ProductCategory.FASHION_APPAREL
                             if not product.sku and product_id:
                                 product.sku = f"{category_code}-{product_id}"
                             product.save()
