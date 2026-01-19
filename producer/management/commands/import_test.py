@@ -271,6 +271,7 @@ class Command(BaseCommand):
                         product, product_created = Product.objects.get_or_create(
                             name=product_name,
                             producer=producer,
+                            additional_information=additional_information,
                             defaults={
                                 "description": description,
                                 "user": user,
