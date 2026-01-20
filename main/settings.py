@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "external_delivery.apps.ExternalDeliveryConfig",
     "recommendations",
     "loyalty",
+    "risk",
 ]
 
 MIDDLEWARE = [
@@ -500,6 +501,34 @@ CELERY_BEAT_SCHEDULE = {
         "task": "loyalty.tasks.send_points_expiry_warning",
         "schedule": crontab(hour=10, minute=0),  # Daily at 10 AM
         "kwargs": {"days_before": 7},
+    },
+    "calculate-supplier-health-scores": {
+        "task": "risk.risk_tasks.calculate_supplier_health_scores",
+        "schedule": crontab(hour=0, minute=0),  # Daily at midnight
+    },
+    "calculate-supply-chain-kpis": {
+        "task": "risk.risk_tasks.calculate_supply_chain_kpis",
+        "schedule": crontab(hour="*/6", minute=0),  # Every 6 hours
+    },
+    "check-supplier-health-alerts": {
+        "task": "risk.risk_tasks.check_supplier_health_alerts",
+        "schedule": crontab(hour="*/2", minute=0),  # Every 2 hours
+    },
+    "check-otif-alerts": {
+        "task": "risk.risk_tasks.check_otif_alerts",
+        "schedule": crontab(hour="*/2", minute=0),  # Every 2 hours
+    },
+    "check-stock-alerts": {
+        "task": "risk.risk_tasks.check_stock_alerts",
+        "schedule": crontab(minute="*/15"),  # Every 15 minutes
+    },
+    "auto-resolve-alerts": {
+        "task": "risk.risk_tasks.auto_resolve_alerts",
+        "schedule": crontab(hour=2, minute=0),  # Daily at 2 AM
+    },
+    "calculate-risk-categories": {
+        "task": "risk.risk_tasks.calculate_risk_categories",
+        "schedule": crontab(hour=6, minute=0),  # Daily at 6 AM
     },
 }
 
