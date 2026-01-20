@@ -251,7 +251,6 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.WARNING("  ~ Global risk category already exists"))
 
-        # Initialize scorecards for existing suppliers if they don't have one
         suppliers = Producer.objects.filter(scorecard__isnull=True)
         initialized_count = 0
 

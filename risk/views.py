@@ -150,18 +150,27 @@ class SupplyChainKPIViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def current(self, request):
-        """Get latest KPI snapshot."""
+        """Get latest KPI snapshot.
+        
+        For admins: Returns the most recent KPI snapshot across all suppliers.
+        For suppliers: Returns their own latest KPI snapshot.
+        """
         try:
             user = request.user
+            kpi = None
 
-            if hasattr(user, "producer"):
+            # Admins see the latest KPI across all suppliers
+            if user.is_staff or user.is_superuser:
+                kpi = SupplyChainKPI.objects.all().order_by("-snapshot_date").first()
+            # Suppliers see their own latest KPI
+            elif hasattr(user, "producer"):
                 kpi = SupplyChainKPI.objects.filter(supplier=user.producer).order_by("-snapshot_date").first()
 
-                if kpi:
-                    serializer = self.get_serializer(kpi)
-                    return Response(serializer.data)
+            if kpi:
+                serializer = self.get_serializer(kpi)
+                return Response(serializer.data)
 
-            return Response({"detail": "No KPI data found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "No KPI data available yet"}, status=status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
             logger.error(f"Error fetching current KPI: {e}")
@@ -169,21 +178,40 @@ class SupplyChainKPIViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def trends(self, request):
-        """Get 30-day KPI trends."""
+        """Get 30-day KPI trends.
+        
+        For admins: Returns trend data for all suppliers or specific supplier if supplier_id provided.
+        For suppliers: Returns their own 30-day trend data.
+        
+        Query Parameters:
+        - supplier_id (optional, admin only): Filter by specific supplier ID
+        """
         try:
             user = request.user
             today = timezone.now().date()
             period_30 = today - timedelta(days=30)
+            kpis = None
 
-            if hasattr(user, "producer"):
-                kpis = SupplyChainKPI.objects.filter(supplier=user.producer, snapshot_date__gte=period_30).order_by(
-                    "snapshot_date"
-                )
+            # Admins can view all KPI trends or filter by supplier_id
+            if user.is_staff or user.is_superuser:
+                supplier_id = request.query_params.get("supplier_id")
+                if supplier_id:
+                    kpis = SupplyChainKPI.objects.filter(
+                        supplier_id=supplier_id, snapshot_date__gte=period_30
+                    ).order_by("snapshot_date")
+                else:
+                    kpis = SupplyChainKPI.objects.filter(snapshot_date__gte=period_30).order_by("snapshot_date")
+            # Suppliers see their own 30-day trends
+            elif hasattr(user, "producer"):
+                kpis = SupplyChainKPI.objects.filter(
+                    supplier=user.producer, snapshot_date__gte=period_30
+                ).order_by("snapshot_date")
 
+            if kpis and kpis.exists():
                 serializer = self.get_serializer(kpis, many=True)
                 return Response(serializer.data)
 
-            return Response({"detail": "No trend data found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "No trend data available yet"}, status=status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
             logger.error(f"Error fetching KPI trends: {e}")
