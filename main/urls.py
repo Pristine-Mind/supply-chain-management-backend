@@ -303,6 +303,8 @@ urlpatterns = [
     path("api/v1/payments/", include("payment.urls")),
     # Notification URLs
     path("api/v1/notifications/", include("notification.urls")),
+    # Risk URLs
+    path("api/v1/risk/", include("risk.urls")),
     # Report URLs
     path("api/v1/reports/", include("report.urls")),
     path("api/v1/loyalty/", include("loyalty.urls")),
