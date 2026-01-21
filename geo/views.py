@@ -261,16 +261,16 @@ class ProductDeliverabilityViewSet(viewsets.ViewSet):
             product,
             serializer.validated_data["latitude"],
             serializer.validated_data["longitude"],
-            seller_latitude=product.producer.location.y if product.producer.location else None,
-            seller_longitude=product.producer.location.x if product.producer.location else None,
+            seller_latitude=product.product.producer.location.y if product.product.producer.location else None,
+            seller_longitude=product.product.producer.location.x if product.product.producer.location else None,
         )
 
         delivery_estimate = service.get_delivery_estimate(
             product,
             serializer.validated_data["latitude"],
             serializer.validated_data["longitude"],
-            seller_latitude=product.producer.location.y if product.producer.location else None,
-            seller_longitude=product.producer.location.x if product.producer.location else None,
+            seller_latitude=product.product.producer.location.y if product.product.producer.location else None,
+            seller_longitude=product.product.producer.location.x if product.product.producer.location else None,
         )
 
         return Response(
