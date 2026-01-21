@@ -2413,7 +2413,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ViewSet for managing product categories
     """
 
-    queryset = Category.objects.filter(is_active=True).prefetch_related("subcategories", "subcategories__sub_subcategories")
+    queryset = Category.objects.filter(is_active=True).prefetch_related("subcategories", "subcategories__sub_subcategories").order_by("id")
     serializer_class = CategorySerializer
 
     @action(detail=False, methods=["get"])
