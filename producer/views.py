@@ -193,7 +193,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         creator = self.get_object()
 
         follower_creator_profiles = CreatorProfile.objects.filter(
-            user__userfollow_follower__following=creator.user
+            user__following__following=creator.user
         ).select_related("user")
 
         creator_map = {cp.user_id: cp for cp in follower_creator_profiles}
@@ -227,7 +227,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         creator = self.get_object()
 
         following_creator_profiles = CreatorProfile.objects.filter(
-            user__userfollow_following__follower=creator.user
+            user__followers__follower=creator.user
         ).select_related("user")
 
         creator_map = {cp.user_id: cp for cp in following_creator_profiles}
@@ -255,7 +255,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         """Return list of creators the current authenticated user follows (paginated)."""
         user = request.user
 
-        following_creator_profiles = CreatorProfile.objects.filter(user__userfollow_following__follower=user).select_related(
+        following_creator_profiles = CreatorProfile.objects.filter(user__followers__follower=user).select_related(
             "user"
         )
 
