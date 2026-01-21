@@ -7,6 +7,7 @@ from ckeditor.fields import RichTextField
 from django.contrib.auth.models import User
 from django.contrib.gis.db import models
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
@@ -37,6 +38,12 @@ class Producer(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Last Update Time"))
     location = models.PointField(srid=4326, help_text="Local Unit Location", null=True, blank=True)
     user = models.ForeignKey(User, verbose_name=_("User"), on_delete=models.CASCADE)
+
+    service_radius_km = models.PositiveIntegerField(
+        default=50,
+        verbose_name=_("Service Radius (km)"),
+        help_text=_("Maximum distance from seller location for delivery"),
+    )
 
     def __str__(self):
         return self.name
@@ -893,7 +900,59 @@ class MarketplaceProduct(models.Model):
         null=True, blank=True, verbose_name=_("B2B Minimum Quantity"), help_text=_("Minimum order quantity for B2B pricing")
     )
 
+    # Geographic/Delivery Restriction Fields
+    enable_geo_restrictions = models.BooleanField(
+        default=False,
+        verbose_name=_("Enable Geo Restrictions"),
+        help_text=_("Restrict sales to specific geographic zones"),
+    )
+    max_delivery_distance_km = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Max Delivery Distance (km)"),
+        help_text=_("Maximum distance from seller location for delivery"),
+    )
+    available_delivery_zones = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Available Delivery Zones"),
+        help_text=_("List of GeographicZone IDs where product is deliverable"),
+    )
+    seller_geo_point = models.PointField(
+        null=True,
+        blank=True,
+        srid=4326,
+        verbose_name=_("Seller Geographic Point"),
+        help_text=_("Auto-synced from producer location"),
+    )
+    seller_location_lat = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name=_("Seller Location Latitude"),
+        help_text=_("Denormalized for easier access"),
+        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+    )
+    seller_location_lon = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name=_("Seller Location Longitude"),
+        help_text=_("Denormalized for easier access"),
+        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+    )
+    sale_restricted_to_regions = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Sale Restricted to Regions"),
+        help_text=_("List of SaleRegion IDs with restrictions"),
+    )
+
     def save(self, *args, **kwargs):
+        # Auto-sync seller geo point from producer location
+        if self.product.producer and self.product.producer.location:
+            self.seller_geo_point = self.product.producer.location
+            self.seller_location_lat = self.product.producer.location.y
+            self.seller_location_lon = self.product.producer.location.x
+
         user_profile = None
         try:
             user_profile = self.product.user.userprofile

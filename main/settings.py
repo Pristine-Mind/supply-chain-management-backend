@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     "recommendations",
     "loyalty",
     "risk",
+    "geo",
 ]
 
 MIDDLEWARE = [

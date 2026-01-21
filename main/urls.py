@@ -308,6 +308,7 @@ urlpatterns = [
     # Report URLs
     path("api/v1/reports/", include("report.urls")),
     path("api/v1/loyalty/", include("loyalty.urls")),
+    path("api/v1/geo/", include("geo.urls")),
     # Marketplace Orders URLs - matching frontend API calls exactly
     path("api/v1/marketplace/orders/my-orders/", my_marketplace_orders, name="my-marketplace-orders"),
     path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),

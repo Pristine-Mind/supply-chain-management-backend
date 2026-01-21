@@ -106,10 +106,32 @@ class CreatorProfileAdmin(admin.ModelAdmin):
 @admin.register(Producer)
 class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     required_role = "business_staff"  # Business staff and above can view, business_owner and above can edit
-    list_display = ("name", "contact", "email", "registration_number", "created_at", "updated_at")
+    list_display = ("name", "contact", "email", "registration_number", "service_radius_km", "created_at", "updated_at")
     search_fields = ("name", "email", "registration_number")
-    list_filter = ("created_at", "updated_at")
+    list_filter = ("created_at", "updated_at", "service_radius_km")
     readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        (
+            "Basic Information",
+            {
+                "fields": ("name", "contact", "email", "address", "registration_number", "user"),
+            },
+        ),
+        (
+            "Geographic Information",
+            {
+                "fields": ("location", "service_radius_km"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Metadata",
+            {
+                "fields": ("created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = super().get_queryset(request)
@@ -578,7 +600,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     search_fields = ("product__name", "product__brand__name", "size", "color")
     list_filter = ("is_available", "is_made_in_nepal", "is_featured", "product__brand", "size", "color", "listed_date")
     autocomplete_fields = ["product"]
-    readonly_fields = ("listed_date",)
+    readonly_fields = ("listed_date", "seller_geo_point", "seller_location_lat", "seller_location_lon")
 
     fieldsets = (
         ("Product Information", {"fields": ("product",)}),
@@ -594,6 +616,27 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         ),
         ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "shipping_cost")}),
         ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score", "made_for_you")}),
+        (
+            "Geographic Restrictions",
+            {
+                "fields": (
+                    "enable_geo_restrictions",
+                    "max_delivery_distance_km",
+                    "available_delivery_zones",
+                    "sale_restricted_to_regions",
+                ),
+                "classes": ("collapse",),
+                "description": "Configure geographic restrictions and delivery zones for this product",
+            },
+        ),
+        (
+            "Seller Location (Auto)",
+            {
+                "fields": ("seller_geo_point", "seller_location_lat", "seller_location_lon"),
+                "classes": ("collapse",),
+                "description": "Seller location is automatically synced from producer's location",
+            },
+        ),
         ("Analytics", {"fields": ("recent_purchases_count", "view_count"), "classes": ("collapse",)}),
     )
 

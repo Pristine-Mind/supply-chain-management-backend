@@ -151,7 +151,7 @@ class SupplyChainKPIViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def current(self, request):
         """Get latest KPI snapshot.
-        
+
         For admins: Returns the most recent KPI snapshot across all suppliers.
         For suppliers: Returns their own latest KPI snapshot.
         """
@@ -179,10 +179,10 @@ class SupplyChainKPIViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def trends(self, request):
         """Get 30-day KPI trends.
-        
+
         For admins: Returns trend data for all suppliers or specific supplier if supplier_id provided.
         For suppliers: Returns their own 30-day trend data.
-        
+
         Query Parameters:
         - supplier_id (optional, admin only): Filter by specific supplier ID
         """
@@ -196,16 +196,16 @@ class SupplyChainKPIViewSet(viewsets.ReadOnlyModelViewSet):
             if user.is_staff or user.is_superuser:
                 supplier_id = request.query_params.get("supplier_id")
                 if supplier_id:
-                    kpis = SupplyChainKPI.objects.filter(
-                        supplier_id=supplier_id, snapshot_date__gte=period_30
-                    ).order_by("snapshot_date")
+                    kpis = SupplyChainKPI.objects.filter(supplier_id=supplier_id, snapshot_date__gte=period_30).order_by(
+                        "snapshot_date"
+                    )
                 else:
                     kpis = SupplyChainKPI.objects.filter(snapshot_date__gte=period_30).order_by("snapshot_date")
             # Suppliers see their own 30-day trends
             elif hasattr(user, "producer"):
-                kpis = SupplyChainKPI.objects.filter(
-                    supplier=user.producer, snapshot_date__gte=period_30
-                ).order_by("snapshot_date")
+                kpis = SupplyChainKPI.objects.filter(supplier=user.producer, snapshot_date__gte=period_30).order_by(
+                    "snapshot_date"
+                )
 
             if kpis and kpis.exists():
                 serializer = self.get_serializer(kpis, many=True)
