@@ -168,14 +168,14 @@ router.register(r"coupons", CouponViewSet, basename="coupons")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/v1/", include(router.urls)),
-    # Explicit search endpoint for marketplace (also exposed via router as action)
+    # Explicit search endpoints MUST be before router.urls to avoid being captured as PKs
+    path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
     path(
         "api/v1/marketplace/search/",
         MarketplaceProductViewSet.as_view({"get": "search"}),
         name="marketplace-search",
     ),
-
+    path("api/v1/", include(router.urls)),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),
@@ -199,7 +199,6 @@ urlpatterns = [
     path("api/v1/feedback/user/", UserFeedbackView.as_view(), name="user-feedback"),
     path("api/v1/contact/", ContactCreateView.as_view(), name="contact-create"),
     path("api/v1/global-enums/", GlobalEnumView.as_view(), name="global_enums"),
-    path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
     # User Profile APIs
     path("api/v1/user-profile/", ProfileView.as_view(), name="user-profile"),
     path("api/v1/user-profile/change-password/", ChangePasswordView.as_view(), name="user-profile-change-password"),

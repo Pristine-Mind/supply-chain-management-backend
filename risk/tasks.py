@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from notification.models import Notification
 from producer.models import Order, Product, Sale, StockHistory
-from producer.risk_models import (
+from .models import (
     AlertThreshold,
     ProductDefectRecord,
     RiskCategory,
