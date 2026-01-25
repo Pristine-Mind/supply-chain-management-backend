@@ -192,9 +192,9 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         """Return list of followers for this creator (paginated)."""
         creator = self.get_object()
 
-        follower_creator_profiles = CreatorProfile.objects.filter(
-            user__following__following=creator.user
-        ).select_related("user")
+        follower_creator_profiles = CreatorProfile.objects.filter(user__following__following=creator.user).select_related(
+            "user"
+        )
 
         creator_map = {cp.user_id: cp for cp in follower_creator_profiles}
 
@@ -226,9 +226,9 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         """
         creator = self.get_object()
 
-        following_creator_profiles = CreatorProfile.objects.filter(
-            user__followers__follower=creator.user
-        ).select_related("user")
+        following_creator_profiles = CreatorProfile.objects.filter(user__followers__follower=creator.user).select_related(
+            "user"
+        )
 
         creator_map = {cp.user_id: cp for cp in following_creator_profiles}
 
@@ -255,9 +255,7 @@ class CreatorProfileViewSet(viewsets.GenericViewSet):
         """Return list of creators the current authenticated user follows (paginated)."""
         user = request.user
 
-        following_creator_profiles = CreatorProfile.objects.filter(user__followers__follower=user).select_related(
-            "user"
-        )
+        following_creator_profiles = CreatorProfile.objects.filter(user__followers__follower=user).select_related("user")
 
         creator_map = {cp.user_id: cp for cp in following_creator_profiles}
 
@@ -2413,7 +2411,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ViewSet for managing product categories
     """
 
-    queryset = Category.objects.filter(is_active=True).prefetch_related("subcategories", "subcategories__sub_subcategories").order_by("id")
+    queryset = (
+        Category.objects.filter(is_active=True)
+        .prefetch_related("subcategories", "subcategories__sub_subcategories")
+        .order_by("id")
+    )
     serializer_class = CategorySerializer
 
     @action(detail=False, methods=["get"])

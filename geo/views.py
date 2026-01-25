@@ -11,9 +11,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from producer.models import MarketplaceProduct
-from producer.serializers import MarketplaceProductSerializer
 
-from .models import GeographicZone, SaleRegion, UserLocationSnapshot
+from .models import GeographicZone, UserLocationSnapshot
 from .serializers import (
     DeliverabilityCheckSerializer,
     DeliveryEstimateSerializer,

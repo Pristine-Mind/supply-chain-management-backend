@@ -47,6 +47,36 @@ class DiscoveryEngine:
             if v["user_id"] and v["video_id"]:
                 interactions.append((v["user_id"], v["video_id"], 1.0))
 
+        # Add Product-specific interactions to influence user factors
+        # Even if we only recommend videos, product interest is a strong proxy for video interest
+        product_views = (
+            UserInteraction.objects.filter(event_type="product_view")
+            .values("user_id", "product_id")
+            .annotate(weight=Count("id"))
+        )
+        for pv in product_views:
+            if pv["user_id"] and pv["product_id"]:
+                # Map product interest back to videos containing that product
+                # Using the GenericRelation 'product_tags'
+                related_videos = ShoppableVideo.objects.filter(product_tags__product_id=pv["product_id"]).values_list(
+                    "id", flat=True
+                )
+                for rv_id in related_videos:
+                    interactions.append((pv["user_id"], rv_id, 2.0))
+
+        cart_adds = (
+            UserInteraction.objects.filter(event_type="cart_add")
+            .values("user_id", "product_id")
+            .annotate(weight=Count("id"))
+        )
+        for ca in cart_adds:
+            if ca["user_id"] and ca["product_id"]:
+                related_videos = ShoppableVideo.objects.filter(product_tags__product_id=ca["product_id"]).values_list(
+                    "id", flat=True
+                )
+                for rv_id in related_videos:
+                    interactions.append((ca["user_id"], rv_id, 4.0))
+
         if not interactions:
             logger.warning("No interactions found for training DiscoveryEngine.")
             return

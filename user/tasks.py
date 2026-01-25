@@ -1,7 +1,3 @@
-"""
-Celery tasks for user-related operations including login attempt cleanup.
-"""
-
 import logging
 from datetime import timedelta
 

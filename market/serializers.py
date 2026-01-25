@@ -1070,6 +1070,8 @@ class CreateOrderSerializer(serializers.Serializer):
 class VoiceSearchInputSerializer(serializers.Serializer):
     audio_file = serializers.FileField(required=False)
     query = serializers.CharField(required=False, max_length=255)
+    page = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=20)
 
     def validate(self, data):
         if not data.get("audio_file") and not data.get("query"):
