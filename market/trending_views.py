@@ -22,7 +22,6 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, Rank
 from django.utils import timezone
 
-# Cache TTL for trending endpoints (seconds)
 TRENDING_CACHE_TTL = getattr(settings, "TRENDING_CACHE_TTL", 20)
 from rest_framework import viewsets
 from rest_framework.decorators import action

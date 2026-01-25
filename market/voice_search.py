@@ -7,15 +7,15 @@ from rest_framework.response import Response
 
 from market.models import MarketplaceProduct
 from market.serializers import MarketplaceProductSerializer, VoiceSearchInputSerializer
-from market.services import VoiceRecognitionService
+from market.services import AgenticSearchService, VoiceRecognitionService
 
 logger = logging.getLogger(__name__)
 
 
 class VoiceSearchView(views.APIView):
     """
-    API View to handle voice search.
-    Supports both client-side (text query) and server-side (audio file) processing.
+    Enhanced API View for Agentic Voice Search.
+    Uses AgenticSearchService to parse intent and apply hyper-personalization.
     """
 
     parser_classes = (MultiPartParser, FormParser, JSONParser)
@@ -38,13 +38,22 @@ class VoiceSearchView(views.APIView):
             except ConnectionError as e:
                 return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        # Perform search
-        products = MarketplaceProduct.objects.filter(
-            Q(name__icontains=text_query) | Q(description__icontains=text_query)
-        ).distinct()
+        # Execute Agentic Search
+        page = validated_data.get("page", 1)
+        page_size = validated_data.get("page_size", 20)
+        products, intent, metadata = AgenticSearchService.execute_search(
+            text_query, user=request.user, page=page, page_size=page_size
+        )
 
         product_serializer = MarketplaceProductSerializer(products, many=True, context={"request": request})
 
         return Response(
-            {"query": text_query, "count": products.count(), "results": product_serializer.data}, status=status.HTTP_200_OK
+            {
+                "query": text_query,
+                "intent": intent,
+                "metadata": metadata,
+                "count": metadata.get("total_results", 0),
+                "results": product_serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )

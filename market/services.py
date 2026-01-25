@@ -4,13 +4,20 @@ from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
+import re
+from typing import Dict, Any, Optional, Tuple
+from datetime import timedelta
+from django.db.models import F, Q, Case, When, Value, IntegerField, Count, Prefetch
+from django.core.cache import cache
+from django.contrib.auth.models import User
+from django.utils import timezone
+
 import requests
 import speech_recognition as sr
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
-from django.template.loader import get_template, render_to_string
 from django.utils import timezone
 
 try:
@@ -29,8 +36,6 @@ try:
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
-
-logger = logging.getLogger(__name__)
 
 
 class SparrowSMS:
@@ -908,3 +913,285 @@ class VoiceRecognitionService:
             raise ConnectionError(f"Speech service unavailable: {e}")
         except Exception as e:
             raise ValueError(f"Error processing audio file: {e}")
+
+
+class SearchConstants:
+    """Constants for search configuration"""
+
+    COLORS = ["red", "blue", "green", "black", "white", "yellow", "gray", "orange", "purple", "pink", "brown"]
+    SIZES = ["xs", "s", "m", "l", "xl", "xxl", "xxxl"]
+    B2B_KEYWORDS = ["bulk", "wholesale", "business", "distributor", "reseller", "trade"]
+    LOCAL_KEYWORDS = ["local", "nepali", "nepal", "swadeshi", "made in nepal"]
+    URGENCY_KEYWORDS = ["fast", "urgent", "quick", "today", "tomorrow", "asap", "immediately"]
+
+    DEFAULT_PAGE_SIZE = 20
+    MAX_PAGE_SIZE = 100
+    CACHE_TIMEOUT = 300  # 5 minutes
+    INTERACTION_LOOKBACK_DAYS = 90
+
+
+class AgenticSearchService:
+    """
+    LLM-powered search agent that parses natural language into structured filters.
+    Provides agentic capabilities by understanding user intent and applying business logic.
+    """
+
+    @staticmethod
+    def parse_intent(query: str, user: Optional[User] = None) -> Dict[str, Any]:
+        """
+        Parses raw text into a structured intent.
+        In production, this would use an LLM like GPT-4 or Claude.
+
+        Args:
+            query: Natural language search query
+            user: Optional authenticated user for context
+
+        Returns:
+            Dictionary containing structured search intent
+        """
+        query_lower = query.lower().strip()
+
+        intent = {
+            "query": query,
+            "original_query": query,
+            "min_price": None,
+            "max_price": None,
+            "is_b2b": False,
+            "urgency": "normal",
+            "category_hint": None,
+            "made_in_nepal": False,
+            "color": None,
+            "size": None,
+            "brand": None,
+            "sort_by": None,
+        }
+
+        try:
+            # Price range detection (e.g., "between $100 and $500")
+            range_match = re.search(r"between\s*(?:\$|npr)?\s*(\d+)\s*(?:and|to|-)\s*(?:\$|npr)?\s*(\d+)", query_lower)
+            if range_match:
+                intent["min_price"] = float(range_match.group(1))
+                intent["max_price"] = float(range_match.group(2))
+                query_lower = query_lower.replace(range_match.group(0), "").strip()
+            else:
+                # Max price detection (e.g., "under 500", "below $1000")
+                max_price_match = re.search(r"(?:under|below|less than|max|maximum)\s*(?:\$|npr)?\s*(\d+)", query_lower)
+                if max_price_match:
+                    intent["max_price"] = float(max_price_match.group(1))
+                    query_lower = query_lower.replace(max_price_match.group(0), "").strip()
+
+                # Min price detection (e.g., "above 200", "over $500")
+                min_price_match = re.search(r"(?:above|over|more than|min|minimum)\s*(?:\$|npr)?\s*(\d+)", query_lower)
+                if min_price_match:
+                    intent["min_price"] = float(min_price_match.group(1))
+                    query_lower = query_lower.replace(min_price_match.group(0), "").strip()
+
+            # B2B detection
+            if any(word in query_lower for word in SearchConstants.B2B_KEYWORDS):
+                intent["is_b2b"] = True
+
+            # Made in Nepal detection
+            if any(phrase in query_lower for phrase in SearchConstants.LOCAL_KEYWORDS):
+                intent["made_in_nepal"] = True
+
+            # Urgency detection
+            if any(word in query_lower for word in SearchConstants.URGENCY_KEYWORDS):
+                intent["urgency"] = "high"
+
+            # Color detection
+            for color in SearchConstants.COLORS:
+                if color in query_lower:
+                    intent["color"] = color.upper()
+                    # Remove color from query to improve keyword matching
+                    query_lower = query_lower.replace(color, "").strip()
+                    break
+
+            # Size detection
+            for size in SearchConstants.SIZES:
+                if re.search(rf"\b{size}\b", query_lower):
+                    intent["size"] = size.upper()
+                    query_lower = re.sub(rf"\b{size}\b", "", query_lower).strip()
+                    break
+
+            # Brand detection (simple pattern, enhance with brand list)
+            brand_match = re.search(r"brand:(\w+)", query_lower)
+            if brand_match:
+                intent["brand"] = brand_match.group(1)
+                query_lower = query_lower.replace(brand_match.group(0), "").strip()
+
+            # Sort detection
+            if "popular" in query_lower or "best selling" in query_lower:
+                intent["sort_by"] = "popularity"
+            elif "newest" in query_lower or "latest" in query_lower or "new" in query_lower:
+                intent["sort_by"] = "newest"
+            elif "cheap" in query_lower or "low price" in query_lower:
+                intent["sort_by"] = "price_asc"
+            elif "expensive" in query_lower or "high price" in query_lower:
+                intent["sort_by"] = "price_desc"
+
+            # Clean up multiple spaces
+            intent["query"] = " ".join(query_lower.split())
+
+        except Exception as e:
+            logger.error(f"Error parsing intent for query '{query}': {str(e)}")
+            # Return basic intent on error
+            intent["query"] = query_lower
+
+        return intent
+
+    @staticmethod
+    def _build_cache_key(query: str, user_id: Optional[int], page: int) -> str:
+        """Generate cache key for search results"""
+        user_part = f"user_{user_id}" if user_id else "anon"
+        return f"search:{user_part}:{hash(query)}:page_{page}"
+
+    @staticmethod
+    def _apply_personalization(products, user: User):
+        """Apply user-based personalization to product ranking"""
+        from .models import UserInteraction
+
+        # Get user's interaction history
+        lookback_date = timezone.now() - timedelta(days=SearchConstants.INTERACTION_LOOKBACK_DAYS)
+
+        interactions = (
+            UserInteraction.objects.filter(user=user, created_at__gte=lookback_date)
+            .values("product__product__subcategory", "product__product__brand")
+            .annotate(interaction_count=Count("id"))
+        )
+
+        # Extract categories and brands
+        interacted_categories = [
+            i["product__product__subcategory"] for i in interactions if i["product__product__subcategory"]
+        ]
+        interacted_brands = [i["product__product__brand"] for i in interactions if i["product__product__brand"]]
+
+        if interacted_categories or interacted_brands:
+            products = products.annotate(
+                personalization_boost=Case(
+                    When(
+                        product__subcategory__in=interacted_categories, product__brand__in=interacted_brands, then=Value(2)
+                    ),
+                    When(product__subcategory__in=interacted_categories, then=Value(1)),
+                    When(product__brand__in=interacted_brands, then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            return products.order_by("-personalization_boost")
+
+        return products
+
+    @staticmethod
+    def execute_search(
+        query: str, user: Optional[User] = None, page: int = 1, page_size: int = SearchConstants.DEFAULT_PAGE_SIZE
+    ) -> Tuple[Any, Dict[str, Any], Dict[str, Any]]:
+        """
+        Executes the search based on extracted intent and hyper-personalization.
+
+        Args:
+            query: Natural language search query
+            user: Optional authenticated user
+            page: Page number for pagination
+            page_size: Number of results per page
+
+        Returns:
+            Tuple of (products queryset, intent dict, metadata dict)
+        """
+        from producer.models import MarketplaceProduct
+
+        # Validate pagination
+        page = max(1, page)
+        page_size = min(page_size, SearchConstants.MAX_PAGE_SIZE)
+
+        # Check cache
+        cache_key = AgenticSearchService._build_cache_key(query, user.id if user and user.is_authenticated else None, page)
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            logger.info(f"Cache hit for search: {query}")
+            return cached_result
+
+        # Parse intent
+        intent = AgenticSearchService.parse_intent(query, user)
+        clean_query = intent["query"]
+
+        # Base queryset with optimizations
+        products = MarketplaceProduct.objects.filter(is_available=True).select_related(
+            "product", "product__subcategory", "product__brand"
+        )
+
+        # Keyword matching - consider using full-text search in production
+        if clean_query:
+            products = products.filter(
+                Q(product__name__icontains=clean_query)
+                | Q(product__description__icontains=clean_query)
+                | Q(search_tags__icontains=clean_query)
+            )
+
+        # Apply filters
+        if intent["min_price"] is not None:
+            products = products.filter(listed_price__gte=intent["min_price"])
+
+        if intent["max_price"] is not None:
+            products = products.filter(listed_price__lte=intent["max_price"])
+
+        if intent["is_b2b"]:
+            products = products.filter(enable_b2b_sales=True).order_by("b2b_price")
+
+        if intent["made_in_nepal"]:
+            products = products.filter(is_made_in_nepal=True)
+
+        if intent["color"]:
+            products = products.filter(color=intent["color"])
+
+        if intent["size"]:
+            products = products.filter(size=intent["size"])
+
+        if intent["brand"]:
+            products = products.filter(product__brand__name__iexact=intent["brand"])
+
+        # Apply sorting
+        if intent["sort_by"] == "popularity":
+            products = products.order_by("-rank_score", "-recent_purchases_count")
+        elif intent["sort_by"] == "newest":
+            products = products.order_by("-created_at")
+        elif intent["sort_by"] == "price_asc":
+            products = products.order_by("listed_price")
+        elif intent["sort_by"] == "price_desc":
+            products = products.order_by("-listed_price")
+        elif intent["urgency"] == "high":
+            products = products.order_by(F("estimated_delivery_days").asc(nulls_last=True))
+        else:
+            products = products.order_by("-rank_score", "-recent_purchases_count")
+
+        # Apply personalization for authenticated users
+        if user and user.is_authenticated:
+            products = AgenticSearchService._apply_personalization(products, user)
+
+        # Remove duplicates
+        products = products.distinct()
+
+        # Get total count before pagination
+        total_count = products.count()
+
+        # Apply pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        products = products[start:end]
+
+        # Prepare metadata
+        metadata = {
+            "total_results": total_count,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total_count + page_size - 1) // page_size,
+            "has_next": end < total_count,
+            "has_previous": page > 1,
+        }
+
+        # Cache results
+        result = (products, intent, metadata)
+        cache.set(cache_key, result, SearchConstants.CACHE_TIMEOUT)
+
+        logger.info(f"Search executed: query='{query}', results={total_count}")
+
+        return result

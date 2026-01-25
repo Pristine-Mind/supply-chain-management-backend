@@ -359,9 +359,14 @@ class Feedback(models.Model):
 class UserInteraction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, db_index=True)
     event_type = models.CharField(
-        max_length=100, help_text="Type of event (e.g., 'click', 'page_view', 'watch_time')", db_index=True
+        max_length=100,
+        help_text="Type of event (e.g., 'click', 'page_view', 'watch_time', 'product_view', 'cart_add')",
+        db_index=True,
     )
     video = models.ForeignKey("ShoppableVideo", on_delete=models.CASCADE, null=True, blank=True, related_name="interactions")
+    product = models.ForeignKey(
+        MarketplaceProduct, on_delete=models.CASCADE, null=True, blank=True, related_name="interactions"
+    )
     dwell_time = models.FloatField(null=True, blank=True, help_text="Duration in seconds (for video/page stay)")
     data = models.JSONField(blank=True, null=True, help_text="Additional event details (e.g., element info, coordinates)")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
