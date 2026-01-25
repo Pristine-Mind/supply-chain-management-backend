@@ -7,6 +7,7 @@ from io import BytesIO
 import re
 from typing import Dict, Any, Optional, Tuple
 from datetime import timedelta
+from venv import logger
 from django.db.models import F, Q, Case, When, Value, IntegerField, Count, Prefetch
 from django.core.cache import cache
 from django.contrib.auth.models import User
@@ -36,6 +37,8 @@ try:
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 class SparrowSMS:
@@ -1191,7 +1194,4 @@ class AgenticSearchService:
         # Cache results
         result = (products, intent, metadata)
         cache.set(cache_key, result, SearchConstants.CACHE_TIMEOUT)
-
-        logger.info(f"Search executed: query='{query}', results={total_count}")
-
         return result
