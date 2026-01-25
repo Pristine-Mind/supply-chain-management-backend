@@ -169,14 +169,14 @@ router.register(r"coupons", CouponViewSet, basename="coupons")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/v1/", include(router.urls)),
-    # Explicit search endpoint for marketplace (also exposed via router as action)
+    # Explicit search endpoints MUST be before router.urls to avoid being captured by pk regex
     path(
         "api/v1/marketplace/search/",
         MarketplaceProductViewSet.as_view({"get": "search"}),
         name="marketplace-search",
     ),
     path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
+    path("api/v1/", include(router.urls)),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),
