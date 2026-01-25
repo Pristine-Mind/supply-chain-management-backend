@@ -123,6 +123,8 @@ from user.views import (
     UploadProfilePictureView,
     VerifyOTPView,
 )
+from market.voice_search import VoiceSearchView
+
 
 router = DefaultRouter()
 router.register(r"brands", BrandViewSet, basename="brands")
@@ -174,6 +176,7 @@ urlpatterns = [
         MarketplaceProductViewSet.as_view({"get": "search"}),
         name="marketplace-search",
     ),
+    path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("api/v1/dashboard/", DashboardAPIView.as_view(), name="dashboard"),
