@@ -929,7 +929,7 @@ class SearchConstants:
 
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 100
-    CACHE_TIMEOUT = 300  # 5 minutes
+    CACHE_TIMEOUT = 300
     INTERACTION_LOOKBACK_DAYS = 90
 
 

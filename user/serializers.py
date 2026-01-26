@@ -46,7 +46,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         longitude = validated_data.get("longitude", None)
         location = validated_data.get("location", None)
 
-        user = User.objects.create(
+        user = User(
             username=validated_data["username"],
             email=validated_data["email"],
             first_name=validated_data["first_name"],
@@ -55,13 +55,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         user.set_password(validated_data["password"])
         user.save()
-        # Create UserProfile instance
-        UserProfile.objects.create(
+        # Update or create UserProfile instance (might be created by post_save signal)
+        UserProfile.objects.update_or_create(
             user=user,
-            phone_number=phone_number,
-            location=location,
-            latitude=latitude,
-            longitude=longitude,
+            defaults={
+                "phone_number": phone_number,
+                "location": location,
+                "latitude": latitude,
+                "longitude": longitude,
+            },
         )
         return user
 
@@ -136,7 +138,7 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
         profile_image = validated_data.pop("profile_image", None)
         registered_business_name = validated_data.pop("registered_business_name")
 
-        user = User.objects.create(
+        user = User(
             username=validated_data["username"],
             email=validated_data["email"],
             first_name=validated_data["first_name"],
@@ -146,22 +148,24 @@ class BusinessRegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data["password"])
         user.save()
 
-        # Create UserProfile instance
+        # Update or create UserProfile instance
         business_owner_role = Role.objects.get(code="business_owner")
 
-        UserProfile.objects.create(
+        UserProfile.objects.update_or_create(
             user=user,
-            phone_number=phone_number,
-            location=location,
-            business_type=business_type,
-            registration_certificate=registration_certificate,
-            pan_certificate=pan_certificate,
-            profile_image=profile_image,
-            registered_business_name=registered_business_name,
-            latitude=latitude,
-            longitude=longitude,
-            has_access_to_marketplace=True,
-            role=business_owner_role,
+            defaults={
+                "phone_number": phone_number,
+                "location": location,
+                "business_type": business_type,
+                "registration_certificate": registration_certificate,
+                "pan_certificate": pan_certificate,
+                "profile_image": profile_image,
+                "registered_business_name": registered_business_name,
+                "latitude": latitude,
+                "longitude": longitude,
+                "has_access_to_marketplace": True,
+                "role": business_owner_role,
+            },
         )  # type: ignore
         return user
 

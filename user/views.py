@@ -553,22 +553,13 @@ class ProfileView(APIView):
 
     def get(self, request):
         """Get current user profile"""
-        try:
-            profile = request.user.user_profile
-        except UserProfile.DoesNotExist:
-            # Create profile if it doesn't exist
-            profile = UserProfile.objects.create(user=request.user)
-
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
         serializer = UserProfileDetailSerializer(profile, context={"request": request})
         return Response({"success": True, "data": serializer.data})
 
     def put(self, request):
         """Update user profile (full update)"""
-        try:
-            profile = request.user.user_profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile.objects.create(user=request.user)
-
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
         serializer = UserProfileDetailSerializer(profile, data=request.data, context={"request": request}, partial=False)
 
         if serializer.is_valid():
@@ -579,11 +570,7 @@ class ProfileView(APIView):
 
     def patch(self, request):
         """Update user profile (partial update)"""
-        try:
-            profile = request.user.user_profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile.objects.create(user=request.user)
-
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
         serializer = UserProfileDetailSerializer(profile, data=request.data, context={"request": request}, partial=True)
 
         if serializer.is_valid():
@@ -620,10 +607,7 @@ class UploadProfilePictureView(APIView):
         serializer = UploadProfilePictureSerializer(data=request.data)
 
         if serializer.is_valid():
-            try:
-                profile = request.user.userprofile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(user=request.user)
+            profile, created = UserProfile.objects.get_or_create(user=request.user)
 
             # Delete old profile image if exists
             if profile.profile_image:
@@ -646,10 +630,7 @@ class UpdateNotificationPreferencesView(APIView):
     """API view for updating notification preferences"""
 
     def patch(self, request):
-        try:
-            profile = request.user.userprofile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile.objects.create(user=request.user)
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
 
         serializer = UpdateNotificationPreferencesSerializer(profile, data=request.data, partial=True)
 
