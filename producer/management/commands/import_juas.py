@@ -295,13 +295,13 @@ class Command(BaseCommand):
                                 "description": description,
                                 "user": user,
                                 "category": category,
-                                "old_category": Product.ProductCategory.PET_BABY_CARE,
+                                "old_category": Product.ProductCategory.ELECTRONICS_GADGETS,
                                 "price": mrp,
                                 "cost_price": mrp,
                                 "stock": 10,
                                 "reorder_level": 5,
                                 "is_active": True,
-                                "brand": Brand.objects.get(id=2),
+                                "brand": Brand.objects.get(id=29),
                             },
                         )
 
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                             product.category = category
                             product.color = color
                             product.additional_information = additional_information
-                            product.old_category = Product.ProductCategory.PET_BABY_CARE
+                            product.old_category = Product.ProductCategory.ELECTRONICS_GADGETS
                             if not product.sku and product_id:
                                 product.sku = f"{category_code}-{product_id}"
                             product.save()
