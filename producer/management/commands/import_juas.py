@@ -17,6 +17,7 @@ from producer.models import (
     Producer,
     Product,
     ProductImage,
+    Brand,
 )
 
 # Set up logging
@@ -55,7 +56,7 @@ class Command(BaseCommand):
         """Extract product name from the row"""
         product_name = row.get("product_name")
         if pd.notna(product_name) and str(product_name).strip() and str(product_name).strip().lower() != "nan":
-            return str(product_name).strip()[:250]
+            return "Hi-Future " + str(product_name).strip()[:250]
         return None
 
     def get_product_id(self, row):
@@ -300,6 +301,7 @@ class Command(BaseCommand):
                                 "stock": 10,
                                 "reorder_level": 5,
                                 "is_active": True,
+                                "brand": Brand.objects.get(id=2),
                             },
                         )
 
