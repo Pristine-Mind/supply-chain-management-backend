@@ -1,13 +1,14 @@
-from typing import Any, Optional, Type, TypeVar, cast
+from typing import Any, Optional, TypeVar, cast
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import User as AuthUser
 from django.db import models
 from django.db.models import Q, QuerySet
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
+from django.utils.http import quote
 from django.utils.translation import gettext_lazy as _
 
 _ModelT = TypeVar("_ModelT", bound=models.Model)
@@ -17,6 +18,7 @@ from .admin_permissions import (
     RoleBasedModelAdminMixin,
     UserAdminMixin,
 )
+from .business_export import BusinessDataExporter
 from .models import Contact, LoginAttempt, Role, UserProfile
 
 User = get_user_model()
@@ -83,16 +85,13 @@ class UserProfileInline(admin.StackedInline):
         return request.user.has_perm("user.change_user")
 
 
-@admin.register(User)
 class CustomUserAdmin(UserAdminMixin, BaseUserAdmin):
+    """Admin for all users - Superuser only."""
+
     inlines = (UserProfileInline,)
-    list_display = ("username", "email", "first_name", "last_name", "is_staff", "is_active", "get_role", "date_joined")
+    list_display = ("username", "email", "first_name", "last_name", "get_role", "is_staff", "is_active", "date_joined")
     list_select_related = ("user_profile",)
-    list_filter = (
-        "is_staff",
-        "is_superuser",
-        "is_active",
-    )
+    list_filter = (("user_profile__role", admin.RelatedOnlyFieldListFilter), "is_staff", "is_active")
     search_fields = ("username", "first_name", "last_name", "email")
     ordering = ("-date_joined",)
 
@@ -127,6 +126,51 @@ class CustomUserAdmin(UserAdminMixin, BaseUserAdmin):
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         qs = cast(QuerySet[Any], super().get_queryset(request))
+        # Show all users
+        return qs
+
+    def has_view_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:
+        """Only superusers can view this admin page."""
+        return request.user.is_superuser
+
+
+class GeneralUserAdmin(UserAdminMixin, BaseUserAdmin):
+    """Admin for General Users only."""
+
+    inlines = (UserProfileInline,)
+    list_display = ("username", "email", "first_name", "last_name", "get_role", "is_active", "date_joined")
+    list_select_related = ("user_profile",)
+    list_filter = (("user_profile__role", admin.RelatedOnlyFieldListFilter), "is_active")
+    search_fields = ("username", "first_name", "last_name", "email")
+    ordering = ("-date_joined",)
+
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2", "email", "first_name", "last_name"),
+            },
+        ),
+    )
+
+    def get_role(self, instance: models.Model) -> str:
+        """Get the role name for the user."""
+        if hasattr(instance, "user_profile") and instance.user_profile.role:
+            return instance.user_profile.role.name
+        return "No Role"
+
+    get_role.short_description: str = "Role"  # type: ignore
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = cast(QuerySet[Any], super().get_queryset(request))
+        # Filter to show only general users (exclude business owners and business staff)
+        qs = qs.exclude(user_profile__role__code__in=["business_owner", "business_staff"])
 
         if request.user.is_superuser:
             return qs
@@ -142,6 +186,96 @@ class CustomUserAdmin(UserAdminMixin, BaseUserAdmin):
         if user_role == "agent":
             return qs.filter(is_staff=False)
 
+        return qs.filter(pk=request.user.pk)
+
+    def has_change_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:
+        """Only superusers can change users."""
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:
+        """Only superusers can delete users."""
+        return request.user.is_superuser
+
+
+class BusinessUserAdmin(UserAdminMixin, BaseUserAdmin):
+    """Admin for Business Users only."""
+
+    inlines = (UserProfileInline,)
+    list_display = (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "get_business_type",
+        "get_shop_id",
+        "get_b2b_status",
+        "is_active",
+        "date_joined",
+    )
+    list_select_related = ("user_profile",)
+    list_filter = (
+        "user_profile__business_type",
+        "user_profile__b2b_verified",
+        "is_active",
+    )
+    search_fields = ("username", "first_name", "last_name", "email", "user_profile__shop_id")
+    ordering = ("-date_joined",)
+
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2", "email", "first_name", "last_name"),
+            },
+        ),
+    )
+
+    def get_business_type(self, instance: models.Model) -> str:
+        """Get the business type for the user."""
+        if hasattr(instance, "user_profile") and instance.user_profile.business_type:
+            return instance.user_profile.get_business_type_display()
+        return "N/A"
+
+    get_business_type.short_description: str = "Business Type"  # type: ignore
+
+    def get_b2b_status(self, instance: models.Model) -> str:
+        """Get the B2B verification status."""
+        if hasattr(instance, "user_profile") and instance.user_profile.b2b_verified:
+            return "✓ Verified"
+        return "✗ Not Verified"
+
+    get_b2b_status.short_description: str = "B2B Status"  # type: ignore
+
+    def get_shop_id(self, instance: models.Model) -> str:
+        """Get the shop ID for the user."""
+        if hasattr(instance, "user_profile") and instance.user_profile.shop_id:
+            return instance.user_profile.shop_id
+        return "N/A"
+
+    get_shop_id.short_description: str = "Shop ID"  # type: ignore
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        qs = cast(QuerySet[Any], super().get_queryset(request))
+        # Filter to show only business users
+        qs = qs.filter(user_profile__role__code__in=["business_owner", "business_staff"])
+
+        if request.user.is_superuser:
+            return qs
+
+        if not hasattr(request.user, "user_profile") or not request.user.user_profile.role:
+            return qs.none()
+
+        user_role = request.user.user_profile.role.code
+
+        if user_role in ["admin", "manager"]:
+            return qs
+
         if user_role == "business_owner":
             return qs.filter(Q(userprofile__business_owner=request.user) | Q(pk=request.user.pk))
 
@@ -149,6 +283,80 @@ class CustomUserAdmin(UserAdminMixin, BaseUserAdmin):
             return qs.filter(pk=request.user.pk)
 
         return qs.filter(pk=request.user.pk)
+
+    def has_change_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:
+        """Only superusers can change users."""
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request: HttpRequest, obj: Optional[models.Model] = None) -> bool:
+        """Only superusers can delete users."""
+        return request.user.is_superuser
+
+    def export_business_data(self, request: HttpRequest, queryset: QuerySet[Any]) -> HttpResponse:
+        """Export business user data to Excel with all associated data."""
+        if queryset.count() == 0:
+            messages.error(request, "Please select at least one business user to export.")
+            return
+
+        if queryset.count() > 1:
+            messages.warning(request, "Exporting data for multiple users. Only the first user will be exported.")
+
+        business_user = queryset.first()
+
+        try:
+            exporter = BusinessDataExporter(business_user)
+            excel_file = exporter.generate_export()
+
+            # Create response
+            response = HttpResponse(
+                excel_file.getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+            filename = f"Business_Data_{business_user.username}_{business_user.user_profile.shop_id}.xlsx"
+            response["Content-Disposition"] = f'attachment; filename="{quote(filename)}"'
+
+            messages.success(
+                request,
+                f"Successfully exported business data for {business_user.first_name or business_user.username}",
+            )
+            return response
+        except Exception as e:
+            messages.error(request, f"Error exporting data: {str(e)}")
+            return None
+
+    export_business_data.short_description = "📊 Export Business Data to Excel"
+    actions = ["export_business_data"]
+
+
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
+
+admin.site.register(User, CustomUserAdmin)
+
+
+class GeneralUserProxy(User):
+    """Proxy model for General Users."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "General User"
+        verbose_name_plural = "General Users"
+
+
+admin.site.register(GeneralUserProxy, GeneralUserAdmin)
+
+
+class BusinessUserProxy(User):
+    """Proxy model for Business Users."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Business User"
+        verbose_name_plural = "Business Users"
+
+
+admin.site.register(BusinessUserProxy, BusinessUserAdmin)
 
 
 @admin.register(Role)

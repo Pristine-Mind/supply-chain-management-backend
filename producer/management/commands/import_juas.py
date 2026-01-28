@@ -12,12 +12,12 @@ from openpyxl import load_workbook
 from PIL import Image as PILImage
 
 from producer.models import (
+    Brand,
     Category,
     MarketplaceProduct,
     Producer,
     Product,
     ProductImage,
-    Brand,
 )
 
 # Set up logging
