@@ -1,24 +1,21 @@
 import logging
+import re
 import uuid
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
-
-import re
-from typing import Dict, Any, Optional, Tuple
-from datetime import timedelta
+from typing import Any, Dict, Optional, Tuple
 from venv import logger
-from django.db.models import F, Q, Case, When, Value, IntegerField, Count, Prefetch
-from django.core.cache import cache
-from django.contrib.auth.models import User
-from django.utils import timezone
 
 import requests
 import speech_recognition as sr
 from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
+from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When
 from django.utils import timezone
 
 try:

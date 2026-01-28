@@ -23,6 +23,8 @@ from django.utils import timezone
 
 from notification.models import Notification
 from producer.models import Order, Product, Sale, StockHistory
+from transport.models import Delivery, TransportStatus
+
 from .models import (
     AlertThreshold,
     ProductDefectRecord,
@@ -33,7 +35,6 @@ from .models import (
     SupplyChainAlert,
     SupplyChainKPI,
 )
-from transport.models import Delivery, TransportStatus
 
 logger = logging.getLogger(__name__)
 
