@@ -56,7 +56,7 @@ class Command(BaseCommand):
         """Extract product name from the row"""
         product_name = row.get("product_name")
         if pd.notna(product_name) and str(product_name).strip() and str(product_name).strip().lower() != "nan":
-            return "Hi-Future " + str(product_name).strip()[:250]
+            return str(product_name).strip()[:250]
         return None
 
     def get_product_id(self, row):
@@ -295,13 +295,13 @@ class Command(BaseCommand):
                                 "description": description,
                                 "user": user,
                                 "category": category,
-                                "old_category": Product.ProductCategory.ELECTRONICS_GADGETS,
+                                "old_category": Product.ProductCategory.HEALTH_BEAUTY,
                                 "price": mrp,
                                 "cost_price": mrp,
                                 "stock": 10,
                                 "reorder_level": 5,
                                 "is_active": True,
-                                "brand": Brand.objects.get(id=29),
+                                # "brand": Brand.objects.get(id=29),
                             },
                         )
 
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                             product.category = category
                             product.color = color
                             product.additional_information = additional_information
-                            product.old_category = Product.ProductCategory.ELECTRONICS_GADGETS
+                            product.old_category = Product.ProductCategory.HEALTH_BEAUTY
                             if not product.sku and product_id:
                                 product.sku = f"{category_code}-{product_id}"
                             product.save()
