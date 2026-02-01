@@ -12,6 +12,11 @@ if settings.DEBUG:
         SpectacularSwaggerView,
     )
 
+# Import new feature modules
+import market.views_advanced_filters
+import market.views_semantic_search
+import producer.views_bulk
+import producer.views_inventory_analytics
 from market.trending_api_views import track_product_view, trending_summary
 from market.trending_views import TrendingProductsViewSet
 from market.views import (
@@ -175,6 +180,45 @@ urlpatterns = [
         MarketplaceProductViewSet.as_view({"get": "search"}),
         name="marketplace-search",
     ),
+    # Advanced filtering and search endpoints (must be before router.urls)
+    path(
+        "api/v1/marketplace/advanced-search/",
+        market.views_advanced_filters.AdvancedProductSearchView.as_view(),
+        name="advanced-product-search",
+    ),
+    path("api/v1/marketplace/facets/", market.views_advanced_filters.ProductFacetsView.as_view(), name="product-facets"),
+    path(
+        "api/v1/marketplace/filter-options/",
+        market.views_advanced_filters.product_filter_options,
+        name="product-filter-options",
+    ),
+    path(
+        "api/v1/marketplace/advanced-search/post/",
+        market.views_advanced_filters.advanced_product_search,
+        name="advanced-product-search-post",
+    ),
+    # Semantic search endpoints (must be before router.urls)
+    path(
+        "api/v1/marketplace/semantic-search/",
+        market.views_semantic_search.SemanticSearchView.as_view(),
+        name="semantic-search",
+    ),
+    path(
+        "api/v1/marketplace/products/<int:product_id>/similar/",
+        market.views_semantic_search.SimilarProductsView.as_view(),
+        name="similar-products",
+    ),
+    path(
+        "api/v1/marketplace/query-understanding/",
+        market.views_semantic_search.QueryUnderstandingView.as_view(),
+        name="query-understanding",
+    ),
+    path(
+        "api/v1/marketplace/search-suggestions/", market.views_semantic_search.search_suggestions, name="search-suggestions"
+    ),
+    path(
+        "api/v1/marketplace/nl-search/", market.views_semantic_search.natural_language_search, name="natural-language-search"
+    ),
     path("api/v1/", include(router.urls)),
     path("api/login/", LoginAPIView.as_view()),
     path("api/v1/daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
@@ -334,6 +378,57 @@ urlpatterns = [
     path("api/v1/suggestions/", SearchSuggestionsAPIView.as_view(), name="search-suggestions"),
     path("api/v1/suggestions/click/", SuggestionClickAPIView.as_view(), name="suggestion-click"),
     path("api/v1/products/<int:product_id>/related/", RelatedProductsView.as_view(), name="related-products"),
+    # ============================================================================
+    # PREDICTIVE INVENTORY ANALYTICS API
+    # ============================================================================
+    path(
+        "api/v1/producer/products/<int:product_id>/forecast/",
+        producer.views_inventory_analytics.ProductForecastView.as_view(),
+        name="product-forecast",
+    ),
+    path(
+        "api/v1/producer/products/<int:product_id>/stockout-prediction/",
+        producer.views_inventory_analytics.ProductStockoutPredictionView.as_view(),
+        name="product-stockout-prediction",
+    ),
+    path(
+        "api/v1/producer/products/<int:product_id>/optimization/",
+        producer.views_inventory_analytics.ProductOptimizationView.as_view(),
+        name="product-optimization",
+    ),
+    path(
+        "api/v1/producer/products/<int:product_id>/analytics/",
+        producer.views_inventory_analytics.ProductFullAnalyticsView.as_view(),
+        name="product-full-analytics",
+    ),
+    path(
+        "api/v1/producer/portfolio-analytics/",
+        producer.views_inventory_analytics.PortfolioAnalyticsView.as_view(),
+        name="portfolio-analytics",
+    ),
+    path(
+        "api/v1/producer/reorder-recommendations/",
+        producer.views_inventory_analytics.reorder_recommendations,
+        name="reorder-recommendations",
+    ),
+    path("api/v1/producer/batch-forecast/", producer.views_inventory_analytics.batch_forecast, name="batch-forecast"),
+    # ============================================================================
+    # BULK IMPORT/EXPORT API
+    # ============================================================================
+    path("api/v1/producer/import/", producer.views_bulk.BulkImportView.as_view(), name="bulk-import"),
+    path(
+        "api/v1/producer/import/<str:job_id>/status/", producer.views_bulk.ImportStatusView.as_view(), name="import-status"
+    ),
+    path(
+        "api/v1/producer/import/<str:job_id>/result/", producer.views_bulk.ImportResultView.as_view(), name="import-result"
+    ),
+    path("api/v1/producer/import/template/", producer.views_bulk.ImportTemplateView.as_view(), name="import-template"),
+    path("api/v1/producer/import/validate/", producer.views_bulk.ImportValidationView.as_view(), name="import-validate"),
+    path("api/v1/producer/export/", producer.views_bulk.BulkExportView.as_view(), name="bulk-export"),
+    path(
+        "api/v1/producer/export/<str:job_id>/status/", producer.views_bulk.ExportStatusView.as_view(), name="export-status"
+    ),
+    path("api/v1/producer/import-export-stats/", producer.views_bulk.import_export_stats, name="import-export-stats"),
 ]
 
 # Add API documentation URLs only in DEBUG mode
