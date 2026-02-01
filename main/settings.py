@@ -531,6 +531,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "risk.risk_tasks.calculate_risk_categories",
         "schedule": crontab(hour=6, minute=0),  # Daily at 6 AM
     },
+    # Bulk operations cleanup
+    "cleanup-old-export-files": {
+        "task": "producer.tasks_bulk.cleanup_old_export_files",
+        "schedule": crontab(hour=4, minute=0),  # Daily at 4 AM
+    },
 }
 
 SITE_URL = "https://appmulyabazzar.com"
