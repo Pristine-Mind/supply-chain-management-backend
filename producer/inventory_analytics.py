@@ -396,7 +396,19 @@ class ReorderOptimizer:
         annual_demand = forecast["total_forecast"]
 
         if annual_demand <= 0:
-            return {"eoq": 0, "annual_demand": 0, "message": "No demand forecast available"}
+            return {
+                "eoq": 0,
+                "economic_order_quantity": 0,
+                "annual_demand": 0,
+                "ordering_cost": 100,
+                "holding_cost_per_unit": 0,
+                "order_frequency_per_year": 0,
+                "days_between_orders": 0,
+                "total_annual_ordering_cost": 0,
+                "total_annual_holding_cost": 0,
+                "unit_cost": self.product.cost_price or self.product.price or 100,
+                "message": "No demand forecast available",
+            }
 
         # Estimate costs (can be customized based on business data)
         ordering_cost = 100  # Cost per order (processing, shipping, etc.)
@@ -439,10 +451,17 @@ class ReorderOptimizer:
         sales_data = DemandForecaster(self.product)._get_historical_sales(days=60)
 
         if not sales_data:
+            reorder_point = self.product.reorder_level or 10
             return {
-                "reorder_point": self.product.reorder_level or 10,
+                "reorder_point": reorder_point,
                 "safety_stock": self.product.safety_stock or 0,
                 "lead_time_demand": 0,
+                "avg_daily_demand": 0,
+                "demand_std_dev": 0,
+                "service_level": 0.95,
+                "z_score": 1.65,
+                "current_reorder_point": self.product.reorder_point,
+                "recommended_change": round(float(reorder_point - self.product.reorder_point), 0),
                 "message": "Using default values - insufficient data",
             }
 
