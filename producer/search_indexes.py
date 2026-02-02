@@ -28,5 +28,3 @@ class MarketplaceProductIndex(indexes.SearchIndex, indexes.Indexable):
         if isinstance(obj.search_tags, list):
             return " ".join(obj.search_tags)
         return str(obj.search_tags)
-
-    # model_attr handles extracting the names; no custom prepare methods needed

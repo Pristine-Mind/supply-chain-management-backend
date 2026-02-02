@@ -145,11 +145,11 @@ def product_filter_options(request):
 
     # Price ranges
     price_ranges = [
-        {"value": "budget", "label": "Under ₹1,000", "min": 0, "max": 1000},
-        {"value": "economy", "label": "₹1,000 - ₹5,000", "min": 1000, "max": 5000},
-        {"value": "mid", "label": "₹5,000 - ₹15,000", "min": 5000, "max": 15000},
-        {"value": "premium", "label": "₹15,000 - ₹50,000", "min": 15000, "max": 50000},
-        {"value": "luxury", "label": "Over ₹50,000", "min": 50000, "max": None},
+        {"value": "budget", "label": "Under Rs.1,000", "min": 0, "max": 1000},
+        {"value": "economy", "label": "Rs.1,000 - Rs.5,000", "min": 1000, "max": 5000},
+        {"value": "mid", "label": "Rs.5,000 - Rs.15,000", "min": 5000, "max": 15000},
+        {"value": "premium", "label": "Rs.15,000 - Rs.50,000", "min": 15000, "max": 50000},
+        {"value": "luxury", "label": "Over Rs.50,000", "min": 50000, "max": None},
     ]
 
     # Stock status options
