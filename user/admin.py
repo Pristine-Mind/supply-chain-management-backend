@@ -19,7 +19,14 @@ from .admin_permissions import (
     UserAdminMixin,
 )
 from .business_export import BusinessDataExporter
-from .models import Contact, LoginAttempt, Role, UserProfile, GeneralUserProxy, BusinessUserProxy
+from .models import (
+    BusinessUserProxy,
+    Contact,
+    GeneralUserProxy,
+    LoginAttempt,
+    Role,
+    UserProfile,
+)
 
 User = get_user_model()
 
