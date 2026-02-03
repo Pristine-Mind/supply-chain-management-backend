@@ -104,7 +104,7 @@ class SearchSuggestionService:
 
     def _get_co_search_suggestions(self, query: str) -> List[Dict]:
         """Uses QueryAssociation model to find search patterns."""
-        from .models import QueryAssociation
+        from ..models import QueryAssociation
 
         q_hash = self.get_query_hash(query)
         associations = QueryAssociation.objects.filter(
@@ -125,7 +125,7 @@ class SearchSuggestionService:
 
     def _get_manual_suggestions(self, query: str) -> List[Dict]:
         """Uses ManualQueryAssociation model for business-driven overrides."""
-        from .models import ManualQueryAssociation
+        from ..models import ManualQueryAssociation
 
         manuals = ManualQueryAssociation.objects.filter(
             Q(source_query__iexact=query) | Q(source_query__icontains=query), is_active=True
@@ -145,7 +145,7 @@ class SearchSuggestionService:
 
     def _get_category_suggestions(self, query: str) -> List[Dict]:
         """Leverages QueryPerformacePopularity to find popular queries in same category."""
-        from .models import QueryPerformacePopularity
+        from ..models import QueryPerformacePopularity
 
         current_perf = QueryPerformacePopularity.objects.filter(query__iexact=query).first()
         if not current_perf or not current_perf.primary_category:
@@ -201,7 +201,7 @@ class SearchSuggestionService:
 
     def _get_complementary_suggestions(self, query: str) -> List[Dict]:
         """Specifically filters for 'complementary' type associations."""
-        from .models import QueryAssociation
+        from ..models import QueryAssociation
 
         comps = QueryAssociation.objects.filter(
             source_query_hash=self.get_query_hash(query), association_type="complementary", is_active=True
@@ -226,7 +226,7 @@ class SearchSuggestionService:
                 for q, score in hot_queries
             ]
 
-        from .models import QueryPerformacePopularity
+        from ..models import QueryPerformacePopularity
 
         trending = (
             QueryPerformacePopularity.objects.filter(trending_score__gt=0)
@@ -286,7 +286,7 @@ class SearchSuggestionService:
 
     def _get_fallback_suggestions(self, query: str, limit: int) -> List[Dict]:
         """Last resort: return global popular queries."""
-        from .models import QueryPerformacePopularity
+        from ..models import QueryPerformacePopularity
 
         popular = QueryPerformacePopularity.objects.order_by("-total_searches")[:limit]
         return [{"query": p.query, "score": 1.0, "type": "fallback", "reason": "popular_search"} for p in popular]
