@@ -19,7 +19,7 @@ from .admin_permissions import (
     UserAdminMixin,
 )
 from .business_export import BusinessDataExporter
-from .models import Contact, LoginAttempt, Role, UserProfile
+from .models import Contact, LoginAttempt, Role, UserProfile, GeneralUserProxy, BusinessUserProxy
 
 User = get_user_model()
 
@@ -333,29 +333,7 @@ if admin.site.is_registered(User):
     admin.site.unregister(User)
 
 admin.site.register(User, CustomUserAdmin)
-
-
-class GeneralUserProxy(User):
-    """Proxy model for General Users."""
-
-    class Meta:
-        proxy = True
-        verbose_name = "General User"
-        verbose_name_plural = "General Users"
-
-
 admin.site.register(GeneralUserProxy, GeneralUserAdmin)
-
-
-class BusinessUserProxy(User):
-    """Proxy model for Business Users."""
-
-    class Meta:
-        proxy = True
-        verbose_name = "Business User"
-        verbose_name_plural = "Business Users"
-
-
 admin.site.register(BusinessUserProxy, BusinessUserAdmin)
 
 

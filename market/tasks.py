@@ -226,3 +226,56 @@ def cleanup_expired_locks():
     except Exception as e:
         logger.error(f"Error cleaning up expired locks: {e}")
         return f"Error: {e}"
+
+
+@shared_task
+def update_sales_banner_stats():
+    """
+    Periodic task to calculate and update sales banner statistics.
+    Runs every 5 minutes to keep dashboard/banner data fresh.
+
+    Calculates:
+    - Total products sold (sum of all sale quantities)
+    - Total revenue (sum of all sale prices * quantities)
+    - Total number of sales transactions
+    """
+    from decimal import Decimal
+
+    from django.db.models import Count, F, Sum
+
+    from market.models import SalesBannerStats
+
+    try:
+        # Get or create the banner stats record
+        stats = SalesBannerStats.get_or_create_banner_stats()
+
+        # Calculate aggregated statistics from all marketplace sales
+        sales_aggregates = MarketplaceSale.objects.filter(is_deleted=False, payment_status="completed").aggregate(
+            total_quantity=Sum("quantity"),
+            total_count=Count("id"),
+            # Calculate revenue: sum of total_amount
+            total_revenue=Sum("total_amount"),
+        )
+
+        # Update the statistics
+        stats.total_products_sold = sales_aggregates["total_quantity"] or 0
+        stats.total_sales_count = sales_aggregates["total_count"] or 0
+        stats.total_revenue = Decimal(str(sales_aggregates["total_revenue"] or 0))
+        stats.save()
+
+        logger.info(
+            f"Updated sales banner stats: {stats.total_products_sold} products sold, "
+            f"${stats.total_revenue} revenue, {stats.total_sales_count} transactions"
+        )
+
+        return {
+            "status": "success",
+            "total_products_sold": stats.total_products_sold,
+            "total_revenue": float(stats.total_revenue),
+            "total_sales_count": stats.total_sales_count,
+            "updated_at": stats.last_updated.isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating sales banner stats: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}

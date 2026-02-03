@@ -37,6 +37,7 @@ from market.views import (
     OrderTrackingEventViewSet,
     ProductFeedbackView,
     RelatedProductsView,
+    SalesBannerStatsView,
     SellerProductsView,
     ShoppableVideoCategoryViewSet,
     ShoppableVideoViewSet,
@@ -305,6 +306,8 @@ urlpatterns = [
     # Trending Products API endpoints
     path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
+    # Sales Banner Statistics
+    path("api/v1/banner-stats/", SalesBannerStatsView.as_view(), name="banner-stats"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

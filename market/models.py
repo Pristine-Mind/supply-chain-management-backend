@@ -2785,3 +2785,67 @@ class NegotiationHistory(models.Model):
 
     def __str__(self):
         return f"Offer by {self.offer_by.username} at {self.timestamp}"
+
+
+class SalesBannerStats(models.Model):
+    """
+    Stores aggregated sales statistics for banner/dashboard display.
+    Updated periodically (every 5 minutes) via Celery task.
+
+    Fields:
+    - total_products_sold: Total number of products sold (sum of all sale quantities)
+    - total_revenue: Total revenue generated from all sales
+    - total_sales_count: Total number of individual sales transactions
+    - last_updated: Timestamp of when these statistics were last calculated
+    - period_start: Start of the period for this calculation
+    - period_end: End of the period for this calculation
+    """
+
+    total_products_sold = models.BigIntegerField(
+        default=0, verbose_name=_("Total Products Sold"), help_text=_("Total quantity of products sold")
+    )
+    total_revenue = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name=_("Total Revenue"),
+        help_text=_("Total revenue from all sales"),
+    )
+    total_sales_count = models.BigIntegerField(
+        default=0, verbose_name=_("Total Sales Count"), help_text=_("Total number of sale transactions")
+    )
+    last_updated = models.DateTimeField(
+        auto_now=True, verbose_name=_("Last Updated"), help_text=_("Timestamp when statistics were last calculated")
+    )
+    period_start = models.DateTimeField(
+        null=True, blank=True, verbose_name=_("Period Start"), help_text=_("Start of calculation period (null = all time)")
+    )
+    period_end = models.DateTimeField(
+        null=True, blank=True, verbose_name=_("Period End"), help_text=_("End of calculation period (null = current time)")
+    )
+
+    class Meta:
+        verbose_name = _("Sales Banner Statistics")
+        verbose_name_plural = _("Sales Banner Statistics")
+        ordering = ["-last_updated"]
+        # Ensure only one record exists for banner stats
+        constraints = [models.UniqueConstraint(fields=["period_start", "period_end"], name="unique_period_stats")]
+
+    def __str__(self):
+        return f"Sales Stats: {self.total_products_sold} products, ${self.total_revenue} revenue (Updated: {self.last_updated.strftime('%Y-%m-%d %H:%M')})"
+
+    @classmethod
+    def get_or_create_banner_stats(cls):
+        """
+        Get or create the main banner statistics record (all-time stats).
+        """
+        stats, created = cls.objects.get_or_create(
+            period_start=None,
+            period_end=None,
+            defaults={
+                "total_products_sold": 0,
+                "total_revenue": Decimal("0.00"),
+                "total_sales_count": 0,
+            },
+        )
+        return stats

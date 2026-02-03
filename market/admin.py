@@ -37,6 +37,7 @@ from .models import (
     Payment,
     ProductTag,
     Purchase,
+    SalesBannerStats,
     ShoppableVideo,
     UserInteraction,
     UserProductImage,
@@ -1010,3 +1011,51 @@ class CouponAdmin(admin.ModelAdmin):
     def make_inactive(self, request, queryset):
         queryset.update(is_active=False)
         self.message_user(request, _("Selected coupons have been deactivated."), messages.WARNING)
+
+
+@admin.register(SalesBannerStats)
+class SalesBannerStatsAdmin(admin.ModelAdmin):
+    """
+    Admin interface for Sales Banner Statistics.
+    Displays real-time sales metrics updated every 5 minutes.
+    """
+
+    list_display = ("id", "total_products_sold", "formatted_total_revenue", "total_sales_count", "last_updated")
+    list_filter = ("last_updated",)
+    readonly_fields = (
+        "id",
+        "last_updated",
+        "total_products_sold",
+        "total_revenue",
+        "total_sales_count",
+        "period_start",
+        "period_end",
+    )
+
+    def has_add_permission(self, request):
+        """Prevent manual creation of stats records via admin."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Prevent deletion of stats records via admin."""
+        return False
+
+    def formatted_total_revenue(self, obj):
+        """Display total revenue with currency formatting."""
+        return f"${obj.total_revenue:,.2f}"
+
+    formatted_total_revenue.short_description = _("Total Revenue")
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """Prevent editing of individual fields."""
+        extra_context = extra_context or {}
+        extra_context["readonly_fields"] = (
+            "id",
+            "last_updated",
+            "total_products_sold",
+            "total_revenue",
+            "total_sales_count",
+            "period_start",
+            "period_end",
+        )
+        return super().changeform_view(request, object_id, form_url, extra_context)

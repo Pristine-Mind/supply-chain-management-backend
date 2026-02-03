@@ -480,3 +480,21 @@ class LoginAttempt(models.Model):
             if lockout_expires > timezone.now():
                 return int((lockout_expires - timezone.now()).total_seconds())
         return 0
+
+
+class GeneralUserProxy(User):
+    """Proxy model for General Users."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "General User"
+        verbose_name_plural = "General Users"
+
+
+class BusinessUserProxy(User):
+    """Proxy model for Business Users."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Business User"
+        verbose_name_plural = "Business Users"

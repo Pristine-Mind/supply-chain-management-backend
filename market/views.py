@@ -3091,3 +3091,37 @@ class CouponViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class SalesBannerStatsView(views.APIView):
+    """
+    API endpoint to retrieve real-time sales statistics for banner display.
+
+    GET /api/market/banner-stats/ - Returns current sales metrics:
+    - total_products_sold: Total quantity of products sold
+    - total_revenue: Total revenue from all completed sales
+    - total_sales_count: Total number of sales transactions
+    - last_updated: Timestamp of last calculation
+
+    Updates every 5 minutes via Celery periodic task.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        description="Get real-time sales statistics for banner display (Superuser only)",
+        responses={200: "SalesBannerStatsSerializer"},
+    )
+    def get(self, request):
+        """
+        Retrieve the latest sales banner statistics.
+        Only accessible to superusers/admin users.
+        """
+        from market.models import SalesBannerStats
+        from market.serializers import SalesBannerStatsSerializer
+
+        # Get or create banner stats (all-time stats)
+        stats = SalesBannerStats.get_or_create_banner_stats()
+
+        serializer = SalesBannerStatsSerializer(stats)
+        return Response(serializer.data, status=status.HTTP_200_OK)
