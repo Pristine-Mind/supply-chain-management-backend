@@ -439,6 +439,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "search_suggestions.update_query_associations",
         "schedule": 3600.0,  # Every hour
     },
+    # Sales banner statistics
+    "update-sales-banner-stats": {
+        "task": "market.tasks.update_sales_banner_stats",
+        "schedule": crontab(minute="*/5"),  # Every 5 minutes
+    },
     # Update query popularity every 15 minutes
     "update-query-popularity-quarterly": {
         "task": "search_suggestions.update_query_popularity",

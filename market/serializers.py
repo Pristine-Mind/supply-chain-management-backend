@@ -35,6 +35,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     Purchase,
+    SalesBannerStats,
     SellerChatMessage,
     ShoppableVideo,
     ShoppableVideoCategory,
@@ -1809,3 +1810,23 @@ class NegotiationReleaseLockSerializer(serializers.Serializer):
         negotiation.save()
 
         return {"message": "Lock released successfully", "negotiation_status": negotiation.status}
+
+
+class SalesBannerStatsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for sales banner statistics.
+    Used to display real-time sales metrics on the banner/dashboard.
+    """
+
+    class Meta:
+        model = SalesBannerStats
+        fields = [
+            "id",
+            "total_products_sold",
+            "total_revenue",
+            "total_sales_count",
+            "last_updated",
+            "period_start",
+            "period_end",
+        ]
+        read_only_fields = ["id", "last_updated"]
