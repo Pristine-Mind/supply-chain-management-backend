@@ -5,6 +5,7 @@ from .context import GraphQLContext
 from .dataloaders import GlobalDataLoader
 from .enums import AppEnumCollection, AppEnumCollectionData
 from .permissions import IsAuthenticated
+from user.queries import PublicQuery as UserPublicQuery, PrivateQuery as UserPrivateQuery
 
 
 class CustomAsyncGraphQLView(AsyncGraphQLView):
@@ -17,12 +18,16 @@ class CustomAsyncGraphQLView(AsyncGraphQLView):
 
 
 @strawberry.type
-class PublicQuery:
+class PublicQuery(
+    UserPublicQuery,
+):
     id: strawberry.ID = strawberry.ID("public")
 
 
 @strawberry.type
-class PrivateQuery:
+class PrivateQuery(
+    UserPrivateQuery,
+):
     id: strawberry.ID = strawberry.ID("private")
 
 
