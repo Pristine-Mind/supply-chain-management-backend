@@ -1,11 +1,11 @@
-import strawberry
-import strawberry_django
+# import strawberry
+# import strawberry_django
 
-from .models import User
+# from .models import User
 
 
-@strawberry_django.ordering.order(User)
-class UserOrder:
-    id: strawberry.auto
-    display_name: strawberry.auto
-    email: strawberry.auto
+# @strawberry_django.ordering.order(User)
+# class UserOrder:
+#     id: strawberry.auto
+#     display_name: strawberry.auto
+#     email: strawberry.auto

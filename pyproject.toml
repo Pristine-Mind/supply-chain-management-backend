@@ -58,7 +58,6 @@ faiss-cpu = "*"
 implicit = "*"
 numpy = "*"
 scipy = "*"
-strawberry-graphql-django = {version = "0.47.1", extras = ["strawberry-graphql"]}
 
 
 [tool.poetry.dev-dependencies]

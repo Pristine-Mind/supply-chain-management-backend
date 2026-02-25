@@ -43,6 +43,7 @@ from transport.serializers import (
 
 from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
+    BusinessListSerializer,
     BusinessRegisterSerializer,
     ChangePasswordSerializer,
     ContactSerializer,
@@ -57,6 +58,7 @@ from .serializers import (
     UserProfileDetailSerializer,
     VerifyOTPSerializer,
 )
+from .filters import BusinessFilter
 
 
 class RegisterView(generics.CreateAPIView):
@@ -742,3 +744,112 @@ class B2BCreditManagementView(APIView):
 
         except Exception as e:
             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BusinessListView(generics.ListAPIView):
+    """
+    Fast, comprehensive API to list all businesses in Nepal with advanced filtering.
+    
+    This endpoint lists users with:
+    - Role: business_owner
+    - Business Type: distributor
+    - Comprehensive filtering by location, business type, verification status, etc.
+    - Search functionality across business names and user details
+    - Geographical distance-based filtering
+    - Optimized queries to prevent N+1 issues
+    
+    Query Parameters:
+    - business_type: Filter by business type (distributor/retailer)
+    - city: Filter by city ID
+    - city_name: Filter by city name (partial match)
+    - b2b_verified: Filter by B2B verification status (true/false)
+    - has_marketplace_access: Filter by marketplace access (true/false)
+    - is_active: Filter by user active status (true/false)
+    - min_credit_limit: Minimum credit limit
+    - max_credit_limit: Maximum credit limit
+    - registered_after: Show businesses registered after this date
+    - registered_before: Show businesses registered before this date
+    - search: Search in business name, user name, phone number
+    - latitude: Latitude for distance filtering (requires longitude and radius_km)
+    - longitude: Longitude for distance filtering (requires latitude and radius_km)  
+    - radius_km: Radius in km for distance filtering (requires latitude and longitude)
+    - ordering: Order results by any field (prefix with '-' for descending)
+    
+    Examples:
+    - /api/businesses/?business_type=distributor&city_name=kathmandu
+    - /api/businesses/?search=grocery&b2b_verified=true
+    - /api/businesses/?latitude=27.7172&longitude=85.3240&radius_km=10
+    - /api/businesses/?ordering=-user__date_joined (newest first)
+    """
+    
+    serializer_class = BusinessListSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_class = BusinessFilter
+    
+    # Search fields for DRF's SearchFilter (if needed in addition to our custom search)
+    search_fields = [
+        'registered_business_name', 
+        'user__first_name', 
+        'user__last_name',
+        'user__username',
+        'phone_number'
+    ]
+    
+    # Ordering fields
+    ordering_fields = [
+        'user__date_joined', 'user__first_name', 'user__last_name',
+        'business_type', 'location__name', 'b2b_verified', 
+        'credit_limit', 'registered_business_name'
+    ]
+    
+    ordering = ['-user__date_joined']
+
+    def get_queryset(self):
+        """
+        Optimized queryset with select_related and prefetch_related to prevent N+1 queries.
+        Filters to business owners with distributor business type.
+        """
+        return UserProfile.objects.filter(
+            role__code='business_owner',
+            business_type=UserProfile.BusinessType.DISTRIBUTOR,
+            user__is_active=True,
+            b2b_verified=True
+        ).select_related(
+            'user',
+            'role',
+            'location'
+        ).order_by('-user__date_joined')
+
+    def get_serializer_context(self):
+        """Add request context for any custom serializer needs"""
+        context = super().get_serializer_context()
+        context.update({
+            'request': self.request,
+            'view': self
+        })
+        return context
+
+    def list(self, request, *args, **kwargs):
+        """
+        Override list to add custom response data like count and filtering info
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add metadata to response
+        response_data = {
+            'count': queryset.count(),
+            'results': serializer.data,
+            'filters_applied': {
+                key: value for key, value in request.query_params.items()
+                if key not in ['page', 'page_size']
+            }
+        }
+        
+        return Response(response_data)

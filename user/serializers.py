@@ -340,3 +340,56 @@ class ShippingAddressSerializer(serializers.Serializer):
     country = serializers.CharField(max_length=100)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
     is_default = serializers.BooleanField(default=False)
+
+
+class BusinessListSerializer(serializers.ModelSerializer):
+    """
+    Optimized serializer for listing businesses (users with business_owner role and distributor type).
+    Includes business information, location details, and basic user info for fast listing.
+    """
+    
+    # User basic info
+    username = serializers.CharField(source='user.username', read_only=True)
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
+    is_active = serializers.BooleanField(source='user.is_active', read_only=True)
+    
+    # Role information
+    role_name = serializers.CharField(source='role.name', read_only=True)
+    role_code = serializers.CharField(source='role.code', read_only=True)
+    
+    # Location information  
+    location_name = serializers.CharField(source='location.name', read_only=True)
+    
+    # Business information
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            # User basic info
+            'username', 'first_name', 'last_name', 'email', 'full_name',
+            'date_joined', 'is_active',
+            
+            # Business info
+            'phone_number', 'business_type', 'registered_business_name', 
+            'shop_id', 'has_access_to_marketplace',
+            
+            # Role info
+            'role_name', 'role_code',
+            
+            # Location info
+            'location_name', 'latitude', 'longitude',
+            
+            # B2B info
+            'b2b_verified', 'credit_limit', 'payment_terms_days',
+            
+            # Certificates
+            'registration_certificate', 'pan_certificate', 'profile_image'
+        ]
+
+    def get_full_name(self, obj):
+        """Get user's full name"""
+        return f"{obj.user.first_name} {obj.user.last_name}".strip()

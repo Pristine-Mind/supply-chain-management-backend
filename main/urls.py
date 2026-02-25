@@ -18,8 +18,8 @@ import market.views_advanced_filters
 import market.views_semantic_search
 import producer.views_bulk
 import producer.views_inventory_analytics
-from main.graphql.schema import CustomAsyncGraphQLView
-from main.graphql.schema import schema as graphql_schema
+# from main.graphql.schema import CustomAsyncGraphQLView
+# from main.graphql.schema import schema as graphql_schema
 from market.trending_api_views import track_product_view, trending_summary
 from market.trending_views import TrendingProductsViewSet
 from market.views import (
@@ -176,7 +176,7 @@ router.register(r"coupons", CouponViewSet, basename="coupons")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("graphql/", csrf_exempt(CustomAsyncGraphQLView.as_view(schema=graphql_schema, multipart_uploads_enabled=True))),
+    # path("graphql/", csrf_exempt(CustomAsyncGraphQLView.as_view(schema=graphql_schema, multipart_uploads_enabled=True))),
     # Explicit search endpoints MUST be before router.urls to avoid being captured as PKs
     path("api/v1/marketplace/voice-search/", VoiceSearchView.as_view(), name="voice-search"),
     path(
@@ -359,6 +359,8 @@ urlpatterns = [
     path("api/v1/reports/", include("report.urls")),
     path("api/v1/loyalty/", include("loyalty.urls")),
     path("api/v1/geo/", include("geo.urls")),
+    # User URLs (businesses, profiles, etc.)
+    path("api/v1/", include("user.urls")),
     # Marketplace Orders URLs - matching frontend API calls exactly
     path("api/v1/marketplace/orders/my-orders/", my_marketplace_orders, name="my-marketplace-orders"),
     path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),
@@ -441,9 +443,9 @@ if settings.DEBUG:
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
         path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
         path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-        path(
-            "graphiql/", csrf_exempt(CustomAsyncGraphQLView.as_view(schema=graphql_schema, multipart_uploads_enabled=True))
-        ),
+        # path(
+        #     "graphiql/", csrf_exempt(CustomAsyncGraphQLView.as_view(schema=graphql_schema, multipart_uploads_enabled=True))
+        # ),
     ]
 
 # ============================================================================
