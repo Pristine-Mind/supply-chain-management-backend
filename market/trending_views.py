@@ -261,7 +261,7 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def most_viewed(self, request):
         """
-        Get most viewed trending products
+        Get most viewed products by category from the last month
         """
         nocache = request.query_params.get("nocache")
         try:
@@ -277,16 +277,89 @@ class TrendingProductsViewSet(viewsets.ReadOnlyModelViewSet):
             if cached is not None:
                 return Response(cached)
 
-        # Build a fast queryset that annotates a lightweight trending_score
-        base_qs = MarketplaceProduct.objects.filter(is_available=True)
-        queryset = (
-            TrendingProductsManager.calculate_trending_score_fast(base_qs)
-            .filter(view_count__gt=0)
-            .order_by("-view_count", "-trending_score")[:10]
-        )
-
-        serializer = self.get_serializer(queryset, many=True)
-        payload = {"results": serializer.data, "period": "most_viewed", "count": len(serializer.data)}
+        # Get date range for last month
+        now = timezone.now()
+        last_month = now - timedelta(days=30)
+        
+        # Get category filter from query params
+        category_filter = request.query_params.get("category")
+        limit_per_category = int(request.query_params.get("limit_per_category", 5))
+        
+        # Base queryset with last month view filters
+        base_qs = MarketplaceProduct.objects.filter(
+            is_available=True,
+            views__timestamp__gte=last_month
+        ).select_related(
+            "product", 
+            "product__user", 
+            "product__user__user_profile",
+            "product__category"
+        ).prefetch_related("bulk_price_tiers", "variants", "reviews")
+        
+        # Apply category filter if provided
+        if category_filter:
+            queryset = base_qs.filter(
+                product__category__name__icontains=category_filter
+            ).annotate(
+                monthly_view_count=Count("views", filter=Q(views__timestamp__gte=last_month)),
+                category_name=F("product__category__name"),
+                category_id=F("product__category__id")
+            ).filter(monthly_view_count__gt=0).order_by("-monthly_view_count", "-view_count")
+            
+            # Single category result
+            products = queryset[:20]
+            serializer = self.get_serializer(products, many=True, context={"request": request})
+            payload = {
+                "results": serializer.data,
+                "period": "last_month", 
+                "count": len(serializer.data),
+                "category": category_filter,
+                "type": "most_viewed_single_category"
+            }
+        else:
+            # Get top categories first by counting total views per category
+            from django.db.models import OuterRef, Subquery
+            
+            # First get categories with view counts
+            top_categories = (
+                base_qs.values("product__category__id", "product__category__name")
+                .annotate(
+                    category_view_count=Count("views", filter=Q(views__timestamp__gte=last_month)),
+                    category_id=F("product__category__id"),
+                    category_name=F("product__category__name")
+                )
+                .filter(category_view_count__gt=0)
+                .order_by("-category_view_count")
+                .distinct()[:10]
+            )
+            
+            results_by_category = {}
+            for cat in top_categories:
+                # Get top products for this category
+                cat_products = base_qs.filter(
+                    product__category__id=cat["category_id"]
+                ).annotate(
+                    monthly_view_count=Count("views", filter=Q(views__timestamp__gte=last_month))
+                ).filter(
+                    monthly_view_count__gt=0
+                ).order_by("-monthly_view_count", "-view_count")[:limit_per_category]
+                
+                if cat_products.exists():
+                    results_by_category[cat["category_name"]] = {
+                        "category_id": cat["category_id"],
+                        "category_name": cat["category_name"],
+                        "total_monthly_views": cat["category_view_count"],
+                        "products": self.get_serializer(cat_products, many=True, context={"request": request}).data
+                    }
+            
+            payload = {
+                "results": results_by_category,
+                "period": "last_month",
+                "count": sum(len(cat["products"]) for cat in results_by_category.values()),
+                "categories_count": len(results_by_category),
+                "type": "most_viewed_by_category"
+            }
+        
         try:
             if not nocache:
                 cache.set(cache_key, payload, TRENDING_CACHE_TTL)
