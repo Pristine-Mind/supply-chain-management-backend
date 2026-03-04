@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework import serializers
 
 from producer.models import City
@@ -347,49 +348,204 @@ class BusinessListSerializer(serializers.ModelSerializer):
     Optimized serializer for listing businesses (users with business_owner role and distributor type).
     Includes business information, location details, and basic user info for fast listing.
     """
-    
+
     # User basic info
-    username = serializers.CharField(source='user.username', read_only=True)
-    first_name = serializers.CharField(source='user.first_name', read_only=True)
-    last_name = serializers.CharField(source='user.last_name', read_only=True)
-    email = serializers.EmailField(source='user.email', read_only=True)
-    date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
-    is_active = serializers.BooleanField(source='user.is_active', read_only=True)
-    
+    username = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    date_joined = serializers.DateTimeField(source="user.date_joined", read_only=True)
+    is_active = serializers.BooleanField(source="user.is_active", read_only=True)
+
     # Role information
-    role_name = serializers.CharField(source='role.name', read_only=True)
-    role_code = serializers.CharField(source='role.code', read_only=True)
-    
-    # Location information  
-    location_name = serializers.CharField(source='location.name', read_only=True)
-    
+    role_name = serializers.CharField(source="role.name", read_only=True)
+    role_code = serializers.CharField(source="role.code", read_only=True)
+
+    # Location information
+    location_name = serializers.CharField(source="location.name", read_only=True)
+
     # Business information
     full_name = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = UserProfile
         fields = [
             # User basic info
-            'username', 'first_name', 'last_name', 'email', 'full_name',
-            'date_joined', 'is_active',
-            
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "full_name",
+            "date_joined",
+            "is_active",
             # Business info
-            'phone_number', 'business_type', 'registered_business_name', 
-            'shop_id', 'has_access_to_marketplace',
-            
+            "phone_number",
+            "business_type",
+            "registered_business_name",
+            "shop_id",
+            "has_access_to_marketplace",
             # Role info
-            'role_name', 'role_code',
-            
+            "role_name",
+            "role_code",
             # Location info
-            'location_name', 'latitude', 'longitude',
-            
+            "location_name",
+            "latitude",
+            "longitude",
             # B2B info
-            'b2b_verified', 'credit_limit', 'payment_terms_days',
-            
+            "b2b_verified",
+            "credit_limit",
+            "payment_terms_days",
             # Certificates
-            'registration_certificate', 'pan_certificate', 'profile_image'
+            "registration_certificate",
+            "pan_certificate",
+            "profile_image",
         ]
 
     def get_full_name(self, obj):
         """Get user's full name"""
         return f"{obj.user.first_name} {obj.user.last_name}".strip()
+
+
+class RecommendedBusinessSerializer(serializers.ModelSerializer):
+    """
+    Enhanced serializer for recommended businesses with their top products.
+    Used for "recommended business for you" functionality.
+    """
+
+    # Business basic info
+    username = serializers.CharField(source="user.username", read_only=True)
+    full_name = serializers.SerializerMethodField()
+    email = serializers.EmailField(source="user.email", read_only=True)
+
+    # Business information
+    business_name = serializers.CharField(source="registered_business_name", read_only=True)
+    location_name = serializers.CharField(source="location.name", read_only=True)
+
+    # Products information
+    products = serializers.SerializerMethodField()
+    product_count = serializers.SerializerMethodField()
+
+    # Recommendation score (can be based on various factors)
+    recommendation_score = serializers.SerializerMethodField()
+
+    # Distance information (if user location is provided)
+    distance_km = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserProfile
+        fields = [
+            "username",
+            "full_name",
+            "email",
+            "business_name",
+            "business_type",
+            "location_name",
+            "latitude",
+            "longitude",
+            "phone_number",
+            "b2b_verified",
+            "has_access_to_marketplace",
+            "products",
+            "product_count",
+            "recommendation_score",
+            "distance_km",
+            "profile_image",
+        ]
+
+    def get_full_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}".strip()
+
+    def get_products(self, obj):
+        """Get top products for this business (limit to 6 for recommendations)"""
+        from producer.models import Product
+        from producer.serializers import MiniProductSerializer
+
+        # Get active products for this user, limit to top 6
+        products = getattr(obj, "prefetched_products", None)
+        if products is None:
+            products = (
+                Product.objects.filter(user=obj.user, is_active=True).select_related("brand").prefetch_related("images")[:6]
+            )
+        else:
+            products = products[:6]  # Limit to 6 for recommendations
+
+        request = self.context.get("request")
+        return MiniProductSerializer(products, many=True, context={"request": request}).data
+
+    def get_product_count(self, obj):
+        """Get total count of active products for this business"""
+        products = getattr(obj, "prefetched_products", None)
+        if products is not None:
+            return len(products)
+
+        from producer.models import Product
+
+        return Product.objects.filter(user=obj.user, is_active=True).count()
+
+    def get_recommendation_score(self, obj):
+        """
+        Calculate recommendation score based on various factors.
+        Higher score means more recommended.
+        """
+        score = 0
+
+        # B2B verified businesses get higher score
+        if obj.b2b_verified:
+            score += 30
+
+        # Businesses with more products get higher score
+        product_count = self.get_product_count(obj)
+        score += min(product_count * 2, 20)  # Max 20 points for products
+
+        # Businesses with marketplace access get higher score
+        if obj.has_access_to_marketplace:
+            score += 15
+
+        # Newer businesses get slight boost
+        days_since_joined = (timezone.now() - obj.user.date_joined).days
+        if days_since_joined < 30:
+            score += 10
+        elif days_since_joined < 90:
+            score += 5
+
+        # Businesses with complete profiles get higher score
+        if obj.registered_business_name:
+            score += 5
+        if obj.profile_image:
+            score += 5
+        if obj.latitude and obj.longitude:
+            score += 5
+
+        return min(score, 100)  # Cap at 100
+
+    def get_distance_km(self, obj):
+        """Calculate distance from user's location if provided"""
+        request = self.context.get("request")
+        if not request:
+            return None
+
+        user_lat = request.query_params.get("user_latitude")
+        user_lng = request.query_params.get("user_longitude")
+
+        if not (user_lat and user_lng and obj.latitude and obj.longitude):
+            return None
+
+        try:
+            import math
+
+            lat1 = math.radians(float(user_lat))
+            lng1 = math.radians(float(user_lng))
+            lat2 = math.radians(obj.latitude)
+            lng2 = math.radians(obj.longitude)
+
+            dlat = lat2 - lat1
+            dlng = lng2 - lng1
+
+            # Haversine formula
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+            c = 2 * math.asin(math.sqrt(a))
+            distance = 6371 * c  # Earth's radius in km
+
+            return round(distance, 2)
+        except (ValueError, TypeError):
+            return None

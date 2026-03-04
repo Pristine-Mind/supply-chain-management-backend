@@ -2,14 +2,19 @@ import json
 import time
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 from urllib.parse import urlencode
 
 import requests
 from django.contrib.auth.models import User
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from geo.services import GeoLocationService, GeoProductFilterService
 from market.utils import notify_event
 from producer.models import MarketplaceProduct, Product, Sale
 from producer.serializers import MarketplaceProductSerializer
@@ -1830,3 +1835,307 @@ class SalesBannerStatsSerializer(serializers.ModelSerializer):
             "period_end",
         ]
         read_only_fields = ["id", "last_updated"]
+
+
+# Location-aware serializers with distance and delivery information
+
+
+class LocationMetadataSerializer(serializers.Serializer):
+    """
+    Serializer for location metadata including distance and zone information.
+    """
+
+    latitude = serializers.FloatField(read_only=True)
+    longitude = serializers.FloatField(read_only=True)
+    distance_km = serializers.FloatField(read_only=True, allow_null=True)
+    zone_name = serializers.CharField(read_only=True, allow_null=True)
+    zone_tier = serializers.CharField(read_only=True, allow_null=True)
+
+
+class DeliveryInfoSerializer(serializers.Serializer):
+    """
+    Serializer for delivery cost and time information.
+    """
+
+    available = serializers.BooleanField(read_only=True)
+    reason = serializers.CharField(read_only=True, allow_null=True)
+    distance_km = serializers.FloatField(read_only=True, allow_null=True)
+    estimated_cost = serializers.FloatField(read_only=True, allow_null=True)
+    estimated_days = serializers.IntegerField(read_only=True, allow_null=True)
+    zone_name = serializers.CharField(read_only=True, allow_null=True)
+
+
+class LocationBasedProductSerializer(serializers.ModelSerializer):
+    """
+    Base serializer for location-aware marketplace products.
+    Includes distance calculations and delivery information.
+    """
+
+    location_info = serializers.SerializerMethodField()
+    delivery_info = serializers.SerializerMethodField()
+
+    class Meta:
+        abstract = True
+
+    def get_location_info(self, obj) -> Optional[dict]:
+        """Get location metadata for the product."""
+        try:
+            # Get user location from context
+            request = self.context.get("request")
+            if not request:
+                return None
+
+            user_lat = getattr(request, "_user_latitude", None)
+            user_lon = getattr(request, "_user_longitude", None)
+
+            if not user_lat or not user_lon:
+                return None
+
+            # Get product location
+            product_location = None
+            if hasattr(obj, "location") and obj.location:
+                if hasattr(obj.location, "x") and hasattr(obj.location, "y"):
+                    # PointField case
+                    product_location = {
+                        "latitude": obj.location.y,
+                        "longitude": obj.location.x,
+                    }
+                elif hasattr(obj.location, "location") and obj.location.location:
+                    # City FK case
+                    product_location = {
+                        "latitude": obj.location.location.y,
+                        "longitude": obj.location.location.x,
+                    }
+
+            if not product_location:
+                return None
+
+            # Get distance if annotated
+            distance_km = getattr(obj, "distance_km", None)
+
+            # Get zone info
+            geo_service = GeoLocationService()
+            user_zone = geo_service.get_user_zone(None, user_lat, user_lon)
+
+            return {
+                "latitude": product_location["latitude"],
+                "longitude": product_location["longitude"],
+                "distance_km": float(distance_km) if distance_km is not None else None,
+                "zone_name": user_zone.name if user_zone else None,
+                "zone_tier": user_zone.tier if user_zone else None,
+            }
+        except Exception:
+            return None
+
+    def get_delivery_info(self, obj) -> Optional[dict]:
+        """Calculate delivery information for the product."""
+        try:
+            request = self.context.get("request")
+            if not request:
+                return None
+
+            user_lat = getattr(request, "_user_latitude", None)
+            user_lon = getattr(request, "_user_longitude", None)
+
+            if not user_lat or not user_lon:
+                return None
+
+            # Use cached delivery info if available
+            cache_key = f"delivery_info:{obj.__class__.__name__}:{obj.id}:{user_lat}:{user_lon}"
+            cached_info = cache.get(cache_key)
+            if cached_info:
+                return cached_info
+
+            # Calculate delivery info
+            filter_service = GeoProductFilterService()
+            delivery_info = filter_service.calculate_delivery_info(obj, user_lat, user_lon)
+
+            # Cache for 5 minutes
+            cache.set(cache_key, delivery_info, 300)
+            return delivery_info
+
+        except Exception:
+            return None
+
+
+class EnhancedMarketplaceProductSerializer(LocationBasedProductSerializer):
+    """
+    Enhanced MarketplaceProduct serializer with location awareness.
+    """
+
+    product = serializers.SerializerMethodField()
+    reviews_count = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    seller_info = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MarketplaceProduct
+        fields = [
+            "id",
+            "listed_price",
+            "discounted_price",
+            "listed_date",
+            "is_available",
+            "min_order",
+            "offer_start",
+            "offer_end",
+            "estimated_delivery_days",
+            "shipping_cost",
+            "recent_purchases_count",
+            "view_count",
+            "rank_score",
+            "is_featured",
+            "is_made_in_nepal",
+            "made_for_you",
+            "size",
+            "color",
+            "additional_information",
+            "search_tags",
+            "product",
+            "reviews_count",
+            "average_rating",
+            "seller_info",
+            "location_info",
+            "delivery_info",
+        ]
+        read_only_fields = ["id", "listed_date", "recent_purchases_count", "view_count", "rank_score"]
+
+    def get_product(self, obj):
+        """Get basic product information."""
+        if obj.product:
+            return {
+                "id": obj.product.id,
+                "name": obj.product.name,
+                "description": obj.product.description,
+                "category": obj.product.category.name if obj.product.category else None,
+                "brand": obj.product.brand,
+                "sku": obj.product.sku,
+                "images": [img.image.url for img in obj.product.images.all()] if hasattr(obj.product, "images") else [],
+            }
+        return None
+
+    def get_reviews_count(self, obj):
+        """Get total number of reviews."""
+        return obj.marketplaceproductreview_set.count()
+
+    def get_average_rating(self, obj):
+        """Calculate average rating."""
+        reviews = obj.marketplaceproductreview_set.all()
+        if reviews:
+            total_rating = sum(review.rating for review in reviews)
+            return round(total_rating / len(reviews), 1)
+        return None
+
+    def get_seller_info(self, obj):
+        """Get seller/producer information."""
+        if obj.product and obj.product.producer:
+            producer = obj.product.producer
+            return {
+                "id": producer.id,
+                "name": producer.name,
+                "contact": producer.contact,
+                "email": producer.email,
+                "service_radius_km": producer.service_radius_km,
+            }
+        return None
+
+
+class EnhancedMarketplaceUserProductSerializer(LocationBasedProductSerializer):
+    """
+    Enhanced MarketplaceUserProduct serializer with location awareness.
+    """
+
+    seller_info = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MarketplaceUserProduct
+        fields = [
+            "id",
+            "name",
+            "description",
+            "price",
+            "stock",
+            "category",
+            "unit",
+            "is_verified",
+            "is_sold",
+            "created_at",
+            "updated_at",
+            "seller_info",
+            "images",
+            "location_info",
+            "delivery_info",
+        ]
+        read_only_fields = ["id", "is_verified", "created_at", "updated_at"]
+
+    def get_seller_info(self, obj):
+        """Get seller information."""
+        if obj.user:
+            return {
+                "id": obj.user.id,
+                "username": obj.user.username,
+                "first_name": obj.user.first_name,
+                "last_name": obj.user.last_name,
+                "location": obj.location.name if obj.location else None,
+            }
+        return None
+
+    def get_images(self, obj):
+        """Get product images."""
+        return [
+            {"id": img.id, "image": img.image.url, "alt_text": img.alt_text, "order": img.order}
+            for img in obj.images.all().order_by("order")
+        ]
+
+
+class LocationSearchRequestSerializer(serializers.Serializer):
+    """
+    Serializer for location-based search requests.
+    """
+
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
+    radius_km = serializers.FloatField(min_value=1, max_value=200, default=50)
+    type = serializers.ChoiceField(choices=["marketplace", "user"], default="marketplace")
+    category = serializers.CharField(required=False, allow_blank=True)
+    min_price = serializers.FloatField(min_value=0, required=False)
+    max_price = serializers.FloatField(min_value=0, required=False)
+    limit = serializers.IntegerField(min_value=1, max_value=100, default=50)
+
+    def validate(self, data):
+        """Validate search parameters."""
+        if "min_price" in data and "max_price" in data:
+            if data["min_price"] > data["max_price"]:
+                raise serializers.ValidationError("min_price cannot be greater than max_price")
+        return data
+
+
+class LocationFilteredProductListSerializer(serializers.Serializer):
+    """
+    Serializer for location-filtered product list responses.
+    """
+
+    count = serializers.IntegerField(read_only=True)
+    radius_km = serializers.FloatField(read_only=True)
+    user_location = LocationMetadataSerializer(read_only=True)
+    products = serializers.ListField(read_only=True)
+
+
+class DeliveryCalculationRequestSerializer(serializers.Serializer):
+    """
+    Serializer for delivery calculation requests.
+    """
+
+    product_id = serializers.IntegerField()
+    product_type = serializers.ChoiceField(choices=["marketplace", "user"])
+    delivery_latitude = serializers.FloatField(min_value=-90, max_value=90)
+    delivery_longitude = serializers.FloatField(min_value=-180, max_value=180)
+
+
+# Monkey patch request object to store user location
+def add_location_to_request(request, latitude: float, longitude: float):
+    """Add user location to request object for serializer context."""
+    request._user_latitude = latitude
+    request._user_longitude = longitude
+    return request

@@ -1,11 +1,13 @@
 import strawberry
 from strawberry.django.views import AsyncGraphQLView
 
+from user.queries import PrivateQuery as UserPrivateQuery
+from user.queries import PublicQuery as UserPublicQuery
+
 from .context import GraphQLContext
 from .dataloaders import GlobalDataLoader
 from .enums import AppEnumCollection, AppEnumCollectionData
 from .permissions import IsAuthenticated
-from user.queries import PublicQuery as UserPublicQuery, PrivateQuery as UserPrivateQuery
 
 
 class CustomAsyncGraphQLView(AsyncGraphQLView):

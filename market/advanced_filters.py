@@ -1,9 +1,5 @@
-"""
-Advanced Product Filtering with Faceted Search
-Extends existing filters with price ranges, ratings, availability, and aggregated facets.
-"""
-
 import django_filters
+from django.db import models
 from django.db.models import Avg, Count, F, Max, Min, Q
 from django.utils import timezone
 

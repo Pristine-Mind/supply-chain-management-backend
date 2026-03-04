@@ -545,9 +545,14 @@ CELERY_BEAT_SCHEDULE = {
 
 SITE_URL = "https://appmulyabazzar.com"
 
-# Cache configuration: use Redis if provided, otherwise fall back to local memory cache.
+# ============================================================================
+# CACHE CONFIGURATION
+# ============================================================================
+
+# Cache backend: use Redis if provided, otherwise fall back to local memory cache.
 # Set `CACHE_REDIS_URL` in environment to enable Redis caching (e.g. redis://redis:6379/1).
 CACHE_REDIS_URL = env("CACHE_REDIS_URL") or os.environ.get("CACHE_REDIS_URL")
+
 if CACHE_REDIS_URL:
     CACHES = {
         "default": {
@@ -560,17 +565,39 @@ if CACHE_REDIS_URL:
                 "SOCKET_TIMEOUT": 5,
                 "CONNECTION_POOL_KWARGS": {"max_connections": 100},
             },
-        }
+        },
+        # Dedicated location cache for geographic operations
+        "location_cache": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": CACHE_REDIS_URL.replace("/0", "/1") if CACHE_REDIS_URL else None,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "CONNECTION_POOL_KWARGS": {
+                    "max_connections": 200,  # Handle high concurrency
+                    "retry_on_timeout": True,
+                },
+                "IGNORE_EXCEPTIONS": True,  # Don't fail if Redis is down
+            },
+            "TIMEOUT": 300,  # Default timeout
+            "VERSION": 1,
+        },
     }
 else:
     # Development fallback (per-process, not shared between workers)
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        "location_cache": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    }
 
-# Cache TTL defaults (seconds) used by application-level caches. Can be overridden
-# by environment variables if desired.
+# Cache TTL defaults (seconds) used by application-level caches.
+# Can be overridden by environment variables if desired.
 PRODUCER_SEARCH_CACHE_TTL = int(os.environ.get("PRODUCER_SEARCH_CACHE_TTL", 30))
 PRODUCER_LIST_CACHE_TTL = int(os.environ.get("PRODUCER_LIST_CACHE_TTL", 15))
 TRENDING_CACHE_TTL = int(os.environ.get("TRENDING_CACHE_TTL", 20))
+
+# Session cache settings (stored in cache backend)
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
 
 KHALTI_SECRET_KEY = env("KHALTI_SECRET_KEY")
 KHALTI_BASE_URL = "https://khalti.com/api/v2/"
@@ -616,7 +643,7 @@ ANYMAIL = {
 # SECURITY SETTINGS
 # ============================================================================
 
-# Session Security
+# Session Cookie Security
 SESSION_COOKIE_SECURE = not DEBUG  # HTTPS only in production
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access
 SESSION_COOKIE_SAMESITE = "Lax"  # CSRF protection

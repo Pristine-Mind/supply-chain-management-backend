@@ -41,6 +41,7 @@ from transport.serializers import (
     TransporterSerializer,
 )
 
+from .filters import BusinessFilter
 from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
     BusinessListSerializer,
@@ -51,6 +52,7 @@ from .serializers import (
     LoginSerializer,
     PhoneLoginSerializer,
     PhoneNumberSerializer,
+    RecommendedBusinessSerializer,
     RegisterSerializer,
     TransporterRegistrationRequestSerializer,
     UpdateNotificationPreferencesSerializer,
@@ -58,7 +60,6 @@ from .serializers import (
     UserProfileDetailSerializer,
     VerifyOTPSerializer,
 )
-from .filters import BusinessFilter
 
 
 class RegisterView(generics.CreateAPIView):
@@ -749,7 +750,7 @@ class B2BCreditManagementView(APIView):
 class BusinessListView(generics.ListAPIView):
     """
     Fast, comprehensive API to list all businesses in Nepal with advanced filtering.
-    
+
     This endpoint lists users with:
     - Role: business_owner
     - Business Type: distributor
@@ -757,7 +758,7 @@ class BusinessListView(generics.ListAPIView):
     - Search functionality across business names and user details
     - Geographical distance-based filtering
     - Optimized queries to prevent N+1 issues
-    
+
     Query Parameters:
     - business_type: Filter by business type (distributor/retailer)
     - city: Filter by city ID
@@ -771,62 +772,58 @@ class BusinessListView(generics.ListAPIView):
     - registered_before: Show businesses registered before this date
     - search: Search in business name, user name, phone number
     - latitude: Latitude for distance filtering (requires longitude and radius_km)
-    - longitude: Longitude for distance filtering (requires latitude and radius_km)  
+    - longitude: Longitude for distance filtering (requires latitude and radius_km)
     - radius_km: Radius in km for distance filtering (requires latitude and longitude)
     - ordering: Order results by any field (prefix with '-' for descending)
-    
+
     Examples:
     - /api/businesses/?business_type=distributor&city_name=kathmandu
     - /api/businesses/?search=grocery&b2b_verified=true
     - /api/businesses/?latitude=27.7172&longitude=85.3240&radius_km=10
     - /api/businesses/?ordering=-user__date_joined (newest first)
     """
-    
+
     serializer_class = BusinessListSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = BusinessFilter
-    
+
     # Search fields for DRF's SearchFilter (if needed in addition to our custom search)
-    search_fields = [
-        'registered_business_name', 
-        'user__first_name', 
-        'user__last_name',
-        'user__username',
-        'phone_number'
-    ]
-    
+    search_fields = ["registered_business_name", "user__first_name", "user__last_name", "user__username", "phone_number"]
+
     # Ordering fields
     ordering_fields = [
-        'user__date_joined', 'user__first_name', 'user__last_name',
-        'business_type', 'location__name', 'b2b_verified', 
-        'credit_limit', 'registered_business_name'
+        "user__date_joined",
+        "user__first_name",
+        "user__last_name",
+        "business_type",
+        "location__name",
+        "b2b_verified",
+        "credit_limit",
+        "registered_business_name",
     ]
-    
-    ordering = ['-user__date_joined']
+
+    ordering = ["-user__date_joined"]
 
     def get_queryset(self):
         """
         Optimized queryset with select_related and prefetch_related to prevent N+1 queries.
         Filters to business owners with distributor business type.
         """
-        return UserProfile.objects.filter(
-            role__code='business_owner',
-            business_type=UserProfile.BusinessType.DISTRIBUTOR,
-            user__is_active=True,
-            b2b_verified=True
-        ).select_related(
-            'user',
-            'role',
-            'location'
-        ).order_by('-user__date_joined')
+        return (
+            UserProfile.objects.filter(
+                role__code="business_owner",
+                business_type=UserProfile.BusinessType.DISTRIBUTOR,
+                user__is_active=True,
+                b2b_verified=True,
+            )
+            .select_related("user", "role", "location")
+            .order_by("-user__date_joined")
+        )
 
     def get_serializer_context(self):
         """Add request context for any custom serializer needs"""
         context = super().get_serializer_context()
-        context.update({
-            'request': self.request,
-            'view': self
-        })
+        context.update({"request": self.request, "view": self})
         return context
 
     def list(self, request, *args, **kwargs):
@@ -834,22 +831,170 @@ class BusinessListView(generics.ListAPIView):
         Override list to add custom response data like count and filtering info
         """
         queryset = self.filter_queryset(self.get_queryset())
-        
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        
+
         # Add metadata to response
         response_data = {
-            'count': queryset.count(),
-            'results': serializer.data,
-            'filters_applied': {
-                key: value for key, value in request.query_params.items()
-                if key not in ['page', 'page_size']
-            }
+            "count": queryset.count(),
+            "results": serializer.data,
+            "filters_applied": {
+                key: value for key, value in request.query_params.items() if key not in ["page", "page_size"]
+            },
         }
-        
+
         return Response(response_data)
+
+
+class BusinessDirectoryView(APIView):
+    """
+    Enhanced business directory that includes both business listings and recommendations.
+
+    Returns:
+    - recommended_businesses: Top recommended B2B verified businesses with their products
+    - all_businesses: Complete business directory with filtering capabilities
+
+    Query Parameters:
+    - All parameters from BusinessListView for filtering regular businesses
+    - user_latitude: User's latitude for distance-based recommendations
+    - user_longitude: User's longitude for distance-based recommendations
+    - recommendation_limit: Number of recommended businesses to return (default: 6)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Get recommendation limit from query params
+        recommendation_limit = int(request.query_params.get("recommendation_limit", 6))
+
+        # Get recommended businesses
+        recommended_businesses = self._get_recommended_businesses(request, recommendation_limit)
+
+        # Get all businesses using existing BusinessListView logic
+        all_businesses = self._get_all_businesses(request)
+
+        return Response(
+            {
+                "recommended_businesses": {"count": len(recommended_businesses), "results": recommended_businesses},
+                "all_businesses": all_businesses,
+                "meta": {
+                    "recommendation_criteria": self._get_recommendation_criteria(),
+                    "user_location_provided": bool(
+                        request.query_params.get("user_latitude") and request.query_params.get("user_longitude")
+                    ),
+                },
+            }
+        )
+
+    def _get_recommended_businesses(self, request, limit):
+        """Get recommended businesses with products"""
+        from producer.models import Product
+
+        # Get B2B verified businesses with products
+        queryset = (
+            UserProfile.objects.filter(
+                role__code="business_owner",
+                business_type=UserProfile.BusinessType.DISTRIBUTOR,
+                b2b_verified=True,
+                user__is_active=True,
+                user__product_set__is_active=True,  # Only businesses with active products
+            )
+            .select_related("user", "role", "location")
+            .prefetch_related("user__product_set__brand", "user__product_set__images")
+            .distinct()
+        )
+
+        # Apply distance filtering if user location is provided
+        user_lat = request.query_params.get("user_latitude")
+        user_lng = request.query_params.get("user_longitude")
+        max_distance = request.query_params.get("max_recommendation_distance", 50)  # Default 50km
+
+        if user_lat and user_lng:
+            try:
+                lat_float = float(user_lat)
+                lng_float = float(user_lng)
+                distance_float = float(max_distance)
+
+                # Simple bounding box filtering (more efficient than complex distance calculation)
+                lat_range = distance_float / 111.0
+                lng_range = distance_float / (111.0 * abs(lat_float / 90.0) if lat_float != 0 else 111.0)
+
+                queryset = queryset.filter(
+                    latitude__isnull=False,
+                    longitude__isnull=False,
+                    latitude__gte=lat_float - lat_range,
+                    latitude__lte=lat_float + lat_range,
+                    longitude__gte=lng_float - lng_range,
+                    longitude__lte=lng_float + lng_range,
+                )
+            except (ValueError, TypeError):
+                pass
+
+        # Limit results for performance
+        businesses = list(queryset[: limit * 2])  # Get more than needed for scoring
+
+        # Add prefetched products to each business
+        for business in businesses:
+            products = (
+                Product.objects.filter(user=business.user, is_active=True)
+                .select_related("brand")
+                .prefetch_related("images")[:6]
+            )
+            business.prefetched_products = list(products)
+
+        # Serialize and sort by recommendation score
+        serializer = RecommendedBusinessSerializer(businesses, many=True, context={"request": request})
+
+        # Sort by recommendation score (descending) and return top results
+        recommended = sorted(serializer.data, key=lambda x: x["recommendation_score"], reverse=True)[:limit]
+
+        return recommended
+
+    def _get_all_businesses(self, request):
+        """Get all businesses using BusinessListView logic"""
+        # Create a temporary view instance to reuse the logic
+        business_view = BusinessListView()
+        business_view.request = request
+        business_view.format_kwarg = None
+
+        # Get filtered queryset
+        queryset = business_view.filter_queryset(business_view.get_queryset())
+
+        # Apply pagination
+        page = business_view.paginate_queryset(queryset)
+        if page is not None:
+            serializer = BusinessListSerializer(page, many=True, context={"request": request})
+            return business_view.get_paginated_response(serializer.data).data
+
+        # If no pagination
+        serializer = BusinessListSerializer(queryset, many=True, context={"request": request})
+        return {
+            "count": queryset.count(),
+            "results": serializer.data,
+            "filters_applied": {
+                key: value
+                for key, value in request.query_params.items()
+                if key not in ["page", "page_size", "user_latitude", "user_longitude"]
+            },
+        }
+
+    def _get_recommendation_criteria(self):
+        """Return the criteria used for recommendations"""
+        return {
+            "b2b_verified": "Required - Only B2B verified businesses",
+            "active_products": "Required - Must have active products",
+            "business_type": "Distributor type preferred",
+            "factors": [
+                "B2B verification status (30 points)",
+                "Number of active products (up to 20 points)",
+                "Marketplace access (15 points)",
+                "Business age - newer gets boost (up to 10 points)",
+                "Profile completeness (up to 15 points)",
+            ],
+            "distance": "Businesses within specified radius if user location provided",
+        }
