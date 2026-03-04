@@ -9,6 +9,7 @@ from drf_spectacular.views import (
 )
 from rest_framework.routers import DefaultRouter
 
+from market.location_views import LocationBasedProductViewSet
 from market.trending_api_views import track_product_view, trending_summary
 from market.trending_views import TrendingProductsViewSet
 from market.views import (
@@ -125,6 +126,7 @@ router.register(r"sales", SaleViewSet)
 router.register(r"stocklist", StockListView)
 router.register(r"marketplace", MarketplaceProductViewSet, basename="marketplace")
 router.register(r"marketplace-trending", TrendingProductsViewSet, basename="marketplace-trending")
+router.register(r"location-products", LocationBasedProductViewSet, basename="location-products")
 router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, basename="marketplace-user-products")
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
@@ -308,6 +310,27 @@ urlpatterns = [
     path("api/v1/trending/summary/", trending_summary, name="trending-summary"),
     # Sales Banner Statistics
     path("api/v1/banner-stats/", SalesBannerStatsView.as_view(), name="banner-stats"),
+    # Location-based product discovery endpoints
+    path(
+        "api/v1/location/products/nearby/",
+        LocationBasedProductViewSet.as_view({"get": "nearby"}),
+        name="location-products-nearby",
+    ),
+    path(
+        "api/v1/location/products/in-zone/",
+        LocationBasedProductViewSet.as_view({"get": "in_zone"}),
+        name="location-products-in-zone",
+    ),
+    path(
+        "api/v1/location/products/search/",
+        LocationBasedProductViewSet.as_view({"get": "search"}),
+        name="location-products-search",
+    ),
+    path(
+        "api/v1/location/delivery-info/",
+        LocationBasedProductViewSet.as_view({"get": "delivery_info"}),
+        name="location-delivery-info",
+    ),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

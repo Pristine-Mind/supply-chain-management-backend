@@ -236,10 +236,237 @@ class GeoProductFilterService:
                 zone_ids = [z["id"] if isinstance(z, dict) else z for z in available_zones]
                 if user_zone.id not in zone_ids:
                     return False, _("Not available in your delivery zone")
-            else:
-                return False, _("Cannot determine your delivery zone")
 
         return True, None
+
+    def filter_products_by_location(
+        self,
+        queryset,
+        latitude: float,
+        longitude: float,
+        max_distance_km: Optional[float] = None,
+        user_zone: Optional[GeographicZone] = None,
+    ):
+        """
+        Filter queryset based on location and delivery constraints.
+
+        Args:
+            queryset: QuerySet of MarketplaceProduct or MarketplaceUserProduct
+            latitude: User location latitude
+            longitude: User location longitude
+            max_distance_km: Maximum distance filter
+            user_zone: User's geographic zone
+
+        Returns:
+            Filtered queryset with location-based annotations
+        """
+        from django.contrib.gis.db.models.functions import Distance
+        from django.contrib.gis.geos import Point
+
+        user_location = Point(longitude, latitude, srid=4326)
+
+        # Annotate with distance from user location
+        if (
+            hasattr(queryset.model, "location")
+            and queryset.model._meta.get_field("location").get_internal_type() == "PointField"
+        ):
+            # For models with PointField location (like Producer)
+            queryset = queryset.annotate(distance_km=Distance("location", user_location) / 1000).filter(
+                location__isnull=False
+            )
+        else:
+            # For models with City foreign key location
+            queryset = (
+                queryset.select_related("location")
+                .annotate(distance_km=Distance("location__location", user_location) / 1000)
+                .filter(location__location__isnull=False)
+            )
+
+        # Apply distance filter if specified
+        if max_distance_km:
+            queryset = queryset.filter(distance_km__lte=max_distance_km)
+
+        # Apply service radius constraints for producer products
+        if hasattr(queryset.model, "service_radius_km"):
+            queryset = queryset.filter(
+                models.Q(service_radius_km__isnull=True) | models.Q(distance_km__lte=models.F("service_radius_km"))
+            )
+
+        return queryset.order_by("distance_km")
+
+    def get_nearby_products(
+        self,
+        model_class,
+        latitude: float,
+        longitude: float,
+        radius_km: float = 50,
+        limit: int = 50,
+        category: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+    ):
+        """
+        Get products within specified radius with additional filters.
+
+        Args:
+            model_class: MarketplaceProduct or MarketplaceUserProduct
+            latitude: Search center latitude
+            longitude: Search center longitude
+            radius_km: Search radius in kilometers
+            limit: Maximum number of results
+            category: Product category filter
+            min_price: Minimum price filter
+            max_price: Maximum price filter
+
+        Returns:
+            QuerySet of products with location annotations
+        """
+        queryset = model_class.objects.filter(is_available=True)
+
+        # Apply category filter
+        if category:
+            if hasattr(model_class, "category"):
+                queryset = queryset.filter(category=category)
+            elif hasattr(model_class, "product__category"):
+                queryset = queryset.filter(product__category=category)
+
+        # Apply price filters
+        price_field = "listed_price" if hasattr(model_class, "listed_price") else "price"
+        if min_price:
+            queryset = queryset.filter(**{f"{price_field}__gte": min_price})
+        if max_price:
+            queryset = queryset.filter(**{f"{price_field}__lte": max_price})
+
+        # Apply location filtering
+        queryset = self.filter_products_by_location(queryset, latitude, longitude, radius_km)
+
+        return queryset[:limit]
+
+    def get_products_in_user_zone(
+        self,
+        model_class,
+        user_zone: GeographicZone,
+        limit: int = 100,
+    ):
+        """
+        Get all products available in user's geographic zone.
+
+        Args:
+            model_class: MarketplaceProduct or MarketplaceUserProduct
+            user_zone: User's geographic zone
+            limit: Maximum results
+
+        Returns:
+            QuerySet of products in zone
+        """
+        from django.contrib.gis.db.models import Intersects
+
+        queryset = model_class.objects.filter(is_available=True)
+
+        if user_zone.geometry:
+            # Filter by zone geometry
+            if (
+                hasattr(queryset.model, "location")
+                and queryset.model._meta.get_field("location").get_internal_type() == "PointField"
+            ):
+                queryset = queryset.filter(location__intersects=user_zone.geometry)
+            else:
+                queryset = queryset.filter(location__location__intersects=user_zone.geometry)
+        elif user_zone.center_latitude and user_zone.center_longitude and user_zone.radius_km:
+            # Filter by circular zone
+            queryset = self.filter_products_by_location(
+                queryset, user_zone.center_latitude, user_zone.center_longitude, user_zone.radius_km
+            )
+
+        return queryset[:limit]
+
+    def calculate_delivery_info(
+        self,
+        product,
+        delivery_latitude: float,
+        delivery_longitude: float,
+    ) -> Dict:
+        """
+        Calculate delivery information for a product to specific location.
+
+        Args:
+            product: MarketplaceProduct or MarketplaceUserProduct instance
+            delivery_latitude: Delivery location latitude
+            delivery_longitude: Delivery location longitude
+
+        Returns:
+            Dict with delivery info (cost, time, distance, availability)
+        """
+        # Get product location
+        if hasattr(product, "location") and product.location:
+            if hasattr(product.location, "x") and hasattr(product.location, "y"):
+                # PointField case
+                seller_lat, seller_lon = product.location.y, product.location.x
+            else:
+                # City FK case
+                if product.location.location:
+                    seller_lat, seller_lon = product.location.location.y, product.location.location.x
+                else:
+                    return {
+                        "available": False,
+                        "reason": "Seller location not available",
+                        "distance_km": None,
+                        "estimated_cost": None,
+                        "estimated_days": None,
+                    }
+        else:
+            return {
+                "available": False,
+                "reason": "Product location not set",
+                "distance_km": None,
+                "estimated_cost": None,
+                "estimated_days": None,
+            }
+
+        # Calculate distance
+        distance_km = self.location_service.calculate_distance(seller_lat, seller_lon, delivery_latitude, delivery_longitude)
+
+        # Check service radius constraints
+        service_radius = getattr(product, "service_radius_km", None)
+        if service_radius and distance_km > service_radius:
+            return {
+                "available": False,
+                "reason": f"Beyond service radius ({service_radius}km)",
+                "distance_km": distance_km,
+                "estimated_cost": None,
+                "estimated_days": None,
+            }
+
+        # Get user zone for tier-based pricing
+        user_zone = self.location_service.get_user_zone(None, delivery_latitude, delivery_longitude)
+
+        # Calculate delivery cost and time based on distance and zone
+        if user_zone:
+            estimated_cost = float(user_zone.shipping_cost or 0)
+            estimated_days = user_zone.estimated_delivery_days or 1
+        else:
+            # Fallback distance-based calculation
+            if distance_km <= 5:
+                estimated_cost = 0.0
+                estimated_days = 1
+            elif distance_km <= 25:
+                estimated_cost = 100.0
+                estimated_days = 2
+            elif distance_km <= 50:
+                estimated_cost = 200.0
+                estimated_days = 3
+            else:
+                estimated_cost = 300.0
+                estimated_days = 5
+
+        return {
+            "available": True,
+            "reason": None,
+            "distance_km": round(distance_km, 2),
+            "estimated_cost": estimated_cost,
+            "estimated_days": estimated_days,
+            "zone_name": user_zone.name if user_zone else None,
+        }
 
     def get_deliverable_products(
         self,

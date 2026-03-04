@@ -58,6 +58,7 @@ faiss-cpu = "*"
 implicit = "*"
 numpy = "*"
 scipy = "*"
+geopy = "*"
 
 
 [tool.poetry.dev-dependencies]

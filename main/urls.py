@@ -5,6 +5,8 @@ from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.routers import DefaultRouter
 
+from market.location_views import LocationBasedProductViewSet
+
 # Only import API documentation in DEBUG mode
 if settings.DEBUG:
     from drf_spectacular.views import (
@@ -18,6 +20,7 @@ import market.views_advanced_filters
 import market.views_semantic_search
 import producer.views_bulk
 import producer.views_inventory_analytics
+
 # from main.graphql.schema import CustomAsyncGraphQLView
 # from main.graphql.schema import schema as graphql_schema
 from market.trending_api_views import track_product_view, trending_summary
@@ -435,6 +438,26 @@ urlpatterns = [
         "api/v1/producer/export/<str:job_id>/status/", producer.views_bulk.ExportStatusView.as_view(), name="export-status"
     ),
     path("api/v1/producer/import-export-stats/", producer.views_bulk.import_export_stats, name="import-export-stats"),
+    path(
+        "api/v1/market/location/products/nearby/",
+        LocationBasedProductViewSet.as_view({"get": "nearby"}),
+        name="location-products-nearby",
+    ),
+    path(
+        "api/v1/market/location/products/in-zone/",
+        LocationBasedProductViewSet.as_view({"get": "in_zone"}),
+        name="location-products-in-zone",
+    ),
+    path(
+        "api/v1/market/location/products/search/",
+        LocationBasedProductViewSet.as_view({"get": "search"}),
+        name="location-products-search",
+    ),
+    path(
+        "api/v1/market/location/delivery-info/",
+        LocationBasedProductViewSet.as_view({"get": "delivery_info"}),
+        name="location-delivery-info",
+    ),
 ]
 
 # Add API documentation URLs only in DEBUG mode

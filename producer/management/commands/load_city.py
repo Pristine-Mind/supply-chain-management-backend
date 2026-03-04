@@ -49,7 +49,7 @@ class Command(BaseCommand):
             "Humla",
             "Jajarkot",
             "Kailali",
-            "Kanchanpur", 
+            "Kanchanpur",
             "Kaski",
             "Lamjung",
             "Manang",
