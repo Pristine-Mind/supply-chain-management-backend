@@ -824,6 +824,12 @@ class MarketplaceProduct(models.Model):
     discounted_price = models.FloatField(
         null=True, blank=True, verbose_name=_("Discounted Price"), help_text="Discounted price if applicable."
     )
+    discount_percentage = models.FloatField(
+        default=0,
+        verbose_name=_("Discount Percentage"),
+        help_text="Discount percentage to apply (0-100). Auto-calculates discounted_price.",
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
     listed_date = models.DateTimeField(auto_now_add=True, verbose_name=_("Listed Date"))
     is_available = models.BooleanField(default=True, verbose_name=_("Is Available"))
     min_order = models.PositiveIntegerField(
@@ -952,6 +958,14 @@ class MarketplaceProduct(models.Model):
             self.seller_geo_point = self.product.producer.location
             self.seller_location_lat = self.product.producer.location.y
             self.seller_location_lon = self.product.producer.location.x
+
+        # Auto-calculate discounted_price from discount_percentage
+        if self.discount_percentage and self.discount_percentage > 0:
+            discount_amount = self.listed_price * (self.discount_percentage / 100)
+            self.discounted_price = round(self.listed_price - discount_amount, 2)
+        elif self.discount_percentage == 0:
+            # If discount_percentage is 0, clear the discounted_price
+            self.discounted_price = None
 
         user_profile = None
         try:

@@ -18,10 +18,10 @@ A comprehensive, production-ready location-based marketplace API system designed
 ## 📁 System Components
 
 ### Core APIs (`market/location_views.py`)
-- `POST /api/market/location/products/nearby/` - Find products within radius
-- `POST /api/market/location/products/in-zone/` - Zone-based product discovery
-- `POST /api/market/location/products/search/` - Advanced search with delivery info
-- `GET /api/market/location/delivery-info/` - Calculate delivery costs and availability
+- `POST /api/v1/market/location/products/nearby/` - Find products within radius
+- `POST /api/v1/market/location/products/in-zone/` - Zone-based product discovery
+- `POST /api/v1/market/location/products/search/` - Advanced search with delivery info
+- `GET /api/v1/market/location/delivery-info/` - Calculate delivery costs and availability
 
 ### Enhanced Services
 1. **Geo Services** (`geo/services.py`) - Enhanced geographic filtering and distance calculations
@@ -106,7 +106,7 @@ task_manager = get_task_manager()
 import requests
 
 # Find products within 50km of Kathmandu
-response = requests.post('http://localhost:8000/api/market/location/products/nearby/', json={
+response = requests.post('http://localhost:8000/api/v1/market/location/products/nearby/', json={
     "latitude": 27.7172,
     "longitude": 85.3240,
     "radius_km": 50,
@@ -122,7 +122,7 @@ print(response.json())
 ### 3. Monitor System Health
 ```python
 # Check system status
-health_response = requests.get('http://localhost:8000/api/market/location/system/health/')
+health_response = requests.get('http://localhost:8000/api/v1/market/location/system/health/')
 print(f"System Status: {health_response.json()['overall_status']}")
 ```
 
