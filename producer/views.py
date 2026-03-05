@@ -1622,6 +1622,106 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
         return Response(order_pricing)
 
+    @action(detail=True, methods=["patch", "post"], permission_classes=[IsAuthenticated], url_path="set-discount")
+    def set_discount(self, request, pk=None):
+        """
+        Set or update discount percentage for a marketplace product.
+        Endpoint: PATCH/POST /api/marketplace-products/{id}/set-discount/
+        
+        Request body:
+        {
+            "discount_percentage": 15.0
+        }
+        
+        Returns the updated marketplace product with calculated discounted price.
+        """
+        marketplace_product = self.get_object()
+        
+        # Check permissions - user must be the product owner or staff
+        product_user = marketplace_product.product.user
+        if request.user != product_user and not request.user.is_staff and not request.user.is_superuser:
+            return Response(
+                {"detail": "You don't have permission to update discount for this product"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        
+        discount_percentage = request.data.get("discount_percentage")
+        
+        if discount_percentage is None:
+            return Response(
+                {"error": "discount_percentage is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        try:
+            discount_percentage = float(discount_percentage)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "discount_percentage must be a valid number"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        if discount_percentage < 0 or discount_percentage > 100:
+            return Response(
+                {"error": "discount_percentage must be between 0 and 100"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        try:
+            marketplace_product.discount_percentage = discount_percentage
+            marketplace_product.save()
+            
+            serializer = self.get_serializer(marketplace_product)
+            return Response(
+                {
+                    "message": f"Discount percentage updated successfully to {discount_percentage}%",
+                    "discount_applied": {
+                        "listed_price": marketplace_product.listed_price,
+                        "discount_percentage": marketplace_product.discount_percentage,
+                        "discounted_price": marketplace_product.discounted_price,
+                        "savings_amount": marketplace_product.savings_amount,
+                    },
+                    "product": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update discount: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated], url_path="discount-info")
+    def discount_info(self, request, pk=None):
+        """
+        Get current discount information for a marketplace product.
+        Endpoint: GET /api/marketplace-products/{id}/discount-info/
+        
+        Returns:
+        {
+            "listed_price": 1000,
+            "discount_percentage": 15,
+            "discounted_price": 850,
+            "savings_amount": 150,
+            "percent_off": 15.0
+        }
+        """
+        marketplace_product = self.get_object()
+        
+        return Response(
+            {
+                "listed_price": marketplace_product.listed_price,
+                "discount_percentage": marketplace_product.discount_percentage,
+                "discounted_price": marketplace_product.discounted_price,
+                "savings_amount": marketplace_product.savings_amount,
+                "percent_off": marketplace_product.percent_off,
+                "effective_price": float(marketplace_product.price),
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class MarketplaceUserRecommendedProductViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceProductSerializer

@@ -742,6 +742,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     is_featured = serializers.BooleanField(read_only=False)
     is_made_in_nepal = serializers.BooleanField(read_only=False)
     made_for_you = serializers.BooleanField(read_only=False)
+    discount_percentage = serializers.FloatField(required=False, allow_null=True)
 
     effective_price = serializers.SerializerMethodField()
     is_b2b_eligible = serializers.SerializerMethodField()
@@ -765,6 +766,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "product_details",
             "discounted_price",
             "listed_price",
+            "discount_percentage",
             "percent_off",
             "savings_amount",
             "offer_start",
@@ -876,6 +878,15 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"Invalid color choice. Must be one of: {[choice[0] for choice in MarketplaceProduct.ColorChoices.choices]}"
             )
+        return value
+
+    def validate_discount_percentage(self, value):
+        """
+        Validate discount percentage is between 0 and 100
+        """
+        if value is not None:
+            if value < 0 or value > 100:
+                raise serializers.ValidationError("Discount percentage must be between 0 and 100.")
         return value
 
     def validate(self, data):
