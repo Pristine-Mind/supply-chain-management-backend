@@ -545,7 +545,7 @@ class DailyProductStatsView(APIView):
                             product.name,
                             product.user.get_full_name() or product.user.username if product.user else "N/A",
                             product.sku,
-                            product.get_category_display() if hasattr(product, "get_category_display") else product.category,
+                            str(product.category) if product.category else "N/A",
                             product.price,
                             product.cost_price,
                             product.stock,
@@ -1944,7 +1944,7 @@ def export_customers_to_excel(request):
 def export_products_to_excel(request):
     field_names = [
         "name",
-        "get_category_display",
+        "category",
         "description",
         "sku",
         "price",

@@ -36,6 +36,9 @@ def export_queryset_to_excel(queryset, field_names, headers=None):
             elif isinstance(value, date):
                 # Handle date objects (without time)
                 value = value.strftime("%Y-%m-%d")
+            else:
+                # Convert model instances and other objects to strings
+                value = str(value) if value is not None else ""
             row.append(value)
         ws.append(row)
 
