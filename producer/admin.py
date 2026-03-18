@@ -605,7 +605,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     fieldsets = (
         ("Product Information", {"fields": ("product",)}),
         ("Product Attributes", {"fields": ("size", "color", "additional_information")}),
-        ("Pricing & Offers", {"fields": ("listed_price", "discounted_price", "offer_start", "offer_end")}),
+        ("Pricing & Offers", {"fields": ("listed_price", "discounted_price", "discount_percentage", "offer_start", "offer_end")}),
         (
             "B2B Sales",
             {

@@ -959,12 +959,18 @@ class MarketplaceProduct(models.Model):
             self.seller_location_lat = self.product.producer.location.y
             self.seller_location_lon = self.product.producer.location.x
 
-        # Auto-calculate discounted_price from discount_percentage
+        # Auto-calculate discounted_price from discount_percentage when it is set.
+        # If only discounted_price is provided (discount_percentage == 0 or unset),
+        # back-calculate discount_percentage so both fields stay consistent.
         if self.discount_percentage and self.discount_percentage > 0:
             discount_amount = self.listed_price * (self.discount_percentage / 100)
             self.discounted_price = round(self.listed_price - discount_amount, 2)
-        elif self.discount_percentage == 0:
-            # If discount_percentage is 0, clear the discounted_price
+        elif (not self.discount_percentage or self.discount_percentage == 0) and self.discounted_price:
+            # discounted_price was entered directly; derive discount_percentage from it
+            if self.listed_price and self.listed_price > 0:
+                self.discount_percentage = round(100 * (self.listed_price - self.discounted_price) / self.listed_price, 2)
+        else:
+            # Neither field is set — clear discounted_price
             self.discounted_price = None
 
         user_profile = None
