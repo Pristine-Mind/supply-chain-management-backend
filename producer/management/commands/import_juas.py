@@ -295,7 +295,7 @@ class Command(BaseCommand):
                                 "description": description,
                                 "user": user,
                                 "category": category,
-                                "old_category": Product.ProductCategory.HEALTH_BEAUTY,
+                                "old_category": Product.ProductCategory.ELECTRONICS_GADGETS,
                                 "price": mrp,
                                 "cost_price": mrp,
                                 "stock": 10,
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                             product.category = category
                             product.color = color
                             product.additional_information = additional_information
-                            product.old_category = Product.ProductCategory.HEALTH_BEAUTY
+                            product.old_category = Product.ProductCategory.ELECTRONICS_GADGETS
                             if not product.sku and product_id:
                                 product.sku = f"{category_code}-{product_id}"
                             product.save()
