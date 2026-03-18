@@ -844,6 +844,11 @@ class MarketplaceProduct(models.Model):
     shipping_cost = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal("0"), verbose_name=_("Shipping Cost")
     )
+    is_delivery_free = models.BooleanField(
+        default=False,
+        verbose_name=_("Free Delivery"),
+        help_text=_("When enabled, shipping cost is set to zero and delivery is shown as free to buyers."),
+    )
     recent_purchases_count = models.PositiveIntegerField(
         default=0,
         verbose_name=_("Recent Purchases (24h)"),
@@ -958,6 +963,10 @@ class MarketplaceProduct(models.Model):
             self.seller_geo_point = self.product.producer.location
             self.seller_location_lat = self.product.producer.location.y
             self.seller_location_lon = self.product.producer.location.x
+
+        # When free delivery is enabled, force shipping_cost to zero
+        if self.is_delivery_free:
+            self.shipping_cost = Decimal("0")
 
         # Auto-calculate discounted_price from discount_percentage when it is set.
         # If only discounted_price is provided (discount_percentage == 0 or unset),
