@@ -775,6 +775,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "offer_countdown",
             "estimated_delivery_days",
             "shipping_cost",
+            "is_delivery_free",
             "is_free_shipping",
             "is_featured",
             "is_made_in_nepal",

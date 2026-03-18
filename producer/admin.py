@@ -614,7 +614,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
                 "description": "Configure business-to-business pricing and requirements",
             },
         ),
-        ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "shipping_cost")}),
+        ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "is_delivery_free", "shipping_cost")}),        
         ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score", "made_for_you")}),
         (
             "Geographic Restrictions",

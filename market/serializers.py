@@ -473,10 +473,22 @@ class CartItemSerializer(serializers.ModelSerializer):
     product_details = MarketplaceProductSerializer(source="product", read_only=True)
     unit_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
+    is_delivery_free = serializers.SerializerMethodField()
+    item_shipping_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        fields = ["id", "cart", "product", "quantity", "product_details", "unit_price", "total_price"]
+        fields = [
+            "id",
+            "cart",
+            "product",
+            "quantity",
+            "product_details",
+            "unit_price",
+            "total_price",
+            "is_delivery_free",
+            "item_shipping_cost",
+        ]
 
     def get_unit_price(self, obj):
         p = obj.product
@@ -486,6 +498,15 @@ class CartItemSerializer(serializers.ModelSerializer):
         p = obj.product
         unit = p.discounted_price if p.discounted_price is not None else p.listed_price
         return unit * obj.quantity
+
+    def get_is_delivery_free(self, obj):
+        return getattr(obj.product, "is_delivery_free", False)
+
+    def get_item_shipping_cost(self, obj):
+        p = obj.product
+        if getattr(p, "is_delivery_free", False):
+            return 0.0
+        return float(p.shipping_cost) if p.shipping_cost else 0.0
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -506,7 +527,12 @@ class CartSerializer(serializers.ModelSerializer):
         return sum(effective_price(item) * item.quantity for item in obj.items.all())
 
     def get_shipping(self, obj):
-        return 100.0
+        total_shipping = Decimal("0")
+        for item in obj.items.all():
+            p = item.product
+            if not getattr(p, "is_delivery_free", False):
+                total_shipping += p.shipping_cost if p.shipping_cost else Decimal("0")
+        return float(total_shipping)
 
     def get_total(self, obj):
         return self.get_subtotal(obj) + self.get_shipping(obj)
