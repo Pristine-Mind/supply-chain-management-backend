@@ -479,10 +479,13 @@ class CartItemSerializer(serializers.ModelSerializer):
         fields = ["id", "cart", "product", "quantity", "product_details", "unit_price", "total_price"]
 
     def get_unit_price(self, obj):
-        return obj.product.listed_price
+        p = obj.product
+        return p.discounted_price if p.discounted_price is not None else p.listed_price
 
     def get_total_price(self, obj):
-        return obj.product.listed_price * obj.quantity
+        p = obj.product
+        unit = p.discounted_price if p.discounted_price is not None else p.listed_price
+        return unit * obj.quantity
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -496,7 +499,11 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ["id", "user", "items", "subtotal", "shipping", "total", "created_at"]
 
     def get_subtotal(self, obj):
-        return sum(item.product.listed_price * item.quantity for item in obj.items.all())
+        def effective_price(item):
+            p = item.product
+            return p.discounted_price if p.discounted_price is not None else p.listed_price
+
+        return sum(effective_price(item) * item.quantity for item in obj.items.all())
 
     def get_shipping(self, obj):
         return 100.0
