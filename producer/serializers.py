@@ -400,6 +400,7 @@ class ProductSerializer(serializers.ModelSerializer):
     brand_details = serializers.SerializerMethodField()
 
     marketplace_id = serializers.SerializerMethodField()
+    marketplace_discounted_price = serializers.SerializerMethodField()
 
     size_display = serializers.CharField(source="get_size_display", read_only=True)
     color_display = serializers.CharField(source="get_color_display", read_only=True)
@@ -418,6 +419,13 @@ class ProductSerializer(serializers.ModelSerializer):
         marketplace_product = MarketplaceProduct.objects.filter(product=obj)
         if marketplace_product.exists():
             return marketplace_product.first().id
+        return None
+
+    def get_marketplace_discounted_price(self, obj):
+        """Return the discounted_price of the related MarketplaceProduct if it exists, else None."""
+        marketplace_product = MarketplaceProduct.objects.filter(product=obj)
+        if marketplace_product.exists():
+            return marketplace_product.first().discounted_price
         return None
 
     def validate_price(self, value):
