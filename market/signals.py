@@ -342,16 +342,15 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
             msg = f"🛒 Your order #{instance.order_number} has been placed successfully!"
             
             # Prepare JSON-serializable order context for email
+            # Using simple values that are guaranteed to exist
             email_ctx = {
                 "order_number": instance.order_number,
-                "customer_name": instance.customer.first_name or instance.customer.username or instance.customer.email,
+                "customer_name": getattr(instance.customer, "first_name", "") or getattr(instance.customer, "username", "Customer"),
                 "total_amount": str(instance.total_amount),
                 "currency": instance.currency,
-                "order_status": instance.get_order_status_display(),
-                "payment_status": instance.get_payment_status_display(),
+                "order_status": instance.order_status,
+                "payment_status": instance.payment_status,
                 "created_at": instance.created_at.isoformat(),
-                "items_count": instance.items.count(),
-                "delivery_address": instance.delivery.full_address if instance.delivery else "",
             }
             
             notify_event(

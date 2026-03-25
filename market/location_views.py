@@ -47,7 +47,7 @@ from .location_utils import (
     handle_location_errors,
 )
 from .serializers import (
-    DeliveryInfoSerializer,
+    DeliveryTimeEstimateSerializer,
     EnhancedMarketplaceProductSerializer,
     EnhancedMarketplaceUserProductSerializer,
     LocationFilteredProductListSerializer,

@@ -1885,7 +1885,7 @@ class LocationMetadataSerializer(serializers.Serializer):
     zone_tier = serializers.CharField(read_only=True, allow_null=True)
 
 
-class DeliveryInfoSerializer(serializers.Serializer):
+class DeliveryTimeEstimateSerializer(serializers.Serializer):
     """
     Serializer for delivery cost and time information.
     """
