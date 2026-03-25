@@ -6,15 +6,16 @@
   <title>{% trans "Order Confirmation" %}</title>
 </head>
 <body>
-  <h1>{% trans "Thank you for your order!" %}</h1>
-  <p>{% blocktrans %}Hi {{ order_obj.customer.name }},{% endblocktrans %}</p>
-  <p>{% blocktrans %}We have received your order <strong>#{{ order_obj.order_number }}</strong> placed on {{ order_obj.order_date|date:"F j, Y, g:i a" }}.{% endblocktrans %}</p>
+  <h1>🛒 {% trans "Order Confirmation" %}</h1>
+  <p>{% trans "Hi" %} {{ customer_name }},</p>
 
   <h2>{% trans "Order Details" %}</h2>
   <ul>
-    <li><strong>{% trans "Product" %}:</strong> {{ order_obj.product.name }}</li>
-    <li><strong>{% trans "Quantity" %}:</strong> {{ order_obj.quantity }}</li>
-    <li><strong>{% trans "Total Price" %}:</strong> {{ order_obj.total_price }}</li>
+    <li><strong>{% trans "Order Number" %}:</strong> #{{ order_number }}</li>
+    <li><strong>{% trans "Order Date" %}:</strong> {{ created_at }}</li>
+    <li><strong>{% trans "Total Amount" %}:</strong> {{ currency }} {{ total_amount }}</li>
+    <li><strong>{% trans "Order Status" %}:</strong> {{ order_status }}</li>
+    <li><strong>{% trans "Payment Status" %}:</strong> {{ payment_status }}</li>
   </ul>
 
   <p>{% trans "We’ll notify you again when your order ships." %}</p>

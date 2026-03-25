@@ -353,6 +353,19 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
                 "created_at": instance.created_at.isoformat(),
             }
             
+            # Get SMS number from delivery information
+            sms_number = None
+            has_sms = False
+            try:
+                if instance.delivery and instance.delivery.phone_number:
+                    sms_number = instance.delivery.phone_number
+                    has_sms = True
+            except Exception:
+                pass
+            
+            # SMS body for the order notification
+            sms_body = f"Your order #{instance.order_number} for {instance.currency} {instance.total_amount} has been placed. Track it here."
+            
             notify_event(
                 user=instance.customer,
                 notif_type=Notification.Type.ORDER,
@@ -360,9 +373,11 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
                 via_in_app=True,
                 via_email=True,
                 email_addr=instance.customer.email,
-                email_tpl="order_created.html",
+                email_tpl="order_confirmation.html",
                 email_ctx=email_ctx,
-                via_sms=False,
+                via_sms=has_sms,
+                sms_number=sms_number,
+                sms_body=sms_body,
             )
         except Exception as e:
             logger.error(f"Error sending order creation notification: {str(e)}")
