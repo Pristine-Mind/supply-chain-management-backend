@@ -1319,8 +1319,8 @@ class MarketplaceOrderManager(models.Manager):
         )
 
         # Mark the cart as inactive after successful order creation
-        # cart.is_active = False
-        # cart.save(update_fields=["is_active"])
+        cart.is_active = False
+        cart.save(update_fields=["is_active"])
         return order
 
 

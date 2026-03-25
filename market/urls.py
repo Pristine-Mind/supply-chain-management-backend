@@ -305,6 +305,7 @@ urlpatterns = [
     path("api/v1/marketplace/orders/<int:pk>/", marketplace_order_detail, name="marketplace-order-detail"),
     path("api/v1/marketplace/orders/<int:pk>/cancel/", cancel_marketplace_order, name="marketplace-order-cancel"),
     path("api/v1/marketplace/orders/<int:pk>/reorder/", reorder_marketplace_order, name="marketplace-order-reorder"),
+    path("api/v1/marketplace/orders/<int:order_id>/payment-status/", MarketplaceOrderPaymentStatusUpdateView.as_view(), name="marketplace-order-payment-status-update"),
     path("api/v1/marketplace/orders/create/", create_order, name="create-marketplace-order"),
     # Trending Products API endpoints
     path("api/v1/trending/track-view/", track_product_view, name="track-product-view"),

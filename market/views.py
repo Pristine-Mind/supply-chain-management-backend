@@ -108,6 +108,7 @@ from .serializers import (
     FeedbackSerializer,
     MarketplaceOrderSerializer,
     MarketplaceSaleSerializer,
+    PaymentStatusUpdateSerializer,
     MarketplaceUserProductSerializer,
     NegotiationLockSerializer,
     NegotiationReleaseLockSerializer,
@@ -909,6 +910,47 @@ class CartStatusUpdateView(generics.UpdateAPIView):
                 "success": True,
                 "message": f"Cart {instance.id} marked as {'active' if instance.is_active else 'inactive'}",
                 "cart": CartSerializer(instance).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
+    """Update marketplace order payment status."""
+    
+    serializer_class = PaymentStatusUpdateSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "id"
+    lookup_url_kwarg = "order_id"
+
+    def get_queryset(self):
+        """Ensure user can only update their own orders."""
+        return MarketplaceOrder.objects.filter(customer=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        """Handle payment status update."""
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        
+        old_status = instance.payment_status
+        
+        # Set default payment_status to "paid" if not provided
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        if 'payment_status' not in data:
+            data['payment_status'] = 'paid'
+        
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        new_status = instance.payment_status
+        
+        # Return detailed response
+        return Response(
+            {
+                "success": True,
+                "message": f"Payment status updated from {old_status} to {new_status}",
+                "order": MarketplaceOrderSerializer(instance).data
             },
             status=status.HTTP_200_OK
         )

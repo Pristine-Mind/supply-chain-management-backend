@@ -1045,6 +1045,15 @@ class MarketplaceOrderSerializer(serializers.ModelSerializer):
         ]
 
 
+class PaymentStatusUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating marketplace order payment status."""
+
+    class Meta:
+        model = MarketplaceOrder
+        fields = ["id", "payment_status"]
+        read_only_fields = ["id"]
+
+
 class CreateOrderSerializer(serializers.Serializer):
     """Serializer for creating orders from cart."""
 
