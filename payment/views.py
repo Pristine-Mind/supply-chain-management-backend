@@ -107,13 +107,13 @@ def initiate_payment(request: HttpRequest) -> Response:
         return Response({"status": "error", "message": "Invalid payment gateway"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        cart = Cart.objects.prefetch_related("items__product__product").get(id=cart_id, user=request.user)
-        logger.info(f"✅ Cart found: ID={cart.id}, Items count={cart.items.count()}")
+        cart = Cart.objects.prefetch_related("items__product__product").get(id=cart_id, user=request.user, is_active=True)
+        logger.info(f"✅ Active cart found: ID={cart.id}, Items count={cart.items.count()}")
     except Cart.DoesNotExist:
-        logger.error(f"❌ Cart not found: ID={cart_id}, User={request.user.username}")
-        # List all carts for this user for debugging
-        user_carts = Cart.objects.filter(user=request.user)
-        logger.error(f"   Available carts for user: {[f'Cart {c.id}' for c in user_carts]}")
+        logger.error(f"❌ Active cart not found: ID={cart_id}, User={request.user.username}")
+        # List active carts for this user for debugging
+        active_carts = Cart.objects.filter(user=request.user, is_active=True)
+        logger.error(f"   Available active carts for user: {[f'Cart {c.id}' for c in active_carts]}")
         return Response({"status": "error", "message": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if not cart.items.exists():

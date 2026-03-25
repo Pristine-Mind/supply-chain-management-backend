@@ -380,10 +380,32 @@ class UserInteraction(models.Model):
 
 class Cart(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name="carts")
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"), db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = _("Cart")
+        verbose_name_plural = _("Carts")
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+            models.Index(fields=["created_at"]),
+        ]
+
     def __str__(self):
-        return f"Cart {self.id} for {self.user.username if self.user else 'Guest'}"
+        return f"Cart {self.id} for {self.user.username if self.user else 'Guest'} ({'Active' if self.is_active else 'Inactive'})"
+
+    @classmethod
+    def get_or_create_active(cls, user):
+        """
+        Get or create an active cart for a user.
+        If user has an active cart, return it.
+        Otherwise, create a new active cart.
+        """
+        if user:
+            active_cart = cls.objects.filter(user=user, is_active=True).first()
+            if active_cart:
+                return active_cart
+        return cls.objects.create(user=user, is_active=True)
 
 
 class CartItem(models.Model):
@@ -1295,6 +1317,10 @@ class MarketplaceOrderManager(models.Manager):
         _ = OrderTrackingEvent.objects.create(
             marketplace_order=order, status=OrderStatus.PENDING, message="Order created successfully"
         )
+
+        # Mark the cart as inactive after successful order creation
+        cart.is_active = False
+        cart.save(update_fields=["is_active"])
 
         return order
 

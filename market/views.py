@@ -815,18 +815,18 @@ class CartCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        cart, created = Cart.objects.get_or_create(user=request.user)
+        cart = Cart.get_or_create_active(request.user)
         serializer = self.get_serializer(cart)
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class UserCartView(views.APIView):
-    """Return the authenticated user's cart (create if missing) with items."""
+    """Return the authenticated user's latest active cart (create if missing) with items."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        cart, _ = Cart.objects.get_or_create(user=request.user)
+        cart = Cart.get_or_create_active(request.user)
         serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -836,7 +836,7 @@ class CartItemCreateView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         cart_id = self.kwargs["cart_id"]
-        cart = get_object_or_404(Cart, id=cart_id)
+        cart = get_object_or_404(Cart, id=cart_id, is_active=True)
 
         product = request.data.get("product")
         existing_item = CartItem.objects.filter(cart=cart, product=product).first()
@@ -2087,8 +2087,8 @@ class ShoppableVideoViewSet(viewsets.ModelViewSet):
         if quantity < 1:
             return Response({"error": "Quantity must be at least 1"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get or create cart
-        cart, _ = Cart.objects.get_or_create(user=user)
+        # Get or create active cart
+        cart = Cart.get_or_create_active(user)
 
         # Add to cart logic (similar to CartItemCreateView)
         cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product, defaults={"quantity": quantity})
@@ -3072,7 +3072,7 @@ class CouponViewSet(viewsets.ModelViewSet):
         if not coupon:
             return Response({"valid": False, "message": "Invalid coupon code"}, status=status.HTTP_404_NOT_FOUND)
 
-        cart = get_object_or_404(Cart, id=cart_id, user=request.user)
+        cart = get_object_or_404(Cart, id=cart_id, user=request.user, is_active=True)
 
         items_total = self._get_cart_total(cart)
 

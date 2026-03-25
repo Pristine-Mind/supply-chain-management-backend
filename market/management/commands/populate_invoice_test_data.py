@@ -229,7 +229,7 @@ class Command(BaseCommand):
         self.stdout.write("\n🛒 Creating test carts and cart items...")
 
         # Cart 1 - Buyer 1 with multiple items
-        cart1, created = Cart.objects.get_or_create(user=buyer1, defaults={"created_at": timezone.now()})
+        cart1, created = Cart.objects.get_or_create(user=buyer1, defaults={"created_at": timezone.now(), "is_active": True})
 
         # Clear existing items if any
         CartItem.objects.filter(cart=cart1).delete()
@@ -240,7 +240,7 @@ class Command(BaseCommand):
         CartItem.objects.create(cart=cart1, product=mp4, quantity=3)  # 3x Tea
 
         # Cart 2 - Buyer 2 with single expensive item
-        cart2, created = Cart.objects.get_or_create(user=buyer2, defaults={"created_at": timezone.now()})
+        cart2, created = Cart.objects.get_or_create(user=buyer2, defaults={"created_at": timezone.now(), "is_active": True})
 
         # Clear existing items if any
         CartItem.objects.filter(cart=cart2).delete()

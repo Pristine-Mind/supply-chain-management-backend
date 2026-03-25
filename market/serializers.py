@@ -1038,18 +1038,18 @@ class CreateOrderSerializer(serializers.Serializer):
     coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
     def validate_cart_id(self, value):
-        """Validate that the cart exists and belongs to the user."""
+        """Validate that the cart exists, is active, and belongs to the user."""
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             raise serializers.ValidationError("Authentication required")
 
         try:
-            cart = Cart.objects.get(id=value, user=request.user)
+            cart = Cart.objects.get(id=value, user=request.user, is_active=True)
             if not cart.items.exists():
                 raise serializers.ValidationError("Cart is empty")
             return value
         except Cart.DoesNotExist:
-            raise serializers.ValidationError("Cart not found")
+            raise serializers.ValidationError("Cart not found or inactive")
 
     def validate_coupon_code(self, value):
         """Validate coupon code if provided."""
@@ -1073,8 +1073,8 @@ class CreateOrderSerializer(serializers.Serializer):
         payment_method = validated_data.get("payment_method")
         coupon_code = validated_data.get("coupon_code")
 
-        # Get the cart
-        cart = Cart.objects.get(id=cart_id, user=request.user)
+        # Get the active cart
+        cart = Cart.objects.get(id=cart_id, user=request.user, is_active=True)
 
         # Create delivery info
         from .models import Coupon, DeliveryInfo, MarketplaceOrder
