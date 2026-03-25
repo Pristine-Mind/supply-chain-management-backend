@@ -340,6 +340,20 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
     if created:
         try:
             msg = f"🛒 Your order #{instance.order_number} has been placed successfully!"
+            
+            # Prepare JSON-serializable order context for email
+            email_ctx = {
+                "order_number": instance.order_number,
+                "customer_name": instance.customer.first_name or instance.customer.username or instance.customer.email,
+                "total_amount": str(instance.total_amount),
+                "currency": instance.currency,
+                "order_status": instance.get_order_status_display(),
+                "payment_status": instance.get_payment_status_display(),
+                "created_at": instance.created_at.isoformat(),
+                "items_count": instance.items.count(),
+                "delivery_address": instance.delivery.full_address if instance.delivery else "",
+            }
+            
             notify_event(
                 user=instance.customer,
                 notif_type=Notification.Type.ORDER,
@@ -348,7 +362,7 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
                 via_email=True,
                 email_addr=instance.customer.email,
                 email_tpl="order_created.html",
-                email_ctx={"order": instance},
+                email_ctx=email_ctx,
                 via_sms=False,
             )
         except Exception as e:
