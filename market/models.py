@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 import string
@@ -23,6 +24,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
 from reversion.models import Version
+
+logger = logging.getLogger(__name__)
 
 try:
     from babel.numbers import format_currency
