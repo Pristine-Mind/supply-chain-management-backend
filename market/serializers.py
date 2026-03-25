@@ -517,7 +517,8 @@ class CartSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Cart
-        fields = ["id", "user", "items", "subtotal", "shipping", "total", "created_at"]
+        fields = ["id", "user", "is_active", "items", "subtotal", "shipping", "total", "created_at"]
+        read_only_fields = ["id", "user", "items", "created_at"]
 
     def get_subtotal(self, obj):
         def effective_price(item):
@@ -536,6 +537,21 @@ class CartSerializer(serializers.ModelSerializer):
 
     def get_total(self, obj):
         return self.get_subtotal(obj) + self.get_shipping(obj)
+
+
+class CartStatusUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating cart status (is_active field)."""
+
+    class Meta:
+        model = Cart
+        fields = ["id", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_is_active(self, value):
+        """Validate is_active field."""
+        if not isinstance(value, bool):
+            raise serializers.ValidationError("is_active must be a boolean value (true or false)")
+        return value
 
 
 class MarketplaceSaleSerializer(serializers.ModelSerializer):

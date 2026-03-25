@@ -211,6 +211,7 @@ urlpatterns = [
         CartItemDeleteView.as_view(),
         name="cart-item-delete",
     ),
+    path("api/v1/carts/<int:cart_id>/status/", CartStatusUpdateView.as_view(), name="cart-status-update"),
     path("api/v1/creators/<int:pk>/follow/", follow_creator, name="creator-follow"),
     path("api/v1/affiliate/redirect/", affiliate_redirect, name="affiliate-redirect"),
     path("api/v1/deliveries/", DeliveryCreateView.as_view(), name="delivery-create"),

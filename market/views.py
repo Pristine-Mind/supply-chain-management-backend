@@ -99,6 +99,7 @@ from .serializers import (
     BidUserSerializer,
     CartItemSerializer,
     CartSerializer,
+    CartStatusUpdateSerializer,
     ChatMessageSerializer,
     CouponSerializer,
     CreateDeliveryFromSaleSerializer,
@@ -879,6 +880,38 @@ class CartItemDeleteView(generics.DestroyAPIView):
     def get_queryset(self):
         cart_id = self.kwargs["cart_id"]
         return CartItem.objects.filter(cart_id=cart_id)
+
+
+class CartStatusUpdateView(generics.UpdateAPIView):
+    """Update cart status (mark as active/inactive)."""
+    
+    serializer_class = CartStatusUpdateSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "id"
+    lookup_url_kwarg = "cart_id"
+
+    def get_queryset(self):
+        """Ensure user can only update their own carts."""
+        return Cart.objects.filter(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        """Handle cart status update."""
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Return detailed response
+        return Response(
+            {
+                "success": True,
+                "message": f"Cart {instance.id} marked as {'active' if instance.is_active else 'inactive'}",
+                "cart": CartSerializer(instance).data
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class DeliveryCreateView(generics.CreateAPIView):
