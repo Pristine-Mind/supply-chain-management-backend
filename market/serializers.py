@@ -1101,8 +1101,7 @@ class CreateOrderSerializer(serializers.Serializer):
         )
 
         # Clear the cart after successful order creation
-        cart.items.all().delete()
-
+        # cart.items.all().delete()
         return order
 
 
