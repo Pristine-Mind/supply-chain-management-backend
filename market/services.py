@@ -157,11 +157,14 @@ class InvoiceGenerationService:
                     # Get current product price or marketplace product price
                     unit_price = cart_item.product.product.price
 
+                    # Generate product SKU - ensure it's never null
+                    product_sku = getattr(cart_item.product.product, "sku", None) or f"MP-{cart_item.product.id}"
+
                     # Create line item with comprehensive product data
                     InvoiceLineItem.objects.create(
                         invoice=invoice,
                         product_name=cart_item.product.product.name,
-                        product_sku=getattr(cart_item.product.product, "sku", f"MP-{cart_item.product.id}"),
+                        product_sku=product_sku,
                         description=InvoiceGenerationService._format_product_description(cart_item.product),
                         quantity=cart_item.quantity,
                         unit_price=unit_price,
@@ -220,10 +223,12 @@ class InvoiceGenerationService:
             )
 
             # Create line item with comprehensive product data
+            # Generate product SKU - ensure it's never null
+            product_sku = getattr(marketplace_sale.product.product, "sku", None) or f"MP-{marketplace_sale.product.id}"
             InvoiceLineItem.objects.create(
                 invoice=invoice,
                 product_name=marketplace_sale.product.product.name,
-                product_sku=getattr(marketplace_sale.product.product, "sku", f"MP-{marketplace_sale.product.id}"),
+                product_sku=product_sku,
                 description=InvoiceGenerationService._format_product_description(marketplace_sale.product),
                 quantity=marketplace_sale.quantity,
                 unit_price=marketplace_sale.unit_price,
@@ -282,10 +287,12 @@ class InvoiceGenerationService:
 
             # Create line items for each order item
             for item in marketplace_order.items.select_related("product", "product__product").all():
+                # Generate product SKU - ensure it's never null
+                product_sku = getattr(item.product.product, "sku", None) or f"MP-{item.product.id}"
                 InvoiceLineItem.objects.create(
                     invoice=invoice,
                     product_name=getattr(item.product.product, "name", str(item.product)),
-                    product_sku=getattr(item.product.product, "sku", ""),
+                    product_sku=product_sku,
                     description=InvoiceGenerationService._format_product_description(item.product),
                     quantity=item.quantity,
                     unit_price=item.unit_price,

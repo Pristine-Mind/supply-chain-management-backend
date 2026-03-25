@@ -1262,6 +1262,11 @@ class MarketplaceOrderManager(models.Manager):
 
         # Create order items from cart items
         for cart_item in cart.items.all():
+            # Skip items with invalid quantities
+            if not cart_item.quantity or cart_item.quantity < 1:
+                logger.warning(f"Skipping cart item {cart_item.id} with invalid quantity: {cart_item.quantity}")
+                continue
+
             unit_price, negotiation = item_prices[cart_item.id]
             _ = MarketplaceOrderItem.objects.create(
                 order=order,
