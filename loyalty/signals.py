@@ -94,7 +94,7 @@ def handle_order_cancellation(sender, instance, **kwargs):
     try:
         from market.models import OrderStatus
 
-        if instance.status == OrderStatus.CANCELLED:
+        if instance.order_status == OrderStatus.CANCELLED:
             reference_id = f"refund_order_{instance.id}"
 
             if LoyaltyTransaction.objects.filter(reference_id=reference_id).exists():
@@ -103,14 +103,14 @@ def handle_order_cancellation(sender, instance, **kwargs):
 
             try:
                 points_deducted, trans = LoyaltyService.refund_points(
-                    user=instance.buyer,
+                    user=instance.customer,
                     amount=instance.total_amount,
                     description=f"Points refunded for cancelled order #{instance.order_number}",
                     purchase_id=str(instance.id),
                     reference_id=reference_id,
                 )
                 logger.info(
-                    f"Refunded {points_deducted} points from {instance.buyer.username} "
+                    f"Refunded {points_deducted} points from {instance.customer.username} "
                     f"for cancelled order {instance.order_number}"
                 )
             except Exception as e:
