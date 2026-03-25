@@ -204,14 +204,34 @@ class EmailNotificationService(NotificationServiceInterface):
             from django.conf import settings
             from django.core.mail import send_mail
 
+            # Validate user email
+            if not notification.user.email:
+                error_msg = "User has no email address"
+                logger.warning(f"Email notification failed: {error_msg} for user {notification.user.id}")
+                notification.mark_as_failed(error_msg)
+                return False
+
+            # Validate email backend configuration
+            email_backend = getattr(settings, "EMAIL_BACKEND", "")
+            if not email_backend:
+                error_msg = "Email backend not configured. Check EMAIL_BACKEND in settings."
+                logger.error(f"Email service error: {error_msg}")
+                notification.mark_as_failed(error_msg)
+                return False
+
+            # Check for Brevo configuration if using Brevo backend
+            if "brevo" in email_backend.lower():
+                brevo_key = getattr(settings, "BREVO_API_KEY", "")
+                if not brevo_key:
+                    error_msg = "BREVO_API_KEY not configured. Set BREVO_API_KEY environment variable."
+                    logger.error(f"Email service error: {error_msg}")
+                    notification.mark_as_failed(error_msg)
+                    return False
+
             subject = notification.title
             message = notification.body
             from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@example.com")
             recipient_list = [notification.user.email]
-
-            if not notification.user.email:
-                notification.mark_as_failed("User has no email address")
-                return False
 
             send_mail(
                 subject=subject, message=message, from_email=from_email, recipient_list=recipient_list, fail_silently=False
@@ -219,6 +239,7 @@ class EmailNotificationService(NotificationServiceInterface):
 
             notification.mark_as_sent()
             self._log_event(notification, "sent")
+            logger.info(f"Email notification {notification.id} sent successfully to {notification.user.email}")
             return True
 
         except Exception as e:
@@ -254,13 +275,34 @@ class SMSNotificationService(NotificationServiceInterface):
         self.api_key = getattr(settings, "SPARROWSMS_API_KEY", "")
         self.sender_id = getattr(settings, "SPARROWSMS_SENDER_ID", "")
         self.endpoint = getattr(settings, "SPARROWSMS_ENDPOINT", "")
+        
+        # Validate configuration
+        if not self.api_key or not self.sender_id or not self.endpoint:
+            logger.warning(
+                "SparrowSMS not fully configured. Missing: "
+                f"API_KEY={bool(self.api_key)}, "
+                f"SENDER_ID={bool(self.sender_id)}, "
+                f"ENDPOINT={bool(self.endpoint)}"
+            )
 
     def send_notification(self, notification: Notification) -> bool:
         """Send SMS notification"""
         try:
+            # Validate configuration
+            if not self.api_key or not self.sender_id or not self.endpoint:
+                error_msg = (
+                    "SMS service not configured. Set SPARROWSMS_API_KEY, "
+                    "SPARROWSMS_SENDER_ID, and SPARROWSMS_ENDPOINT environment variables."
+                )
+                logger.error(f"SMS service error: {error_msg}")
+                notification.mark_as_failed(error_msg)
+                return False
+
             # Check if user has phone number
             if not hasattr(notification.user, "phone_number") or not notification.user.phone_number:
-                notification.mark_as_failed("User has no phone number")
+                error_msg = "User has no phone number"
+                logger.warning(f"SMS notification failed: {error_msg} for user {notification.user.id}")
+                notification.mark_as_failed(error_msg)
                 return False
 
             # Prepare SMS data
@@ -271,6 +313,10 @@ class SMSNotificationService(NotificationServiceInterface):
                 "text": f"{notification.title}\n{notification.body}",
             }
 
+            logger.info(
+                f"Sending SMS to {notification.user.phone_number} via {self.endpoint}"
+            )
+
             # Send SMS via SparrowSMS API
             response = requests.post(self.endpoint, data=sms_data, timeout=30)
 
@@ -279,15 +325,24 @@ class SMSNotificationService(NotificationServiceInterface):
                 if response_data.get("response_code") == "200":
                     notification.mark_as_sent()
                     self._log_event(notification, "sent", {"sms_id": response_data.get("id")})
+                    logger.info(f"SMS notification {notification.id} sent successfully")
                     return True
                 else:
                     error_msg = response_data.get("error_message", "Unknown SMS error")
+                    logger.error(f"SparrowSMS error: {error_msg}")
                     notification.mark_as_failed(error_msg)
                     return False
             else:
-                notification.mark_as_failed(f"SMS API error: {response.status_code}")
+                error_msg = f"SMS API error: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                notification.mark_as_failed(error_msg)
                 return False
 
+        except requests.RequestException as e:
+            error_msg = f"SMS API request error: {str(e)}"
+            logger.error(error_msg)
+            notification.mark_as_failed(error_msg)
+            return False
         except Exception as e:
             logger.error(f"SMS service error: {e}")
             notification.mark_as_failed(str(e))
@@ -314,6 +369,45 @@ class SMSNotificationService(NotificationServiceInterface):
         NotificationEvent.objects.create(notification=notification, event_type=event_type, metadata=metadata or {})
 
 
+class InAppNotificationService(NotificationServiceInterface):
+    """In-app notification service - stores notifications in the database for user access"""
+
+    def send_notification(self, notification: Notification) -> bool:
+        """Save in-app notification to database"""
+        try:
+            # In-app notifications are already in the database (Notification model)
+            # Just mark them as sent/delivered since they're ready for display
+            notification.mark_as_sent()
+            notification.mark_as_delivered()
+            self._log_event(notification, "sent")
+            logger.info(f"In-app notification {notification.id} marked as delivered")
+            return True
+        except Exception as e:
+            logger.error(f"In-app notification service error: {e}")
+            notification.mark_as_failed(str(e))
+            return False
+
+    def send_bulk_notifications(self, notifications: List[Notification]) -> Dict[str, Any]:
+        """Send multiple in-app notifications"""
+        results = {"total": len(notifications), "success": 0, "failed": 0, "errors": []}
+
+        for notification in notifications:
+            try:
+                if self.send_notification(notification):
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+            except Exception as e:
+                results["failed"] += 1
+                results["errors"].append(f"Notification {notification.id}: {str(e)}")
+
+        return results
+
+    def _log_event(self, notification: Notification, event_type: str, metadata: Dict = None):
+        """Log notification event"""
+        NotificationEvent.objects.create(notification=notification, event_type=event_type, metadata=metadata or {})
+
+
 class NotificationServiceFactory:
     """Factory class to get appropriate notification service"""
 
@@ -321,7 +415,7 @@ class NotificationServiceFactory:
         "push": FCMService,
         "email": EmailNotificationService,
         "sms": SMSNotificationService,
-        "in_app": None,  # In-app notifications are handled differently
+        "in_app": InAppNotificationService,
     }
 
     @classmethod
