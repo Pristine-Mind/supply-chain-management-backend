@@ -1746,16 +1746,24 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
 )
 def create_order(request):
     """Create a new order from cart items."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     serializer = CreateOrderSerializer(data=request.data, context={"request": request})
 
     if serializer.is_valid():
         try:
             order = serializer.save()
+            logger.info(f"Order created successfully: {order.order_number}")
             response_serializer = MarketplaceOrderSerializer(order)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
-            return Response({"error": f"Failed to create order: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            import traceback
+            error_msg = f"Failed to create order: {str(e)}"
+            logger.error(f"{error_msg}\n{traceback.format_exc()}")
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
+    logger.warning(f"Order creation validation failed: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

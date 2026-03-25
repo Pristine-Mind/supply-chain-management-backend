@@ -420,10 +420,12 @@ def generate_invoice_from_marketplace_order(sender, instance, created, **kwargs)
     """
     Generate invoice when marketplace order payment is completed
     """
+    from .models import PaymentStatus
+    
     print(f"Signal triggered for MarketplaceOrder {instance.order_number}, payment_status: {instance.payment_status}")
 
-    # Only process if payment status is completed
-    if instance.payment_status == "completed":
+    # Only process if payment status is paid
+    if instance.payment_status == PaymentStatus.PAID:
         try:
             # Check if invoice already exists using proper OneToOne relationship check
             try:
@@ -457,7 +459,7 @@ def generate_invoice_from_marketplace_order(sender, instance, created, **kwargs)
             traceback.print_exc()
     else:
         print(
-            f"Order {instance.order_number} payment_status is '{instance.payment_status}', not 'completed' - skipping invoice generation"
+            f"Order {instance.order_number} payment_status is '{instance.payment_status}', not '{PaymentStatus.PAID}' - skipping invoice generation"
         )
 
 
