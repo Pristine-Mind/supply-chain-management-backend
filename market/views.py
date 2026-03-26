@@ -459,6 +459,16 @@ def verify_khalti_payment(request):
             marketplace_order.payment_method = "khalti"
             marketplace_order.save(update_fields=["payment_status", "transaction_id", "payment_method"])
             
+            # Mark related cart as inactive after successful payment
+            try:
+                # Find and deactivate the cart that was used for this order
+                active_carts = Cart.objects.filter(user=request.user, is_active=True)
+                if active_carts.exists():
+                    # Mark all active carts as inactive (safety measure in case multiple carts)
+                    active_carts.update(is_active=False)
+            except Exception as e:
+                logger.warning(f"Failed to deactivate cart after payment: {str(e)}")
+            
             # Create Payment record for audit trail
             Payment.objects.update_or_create(
                 transaction_id=khalti_transaction_id,
@@ -1047,6 +1057,13 @@ class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
         self.perform_update(serializer)
         
         new_status = instance.payment_status
+        
+        # If payment status is set to paid, deactivate user's active carts
+        if new_status == "paid" and old_status != "paid":
+            try:
+                Cart.objects.filter(user=instance.customer, is_active=True).update(is_active=False)
+            except Exception as e:
+                logger.warning(f"Failed to deactivate cart after payment status update: {str(e)}")
         
         # Return detailed response
         return Response(

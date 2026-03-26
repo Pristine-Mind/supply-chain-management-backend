@@ -1318,9 +1318,6 @@ class MarketplaceOrderManager(models.Manager):
             marketplace_order=order, status=OrderStatus.PENDING, message="Order created successfully"
         )
 
-        # Mark the cart as inactive after successful order creation
-        cart.is_active = False
-        cart.save(update_fields=["is_active"])
         return order
 
 
