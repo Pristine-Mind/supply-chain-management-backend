@@ -856,13 +856,6 @@ class MarketplaceSale(models.Model):
             except Exception:
                 self.is_first_order = False
 
-        # Auto-detect first order for authenticated customers when creating
-        if not self.pk and self.customer:
-            try:
-                self.is_first_order = not MarketplaceOrder.objects.filter(customer=self.customer, is_deleted=False).exists()
-            except Exception:
-                self.is_first_order = False
-
         # If this is marked as first order, waive shipping
         if getattr(self, "is_first_order", False):
             self.shipping_cost = Decimal("0")
