@@ -857,9 +857,9 @@ class MarketplaceSale(models.Model):
                 self.is_first_order = False
 
         # Auto-detect first order for authenticated customers when creating
-        if not self.pk and self.buyer:
+        if not self.pk and self.customer:
             try:
-                self.is_first_order = not MarketplaceOrder.objects.filter(buyer=self.buyer, is_deleted=False).exists()
+                self.is_first_order = not MarketplaceOrder.objects.filter(customer=self.customer, is_deleted=False).exists()
             except Exception:
                 self.is_first_order = False
 
@@ -1637,7 +1637,7 @@ class MarketplaceOrder(models.Model):
         ]
 
     def __str__(self):
-        return f"Order #{self.order_number} - {self.buyer.username}"
+        return f"Order #{self.order_number} - {self.customer.username}"
 
     def clean(self):
         """Validate model fields before saving."""
@@ -1730,7 +1730,7 @@ class MarketplaceOrder(models.Model):
     def available_credit_amount(self):
         """Get remaining available credit amount."""
         try:
-            profile = self.buyer.user_profile
+            profile = self.customer.user_profile
             return profile.get_available_credit()
         except AttributeError:
             return Decimal("0")

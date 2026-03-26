@@ -486,10 +486,10 @@ def create_marketplace_order_from_payment(payment_transaction):
 def send_order_confirmation_email(marketplace_order, payment_transaction):
     """Send comprehensive order confirmation email to the buyer."""
     logger.info(
-        f"Starting customer order confirmation for order {marketplace_order.order_number}, customer: {marketplace_order.buyer.username}"
+        f"Starting customer order confirmation for order {marketplace_order.order_number}, customer: {marketplace_order.customer.username}"
     )
     try:
-        customer = marketplace_order.buyer
+        customer = marketplace_order.customer
         order_items = []
 
         # Collect order items information
@@ -635,7 +635,7 @@ def send_seller_order_notifications(marketplace_order, payment_transaction):
             # Prepare email context for seller
             seller_email_context = {
                 "seller_name": seller.get_full_name() or seller.username,
-                "customer_name": marketplace_order.buyer.get_full_name() or marketplace_order.buyer.username,
+                "customer_name": marketplace_order.customer.get_full_name() or marketplace_order.customer.username,
                 "order": {
                     "order_number": marketplace_order.order_number,
                     "created_at": marketplace_order.created_at.strftime("%B %d, %Y at %I:%M %p"),

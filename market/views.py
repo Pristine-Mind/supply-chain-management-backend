@@ -709,7 +709,7 @@ class DistributorOrdersView(DistributorPermissionMixin, views.APIView):
                 {
                     "id": order.id,
                     "order_number": order.order_number or f"ORD-{order.id}",
-                    "customer": getattr(order.buyer, "username", "Unknown") if order.buyer else "Guest",
+                    "customer": getattr(order.customer, "username", "Unknown") if order.customer else "Guest",
                     "created_at": order.created_at.isoformat() if order.created_at else None,
                     "order_status": order.order_status or "pending",
                     "payment_status": order.payment_status or "pending",
@@ -1038,7 +1038,7 @@ class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
 
     def get_queryset(self):
         """Ensure user can only update their own orders."""
-        return MarketplaceOrder.objects.filter(buyer=self.request.user)
+        return MarketplaceOrder.objects.filter(customer=self.request.user)
 
     def update(self, request, *args, **kwargs):
         """Handle payment status update."""
@@ -1061,7 +1061,7 @@ class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
         # If payment status is set to paid, deactivate user's active carts
         if new_status == "paid" and old_status != "paid":
             try:
-                Cart.objects.filter(user=instance.buyer, is_active=True).update(is_active=False)
+                Cart.objects.filter(user=instance.customer, is_active=True).update(is_active=False)
             except Exception as e:
                 logger.warning(f"Failed to deactivate cart after payment status update: {str(e)}")
         
@@ -1349,7 +1349,7 @@ class OrderTrackingEventViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             # For regular users, show events for their orders only
             user_marketplace_sales = MarketplaceSale.objects.filter(models.Q(buyer=user) | models.Q(seller=user))
-            user_marketplace_orders = MarketplaceOrder.objects.filter(buyer=user)
+            user_marketplace_orders = MarketplaceOrder.objects.filter(customer=user)
 
             qs = OrderTrackingEvent.objects.filter(
                 models.Q(marketplace_sale__in=user_marketplace_sales)
@@ -1463,8 +1463,8 @@ def my_marketplace_orders(request):
 
     # Get base queryset for the authenticated user
     queryset = (
-        MarketplaceOrder.objects.filter(buyer=request.user)
-        .select_related("delivery", "buyer")
+        MarketplaceOrder.objects.filter(customer=request.user)
+        .select_related("delivery", "customer")
         .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
         .filter(is_deleted=False)
     )
@@ -1521,9 +1521,9 @@ def marketplace_order_detail(request, pk):
     """Get marketplace order details."""
     try:
         order = (
-            MarketplaceOrder.objects.select_related("delivery", "buyer")
+            MarketplaceOrder.objects.select_related("delivery", "customer")
             .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
-            .get(pk=pk, buyer=request.user, is_deleted=False)
+            .get(pk=pk, customer=request.user, is_deleted=False)
         )
 
         serializer = MarketplaceOrderSerializer(order)
@@ -1588,7 +1588,7 @@ def cancel_marketplace_order(request, pk):
 def reorder_marketplace_order(request, pk):
     """Reorder items from a marketplace order."""
     try:
-        order = MarketplaceOrder.objects.prefetch_related("items").get(pk=pk, buyer=request.user, is_deleted=False)
+        order = MarketplaceOrder.objects.prefetch_related("items").get(pk=pk, customer=request.user, is_deleted=False)
 
         # For now, return a success message instructing user to add items manually
         # In the future, this could automatically add items to cart
@@ -1616,8 +1616,8 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Get orders for the authenticated user."""
         return (
-            MarketplaceOrder.objects.filter(buyer=self.request.user)
-            .select_related("delivery", "buyer")
+            MarketplaceOrder.objects.filter(customer=self.request.user)
+            .select_related("delivery", "customer")
             .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
             .filter(is_deleted=False)
         )
@@ -1767,8 +1767,8 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         try:
             order = (
-                MarketplaceOrder.objects.filter(buyer=request.user, order_number=order_number, is_deleted=False)
-                .select_related("delivery", "buyer")
+                MarketplaceOrder.objects.filter(customer=request.user, order_number=order_number, is_deleted=False)
+                .select_related("delivery", "customer")
                 .prefetch_related("items__product__product", "items__product__product__images", "tracking_events")
                 .get()
             )
@@ -1853,12 +1853,12 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
                 customer_msg = f"📦 Your order #{order.order_number} status updated to: {status_display}"
 
                 notify_event(
-                    user=order.buyer,
+                    user=order.customer,
                     notif_type=Notification.Type.ORDER,
                     message=customer_msg,
                     via_in_app=True,
                     via_email=True,
-                    email_addr=order.buyer.email,
+                    email_addr=order.customer.email,
                     email_tpl="order_status_update.html",
                     email_ctx={"order": order, "old_status": old_status, "new_status": new_status},
                     via_sms=False,
