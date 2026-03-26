@@ -95,6 +95,10 @@ def initiate_payment(request: HttpRequest) -> Response:
     customer_name = data.get("customer_name")
     customer_email = data.get("customer_email")
     customer_phone = data.get("customer_phone")
+    address = data.get("address")
+    city = data.get("city")
+    state = data.get("state")
+    zip_code = data.get("zip_code")
     tax_amount = Decimal(str(data.get("tax_amount", 0)))
     shipping_cost = Decimal(str(data.get("shipping_cost", 0)))
 
@@ -157,6 +161,10 @@ def initiate_payment(request: HttpRequest) -> Response:
                 customer_name=customer_name or request.user.get_full_name(),
                 customer_email=customer_email or request.user.email,
                 customer_phone=customer_phone,
+                address=address,
+                city=city,
+                state=state,
+                zip_code=zip_code,
                 status=PaymentTransactionStatus.PROCESSING,
             )
             khalti = Khalti()
@@ -408,10 +416,10 @@ def create_marketplace_order_from_payment(payment_transaction):
         delivery_info = DeliveryInfo.objects.create(
             customer_name=payment_transaction.customer_name or payment_transaction.user.get_full_name(),
             phone_number=payment_transaction.customer_phone or "",
-            address="",  # Will be updated when delivery address is provided
-            city="Kathmandu",  # Default, will be updated
-            state="Bagmati",  # Default, will be updated
-            zip_code="44600",  # Default, will be updated
+            address=payment_transaction.address or "",
+            city=payment_transaction.city or "Kathmandu",  # Default if not provided
+            state=payment_transaction.state or "Bagmati",  # Default if not provided
+            zip_code=payment_transaction.zip_code or "44600",  # Default if not provided
             latitude=27.7172,  # Default Kathmandu coordinates
             longitude=85.3240,  # Default Kathmandu coordinates
         )
