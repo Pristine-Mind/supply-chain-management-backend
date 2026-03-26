@@ -1286,32 +1286,48 @@ class MarketplaceOrderManager(models.Manager):
             coupon.save(update_fields=["used_count"])
 
         # Create order items from cart items
+        skipped_items = []
         for cart_item in cart.items.all():
             # Skip items with invalid quantities
             if not cart_item.quantity or cart_item.quantity < 1:
                 logger.warning(f"Skipping cart item {cart_item.id} with invalid quantity: {cart_item.quantity}")
+                skipped_items.append({"cart_item_id": cart_item.id, "reason": "Invalid quantity"})
                 continue
 
             unit_price, negotiation = item_prices[cart_item.id]
-            _ = MarketplaceOrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                quantity=cart_item.quantity,
-                unit_price=unit_price,
-                negotiation=negotiation,
-            )
+            
+            try:
+                with transaction.atomic():
+                    # Create order item
+                    _ = MarketplaceOrderItem.objects.create(
+                        order=order,
+                        product=cart_item.product,
+                        quantity=cart_item.quantity,
+                        unit_price=unit_price,
+                        negotiation=negotiation,
+                    )
 
-            # Update negotiation status if it was used
-            if negotiation:
-                negotiation.status = Negotiation.Status.ORDERED
-                negotiation.save()
+                    # Update negotiation status if it was used
+                    if negotiation:
+                        negotiation.status = Negotiation.Status.ORDERED
+                        negotiation.save()
 
-            # Update product stock (access the underlying Product model)
-            if cart_item.product.product.stock < cart_item.quantity:
-                raise ValidationError(f"Insufficient stock for {cart_item.product.product.name}")
+                    # Update product stock (access the underlying Product model)
+                    if cart_item.product.product.stock < cart_item.quantity:
+                        raise ValidationError(f"Insufficient stock for {cart_item.product.product.name}")
 
-            cart_item.product.product.stock -= cart_item.quantity
-            cart_item.product.product.save()
+                    cart_item.product.product.stock -= cart_item.quantity
+                    cart_item.product.product.save()
+                    
+            except (ValidationError, ValueError) as e:
+                logger.error(f"Failed to create order item for cart_item {cart_item.id}: {str(e)}")
+                # Skip this item - transaction rolls back automatically
+                skipped_items.append({"cart_item_id": cart_item.id, "reason": str(e)})
+                continue
+        
+        # Log summary of skipped items
+        if skipped_items:
+            logger.warning(f"Order {order.order_number} skipped {len(skipped_items)} invalid items: {skipped_items}")
 
         # Create initial tracking event
         _ = OrderTrackingEvent.objects.create(

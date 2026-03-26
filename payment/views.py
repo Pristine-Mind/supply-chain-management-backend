@@ -407,8 +407,10 @@ def create_marketplace_order_from_payment(payment_transaction):
     """
     Create MarketplaceOrder from completed payment transaction.
     This handles the new order system integration.
+    Gracefully handles errors and skips invalid items.
     """
     if not payment_transaction.cart:
+        logger.warning(f"Payment transaction {payment_transaction.id} has no associated cart")
         return None
 
     try:
@@ -440,32 +442,44 @@ def create_marketplace_order_from_payment(payment_transaction):
             return None
 
         # Create marketplace order
-        order = MarketplaceOrder.objects.create_order_from_cart(
-            cart=cart, delivery_info=delivery_info, payment_method=payment_transaction.gateway
-        )
+        try:
+            order = MarketplaceOrder.objects.create_order_from_cart(
+                cart=cart, delivery_info=delivery_info, payment_method=payment_transaction.gateway
+            )
+        except Exception as e:
+            logger.error(f"Error creating order from cart: {str(e)}")
+            # Log but don't fail completely - we can still mark payment as completed
+            return None
 
         # Update order with payment information
-        order.payment_status = PaymentStatus.PAID
-        order.order_status = OrderStatus.CONFIRMED
-        order.transaction_id = str(payment_transaction.transaction_id)
-        order.save()
+        try:
+            order.payment_status = PaymentStatus.PAID
+            order.order_status = OrderStatus.CONFIRMED
+            order.transaction_id = str(payment_transaction.transaction_id)
+            order.save()
+        except Exception as e:
+            logger.error(f"Error updating order payment status: {str(e)}")
+            # Try to continue even if this fails
 
         # Create tracking event for payment confirmation
-        OrderTrackingEvent.objects.create(
-            marketplace_order=order,
-            status=OrderStatus.CONFIRMED,
-            message="Payment confirmed successfully",
-            metadata={
-                "payment_gateway": payment_transaction.gateway,
-                "transaction_id": str(payment_transaction.transaction_id),
-                "gateway_transaction_id": payment_transaction.gateway_transaction_id,
-            },
-        )
+        try:
+            OrderTrackingEvent.objects.create(
+                marketplace_order=order,
+                status=OrderStatus.CONFIRMED,
+                message="Payment confirmed successfully",
+                metadata={
+                    "payment_gateway": payment_transaction.gateway,
+                    "transaction_id": str(payment_transaction.transaction_id),
+                    "gateway_transaction_id": payment_transaction.gateway_transaction_id,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Error creating tracking event: {str(e)}")
 
         return order
 
     except Exception as e:
-        logger.error(f"Error creating marketplace order from payment: {e}")
+        logger.error(f"Error creating marketplace order from payment: {str(e)}", exc_info=True)
         return None
 
 
