@@ -1198,6 +1198,17 @@ class MarketplaceOrderManager(models.Manager):
         if not cart.items.exists():
             raise ValidationError("Cannot create order from empty cart.")
 
+        # Pre-validate cart items - skip invalid ones from the start
+        valid_items = []
+        for cart_item in cart.items.all():
+            if not cart_item.quantity or cart_item.quantity < 1:
+                logger.warning(f"Skipping invalid cart item {cart_item.id} with quantity: {cart_item.quantity}")
+                continue
+            valid_items.append(cart_item)
+        
+        if not valid_items:
+            raise ValidationError("Cart has no valid items with quantity >= 1.")
+
         # Calculate total amount (items + shipping)
         items_total = Decimal("0")
         item_prices = {}
@@ -1211,7 +1222,7 @@ class MarketplaceOrderManager(models.Manager):
         except Exception:
             pass
 
-        for cart_item in cart.items.all():
+        for cart_item in valid_items:
             # Check for accepted negotiation
             from django.apps import apps
 
@@ -1287,13 +1298,7 @@ class MarketplaceOrderManager(models.Manager):
 
         # Create order items from cart items
         skipped_items = []
-        for cart_item in cart.items.all():
-            # Skip items with invalid quantities
-            if not cart_item.quantity or cart_item.quantity < 1:
-                logger.warning(f"Skipping cart item {cart_item.id} with invalid quantity: {cart_item.quantity}")
-                skipped_items.append({"cart_item_id": cart_item.id, "reason": "Invalid quantity"})
-                continue
-
+        for cart_item in valid_items:
             unit_price, negotiation = item_prices[cart_item.id]
             
             try:
@@ -1325,9 +1330,13 @@ class MarketplaceOrderManager(models.Manager):
                 skipped_items.append({"cart_item_id": cart_item.id, "reason": str(e)})
                 continue
         
+        # Ensure we have at least one valid order item
+        if not order.items.exists():
+            raise ValidationError("Order creation failed: no valid items could be added to the order.")
+        
         # Log summary of skipped items
         if skipped_items:
-            logger.warning(f"Order {order.order_number} skipped {len(skipped_items)} invalid items: {skipped_items}")
+            logger.warning(f"Order {order.order_number} skipped {len(skipped_items)} items: {skipped_items}")
 
         # Create initial tracking event
         _ = OrderTrackingEvent.objects.create(
