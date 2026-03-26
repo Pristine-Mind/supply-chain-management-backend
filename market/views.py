@@ -80,6 +80,7 @@ from .models import (
     Notification,
     OrderStatus,
     Payment,
+    PaymentStatus,
     ProductChatMessage,
     ProductTag,
     ProductView,
@@ -376,37 +377,139 @@ def shipping_address_form(request, payment_id):
 def verify_khalti_payment(request):
     """
     API view to verify Khalti payment using the payment token.
+    Follows Khalti official API documentation.
+    Updates MarketplaceOrder payment status on success.
+    
+    Accepts:
+    - token: Khalti payment token
+    - amount: Amount in paisa (required)
+    - order_id: MarketplaceOrder ID (optional - if not provided, uses latest pending order)
     """
     token = request.data.get("token")
     amount = request.data.get("amount")
-    transaction_id = request.data.get("transaction_id")
+    order_id = request.data.get("order_id")
 
-    if not token or not amount or not transaction_id:
-        return Response({"error": "Missing token, amount, or transaction ID."}, status=status.HTTP_400_BAD_REQUEST)
+    if not token or not amount:
+        return Response({"error": "Missing token or amount."}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Khalti verification endpoint
     url = "https://khalti.com/api/v2/payment/verify/"
-    payload = {"token": token, "amount": amount}
-    headers = {"Authorization": f"Key {settings.KHALTI_SECRET_KEY}"}
+    payload = {
+        "token": token,
+        "amount": int(amount)  # Amount in paisa
+    }
+    headers = {
+        "Authorization": f"Key {settings.KHALTI_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
 
-    response = requests.post(url, data=payload, headers=headers)
-    if response.status_code == 200:
-        try:
-            payment = Payment.objects.get(transaction_id=transaction_id)
-            payment.status = "completed"
-            payment.save()
-
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            khalti_transaction_id = response_data.get("idx")  # Khalti transaction ID
+            
+            if not khalti_transaction_id:
+                return Response(
+                    {"error": "Invalid payment response from Khalti."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get the MarketplaceOrder
+            marketplace_order = None
+            
+            if order_id:
+                # If order_id is provided, use it
+                try:
+                    marketplace_order = MarketplaceOrder.objects.get(
+                        id=order_id,
+                        customer=request.user,
+                        payment_status=PaymentStatus.PENDING
+                    )
+                except MarketplaceOrder.DoesNotExist:
+                    return Response(
+                        {"error": "Order not found or already paid."}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            else:
+                # Find the user's latest pending order
+                try:
+                    marketplace_order = MarketplaceOrder.objects.filter(
+                        customer=request.user,
+                        payment_status=PaymentStatus.PENDING,
+                        is_deleted=False
+                    ).order_by("-created_at").first()
+                    
+                    if not marketplace_order:
+                        return Response(
+                            {"error": "No pending orders found for your account."}, 
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+                except Exception as e:
+                    logger.error(f"Error finding pending order: {str(e)}")
+                    return Response(
+                        {"error": "Unable to find pending order."}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Update MarketplaceOrder with payment information
+            marketplace_order.payment_status = PaymentStatus.PAID
+            marketplace_order.transaction_id = khalti_transaction_id
+            marketplace_order.payment_method = "khalti"
+            marketplace_order.save(update_fields=["payment_status", "transaction_id", "payment_method"])
+            
+            # Create Payment record for audit trail
+            Payment.objects.update_or_create(
+                transaction_id=khalti_transaction_id,
+                defaults={
+                    "amount": float(Decimal(str(amount / 100))),  # Convert paisa to rupees
+                    "status": "completed",
+                    "payment_method": "khalti"
+                }
+            )
+            
             # Send SMS confirmation
-            sms_service.send_payment_confirmation_sms(payment)
-
-            return redirect("payment_confirmation", payment_id=payment.id)
-        except Payment.DoesNotExist:
-            payment.status = "failed"
-            payment.save()
-            return Response({"error": "Payment not found."}, status=status.HTTP_404_NOT_FOUND)
-    else:
-        payment.status = "failed"
-        payment.save()
-        return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                sms_service.send_payment_confirmation_sms(marketplace_order)
+            except Exception as e:
+                logger.warning(f"Failed to send SMS confirmation: {str(e)}")
+            
+            return Response({
+                "success": True,
+                "message": "Payment verified successfully.",
+                "transaction_id": khalti_transaction_id,
+                "order_number": marketplace_order.order_number,
+                "amount": float(marketplace_order.total_amount),
+                "order_id": marketplace_order.id
+            }, status=status.HTTP_200_OK)
+        
+        else:
+            error_data = response.json() if response.status_code != 500 else {}
+            error_message = error_data.get("detail", "Payment verification failed.")
+            
+            return Response({
+                "error": error_message,
+                "status_code": response.status_code
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    except requests.exceptions.Timeout:
+        return Response(
+            {"error": "Khalti verification timeout. Please try again."}, 
+            status=status.HTTP_504_GATEWAY_TIMEOUT
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Khalti verification error: {str(e)}")
+        return Response(
+            {"error": "Unable to verify payment with Khalti."}, 
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    except Exception as e:
+        logger.error(f"Payment verification error: {str(e)}")
+        return Response(
+            {"error": "An error occurred during payment verification."}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
