@@ -638,7 +638,7 @@ class InvoiceGenerationService:
             If you have any questions, please contact our support team.
 
             Best regards,
-            Supply Chain Management Team
+            Mulyabazzar Team
             """
 
             email = EmailMessage(

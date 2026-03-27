@@ -257,6 +257,12 @@ def payment_callback(request: HttpRequest) -> Response:
                 success = payment_transaction.mark_as_completed(khalti_transaction_id)
 
                 if success:
+                    # Mark cart as inactive after successful payment
+                    if payment_transaction.cart:
+                        payment_transaction.cart.is_active = False
+                        payment_transaction.cart.save()
+                        logger.info(f"✅ Cart {payment_transaction.cart.id} marked as inactive for user {payment_transaction.user.username}")
+
                     # Generate invoice (placeholder: implement actual logic if needed)
                     # payment_transaction.generate_invoice()
 
@@ -747,6 +753,12 @@ def verify_payment(request: HttpRequest) -> Response:
                 success = payment_transaction.mark_as_completed(pidx)
 
                 if success:
+                    # Mark cart as inactive after successful payment
+                    if payment_transaction.cart:
+                        payment_transaction.cart.is_active = False
+                        payment_transaction.cart.save()
+                        logger.info(f"✅ Cart {payment_transaction.cart.id} marked as inactive for user {payment_transaction.user.username}")
+
                     # Create MarketplaceOrder from payment (new system)
                     marketplace_order = create_marketplace_order_from_payment(payment_transaction)
 
