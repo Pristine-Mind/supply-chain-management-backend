@@ -2,7 +2,8 @@ from decimal import Decimal
 
 import django_filters
 from django.db import models
-from django.db.models import Coalesce, Count, DecimalField, Q
+from django.db.models import Count, DecimalField, Q
+from django.db.models.functions import Coalesce
 
 from user.models import UserProfile
 
