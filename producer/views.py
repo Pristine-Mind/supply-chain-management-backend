@@ -2,6 +2,8 @@ import hashlib
 import logging
 import random
 from datetime import date, datetime, timedelta
+from decimal import Decimal
+from itertools import zip_longest
 
 import requests
 from django.conf import settings
@@ -10,6 +12,7 @@ from django.db import models, transaction
 from django.db.models import (
     Case,
     Count,
+    DecimalField,
     ExpressionWrapper,
     F,
     FloatField,
@@ -19,8 +22,6 @@ from django.db.models import (
     Sum,
     When,
 )
-from itertools import zip_longest
-
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
@@ -1638,16 +1639,16 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         """
         Set or update discount percentage for a marketplace product.
         Endpoint: PATCH/POST /api/marketplace-products/{id}/set-discount/
-        
+
         Request body:
         {
             "discount_percentage": 15.0
         }
-        
+
         Returns the updated marketplace product with calculated discounted price.
         """
         marketplace_product = self.get_object()
-        
+
         # Check permissions - user must be the product owner or staff
         product_user = marketplace_product.product.user
         if request.user != product_user and not request.user.is_staff and not request.user.is_superuser:
@@ -1655,15 +1656,15 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 {"detail": "You don't have permission to update discount for this product"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         discount_percentage = request.data.get("discount_percentage")
-        
+
         if discount_percentage is None:
             return Response(
                 {"error": "discount_percentage is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         try:
             discount_percentage = float(discount_percentage)
         except (ValueError, TypeError):
@@ -1671,17 +1672,17 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 {"error": "discount_percentage must be a valid number"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         if discount_percentage < 0 or discount_percentage > 100:
             return Response(
                 {"error": "discount_percentage must be between 0 and 100"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         try:
             marketplace_product.discount_percentage = discount_percentage
             marketplace_product.save()
-            
+
             serializer = self.get_serializer(marketplace_product)
             return Response(
                 {
@@ -1709,7 +1710,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         """
         Get current discount information for a marketplace product.
         Endpoint: GET /api/marketplace-products/{id}/discount-info/
-        
+
         Returns:
         {
             "listed_price": 1000,
@@ -1720,7 +1721,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         }
         """
         marketplace_product = self.get_object()
-        
+
         return Response(
             {
                 "listed_price": marketplace_product.listed_price,

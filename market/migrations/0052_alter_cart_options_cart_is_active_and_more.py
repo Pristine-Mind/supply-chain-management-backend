@@ -6,25 +6,25 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('market', '0051_salesbannerstats_and_more'),
+        ("market", "0051_salesbannerstats_and_more"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='cart',
-            options={'verbose_name': 'Cart', 'verbose_name_plural': 'Carts'},
+            name="cart",
+            options={"verbose_name": "Cart", "verbose_name_plural": "Carts"},
         ),
         migrations.AddField(
-            model_name='cart',
-            name='is_active',
-            field=models.BooleanField(db_index=True, default=True, verbose_name='Is Active'),
+            model_name="cart",
+            name="is_active",
+            field=models.BooleanField(db_index=True, default=True, verbose_name="Is Active"),
         ),
         migrations.AddIndex(
-            model_name='cart',
-            index=models.Index(fields=['user', 'is_active'], name='market_cart_user_id_0855b4_idx'),
+            model_name="cart",
+            index=models.Index(fields=["user", "is_active"], name="market_cart_user_id_0855b4_idx"),
         ),
         migrations.AddIndex(
-            model_name='cart',
-            index=models.Index(fields=['created_at'], name='market_cart_created_313fc9_idx'),
+            model_name="cart",
+            index=models.Index(fields=["created_at"], name="market_cart_created_313fc9_idx"),
         ),
     ]

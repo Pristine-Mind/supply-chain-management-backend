@@ -340,19 +340,20 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
     if created:
         try:
             msg = f"🛒 Your order #{instance.order_number} has been placed successfully!"
-            
+
             # Prepare JSON-serializable order context for email
             # Using simple values that are guaranteed to exist
             email_ctx = {
                 "order_number": instance.order_number,
-                "customer_name": getattr(instance.customer, "first_name", "") or getattr(instance.customer, "username", "Customer"),
+                "customer_name": getattr(instance.customer, "first_name", "")
+                or getattr(instance.customer, "username", "Customer"),
                 "total_amount": str(instance.total_amount),
                 "currency": instance.currency,
                 "order_status": instance.order_status,
                 "payment_status": instance.payment_status,
                 "created_at": instance.created_at.isoformat(),
             }
-            
+
             # Get SMS number from delivery information
             sms_number = None
             has_sms = False
@@ -362,10 +363,10 @@ def marketplace_order_created_notification(sender, instance: "MarketplaceOrder",
                     has_sms = True
             except Exception:
                 pass
-            
+
             # SMS body for the order notification
             sms_body = f"Your order #{instance.order_number} for {instance.currency} {instance.total_amount} has been placed. Track it here."
-            
+
             notify_event(
                 user=instance.customer,
                 notif_type=Notification.Type.ORDER,
@@ -436,7 +437,7 @@ def generate_invoice_from_marketplace_order(sender, instance, created, **kwargs)
     Generate invoice when marketplace order payment is completed
     """
     from .models import PaymentStatus
-    
+
     print(f"Signal triggered for MarketplaceOrder {instance.order_number}, payment_status: {instance.payment_status}")
 
     # Only process if payment status is paid

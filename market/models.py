@@ -1198,7 +1198,7 @@ class MarketplaceOrderManager(models.Manager):
                 logger.warning(f"Skipping invalid cart item {cart_item.id} with quantity: {cart_item.quantity}")
                 continue
             valid_items.append(cart_item)
-        
+
         if not valid_items:
             raise ValidationError("Cart has no valid items with quantity >= 1.")
 
@@ -1293,7 +1293,7 @@ class MarketplaceOrderManager(models.Manager):
         skipped_items = []
         for cart_item in valid_items:
             unit_price, negotiation = item_prices[cart_item.id]
-            
+
             try:
                 with transaction.atomic():
                     # Create order item
@@ -1316,17 +1316,17 @@ class MarketplaceOrderManager(models.Manager):
 
                     cart_item.product.product.stock -= cart_item.quantity
                     cart_item.product.product.save()
-                    
+
             except (ValidationError, ValueError) as e:
                 logger.error(f"Failed to create order item for cart_item {cart_item.id}: {str(e)}")
                 # Skip this item - transaction rolls back automatically
                 skipped_items.append({"cart_item_id": cart_item.id, "reason": str(e)})
                 continue
-        
+
         # Ensure we have at least one valid order item
         if not order.items.exists():
             raise ValidationError("Order creation failed: no valid items could be added to the order.")
-        
+
         # Log summary of skipped items
         if skipped_items:
             logger.warning(f"Order {order.order_number} skipped {len(skipped_items)} items: {skipped_items}")

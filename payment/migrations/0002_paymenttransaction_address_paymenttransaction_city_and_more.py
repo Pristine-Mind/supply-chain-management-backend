@@ -6,28 +6,28 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('payment', '0001_initial'),
+        ("payment", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='paymenttransaction',
-            name='address',
-            field=models.TextField(blank=True, null=True, verbose_name='Address'),
+            model_name="paymenttransaction",
+            name="address",
+            field=models.TextField(blank=True, null=True, verbose_name="Address"),
         ),
         migrations.AddField(
-            model_name='paymenttransaction',
-            name='city',
-            field=models.CharField(blank=True, max_length=100, null=True, verbose_name='City'),
+            model_name="paymenttransaction",
+            name="city",
+            field=models.CharField(blank=True, max_length=100, null=True, verbose_name="City"),
         ),
         migrations.AddField(
-            model_name='paymenttransaction',
-            name='state',
-            field=models.CharField(blank=True, max_length=100, null=True, verbose_name='State'),
+            model_name="paymenttransaction",
+            name="state",
+            field=models.CharField(blank=True, max_length=100, null=True, verbose_name="State"),
         ),
         migrations.AddField(
-            model_name='paymenttransaction',
-            name='zip_code',
-            field=models.CharField(blank=True, max_length=20, null=True, verbose_name='ZIP Code'),
+            model_name="paymenttransaction",
+            name="zip_code",
+            field=models.CharField(blank=True, max_length=20, null=True, verbose_name="ZIP Code"),
         ),
     ]
