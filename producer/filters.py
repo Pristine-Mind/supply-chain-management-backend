@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import django_filters
-from django import models
+from django.db import models
 from django.db.models import Coalesce, Count, DecimalField, Q
 
 from user.models import UserProfile
