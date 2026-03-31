@@ -1,16 +1,26 @@
 """
 API Views for Advanced Product Filtering with Faceted Search
+Enhanced with search relevance ranking, color normalization, and comprehensive filtering
 """
 
-from rest_framework import status
+from decimal import Decimal
+
+from django.db.models import Case, DecimalField, F, Q, Value, When
+from django.db.models.functions import Coalesce
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from producer.search_utils import (
+    CityFilter,
+    ColorFilter,
+    SizeFilter,
+    build_relevance_score_case,
+)
+
 from .advanced_filters import (
-    AdvancedMarketplaceProductFilter,
     FacetedSearchService,
     get_filtered_products_with_facets,
 )
@@ -25,12 +35,15 @@ class StandardResultsSetPagination(PageNumberPagination):
 
 class AdvancedProductSearchView(APIView):
     """
-    Advanced product search with faceted filtering.
+    Advanced product search with faceted filtering, relevance ranking, and comprehensive filters.
 
     Query Parameters:
-    - search: Text search across product name, description, tags
+    - q or search: Text search with relevance ranking
+    - city: City name or ID (case-insensitive)
     - category_id, subcategory_id, sub_subcategory_id: Category filters
     - brand_id: Filter by brand (can be multiple: brand_id=1&brand_id=2)
+    - colors: Color values (case-insensitive with aliasing support)
+    - sizes: Size values (case-insensitive)
     - min_price, max_price: Price range filters
     - price_range: Preset ranges (budget, economy, mid, premium, luxury)
     - min_rating: Minimum average rating (1-5)
@@ -41,9 +54,9 @@ class AdvancedProductSearchView(APIView):
     - has_discount: true/false
     - discount_min: Minimum discount percentage
     - on_sale: true/false
-    - size, color: Product attributes
     - b2b_available: true/false
-    - sort_by: price_asc, price_desc, newest, popular, rating, name_asc, name_desc, discount
+    - made_in_nepal: true/false
+    - sort_by: relevance, price_asc, price_desc, newest, popular, rating, name_asc, name_desc, discount
     - near_me: lat,lng,radius_km (e.g., 27.7172,85.3240,10)
     """
 
@@ -51,74 +64,270 @@ class AdvancedProductSearchView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
+        from producer.models import MarketplaceProduct
+
+        # Get base queryset
+        queryset = (
+            MarketplaceProduct.objects.filter(is_available=True)
+            .select_related("product", "product__user", "product__category")
+            .prefetch_related("variants", "reviews")
+        )
+
         # Get all query parameters
-        filter_params = request.query_params.dict()
-
-        # Handle multiple values for brand_id
+        search_query = request.query_params.get("q") or request.query_params.get("search", "").strip()
+        city = request.query_params.get("city")
+        category_id = request.query_params.get("category_id")
+        subcategory_id = request.query_params.get("subcategory_id")
+        sub_subcategory_id = request.query_params.get("sub_subcategory_id")
+        colors = request.query_params.getlist("colors")
+        sizes = request.query_params.getlist("sizes")
+        min_price = request.query_params.get("min_price")
+        max_price = request.query_params.get("max_price")
+        min_rating = request.query_params.get("min_rating")
+        delivery_days = request.query_params.get("delivery_days_max")
+        made_in_nepal = request.query_params.get("made_in_nepal")
+        in_stock = request.query_params.get("in_stock")
+        has_discount = request.query_params.get("has_discount")
+        sort_by = request.query_params.get("sort_by", "relevance")
         brand_ids = request.query_params.getlist("brand_id")
-        if brand_ids:
-            filter_params["brand_id"] = brand_ids
 
-        # Handle multiple values for size and color
-        sizes = request.query_params.getlist("size")
-        if sizes:
-            filter_params["size"] = sizes
+        # ========================
+        # Apply Search with Relevance Ranking
+        # ========================
+        has_search = search_query and len(search_query) >= 2
+        if has_search:
+            queryset = queryset.filter(
+                Q(product__name__icontains=search_query)
+                | Q(product__description__icontains=search_query)
+                | Q(search_tags__contains=search_query.lower())
+            ).distinct()
 
-        colors = request.query_params.getlist("color")
+            # Annotate with relevance score
+            relevance_case = build_relevance_score_case(search_query)
+            queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
+        else:
+            queryset = queryset.annotate(relevance_score=Value(0, output_field=DecimalField()))
+
+        # ========================
+        # Apply Category Filters
+        # ========================
+        if category_id:
+            try:
+                cat_id = int(category_id)
+                queryset = queryset.filter(product__category_id=cat_id)
+            except (ValueError, TypeError):
+                pass
+
+        if subcategory_id:
+            try:
+                subcat_id = int(subcategory_id)
+                queryset = queryset.filter(product__subcategory_id=subcat_id)
+            except (ValueError, TypeError):
+                pass
+
+        if sub_subcategory_id:
+            try:
+                subsubcat_id = int(sub_subcategory_id)
+                queryset = queryset.filter(product__sub_subcategory_id=subsubcat_id)
+            except (ValueError, TypeError):
+                pass
+
+        # ========================
+        # Apply City Filter (Case-Insensitive)
+        # ========================
+        if city:
+            queryset = CityFilter.apply_city_filter(queryset, city)
+
+        # ========================
+        # Apply Color Filter (Normalized)
+        # ========================
         if colors:
-            filter_params["color"] = colors
+            queryset = ColorFilter.apply_color_filter(queryset, colors)
 
-        # Get filtered results with facets
-        result = get_filtered_products_with_facets(filter_params)
+        # ========================
+        # Apply Size Filter (Case-Insensitive)
+        # ========================
+        if sizes:
+            queryset = SizeFilter.apply_size_filter(queryset, sizes)
 
-        if not result["is_valid"]:
-            return Response(
-                {"error": "Invalid filter parameters", "details": result["errors"]}, status=status.HTTP_400_BAD_REQUEST
-            )
+        # ========================
+        # Apply Price Filters
+        # ========================
+        if min_price:
+            try:
+                min_val = Decimal(str(min_price))
+                queryset = queryset.filter(
+                    Coalesce("discounted_price", "listed_price", output_field=DecimalField()) >= min_val
+                )
+            except (ValueError, TypeError):
+                pass
 
-        # Paginate results
+        if max_price:
+            try:
+                max_val = Decimal(str(max_price))
+                queryset = queryset.filter(
+                    Coalesce("discounted_price", "listed_price", output_field=DecimalField()) <= max_val
+                )
+            except (ValueError, TypeError):
+                pass
+
+        # ========================
+        # Apply Rating Filter
+        # ========================
+        if min_rating:
+            try:
+                rating = Decimal(str(min_rating))
+                queryset = queryset.filter(average_rating__gte=rating)
+            except (ValueError, TypeError):
+                pass
+
+        # ========================
+        # Apply Delivery Time Filter
+        # ========================
+        if delivery_days:
+            try:
+                days = int(delivery_days)
+                queryset = queryset.filter(Q(estimated_delivery_days__isnull=True) | Q(estimated_delivery_days__lte=days))
+            except (ValueError, TypeError):
+                pass
+
+        # ========================
+        # Apply Brand Filter
+        # ========================
+        if brand_ids:
+            try:
+                brand_ids = [int(b) for b in brand_ids if b]
+                if brand_ids:
+                    queryset = queryset.filter(product__brand_id__in=brand_ids)
+            except (ValueError, TypeError):
+                pass
+
+        # ========================
+        # Apply Flags and Availability
+        # ========================
+        if made_in_nepal and made_in_nepal.lower() == "true":
+            queryset = queryset.filter(is_made_in_nepal=True)
+
+        if in_stock and in_stock.lower() == "true":
+            queryset = queryset.filter(product__stock__gt=0)
+
+        if has_discount and has_discount.lower() == "true":
+            queryset = queryset.filter(discounted_price__isnull=False, discounted_price__lt=F("listed_price"))
+
+        # ========================
+        # Apply Sorting
+        # ========================
+        if sort_by == "rating":
+            queryset = queryset.order_by("-average_rating", "-total_reviews", "-listed_date")
+        elif sort_by == "price_asc" or sort_by == "price_low":
+            queryset = queryset.annotate(
+                effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
+            ).order_by("effective_price")
+        elif sort_by == "price_desc" or sort_by == "price_high":
+            queryset = queryset.annotate(
+                effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
+            ).order_by("-effective_price")
+        elif sort_by == "newest":
+            queryset = queryset.order_by("-listed_date")
+        elif sort_by == "popular":
+            queryset = queryset.order_by("-view_count", "-recent_purchases_count")
+        elif sort_by == "discount":
+            queryset = queryset.annotate(
+                discount_pct=Case(
+                    When(
+                        discounted_price__isnull=False,
+                        then=(F("listed_price") - F("discounted_price")) / F("listed_price") * 100,
+                    ),
+                    default=Value(0, output_field=DecimalField()),
+                    output_field=DecimalField(),
+                )
+            ).order_by("-discount_pct")
+        elif sort_by == "name_asc":
+            queryset = queryset.order_by("product__name")
+        elif sort_by == "name_desc":
+            queryset = queryset.order_by("-product__name")
+        else:  # Default: relevance or newest
+            if has_search:
+                queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date")
+            else:
+                queryset = queryset.order_by("-listed_date", "-view_count")
+
+        # ========================
+        # Get Total Count
+        # ========================
+        total_count = queryset.count()
+
+        # ========================
+        # Paginate Results
+        # ========================
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(result["products"], request)
+        page = paginator.paginate_queryset(queryset, request)
 
         if page is not None:
             serializer = MarketplaceProductSerializer(page, many=True, context={"request": request})
-            return paginator.get_paginated_response(
-                {"results": serializer.data, "facets": result["facets"], "total_count": result["total_count"]}
-            )
+            response_data = {
+                "results": serializer.data,
+                "total_count": total_count,
+                "page_size": self.pagination_class.page_size,
+            }
+            return paginator.get_paginated_response(response_data)
 
-        serializer = MarketplaceProductSerializer(result["products"], many=True, context={"request": request})
-
-        return Response({"results": serializer.data, "facets": result["facets"], "total_count": result["total_count"]})
+        serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
+        return Response(
+            {
+                "results": serializer.data,
+                "total_count": total_count,
+            }
+        )
 
 
 class ProductFacetsView(APIView):
     """
-    Get available facet counts for products.
-    Useful for building filter UI.
+    Get available facet counts for products with current filters applied.
+    Useful for building dynamic filter UI.
     """
 
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # Get base queryset (can be filtered by category, etc.)
-        from producer.models import MarketplaceProduct
-
-        queryset = MarketplaceProduct.objects.filter(is_available=True)
-
-        # Apply any base filters from query params
-        category_id = request.query_params.get("category_id")
-        if category_id:
-            queryset = queryset.filter(product__category_id=category_id)
-
-        facets = FacetedSearchService.get_facet_counts(queryset)
-
-        # Add min/max price info
         from django.db.models import Max, Min
 
+        from producer.models import MarketplaceProduct
+
+        # Get base queryset
+        queryset = MarketplaceProduct.objects.filter(is_available=True)
+
+        # Apply category filters if specified
+        category_id = request.query_params.get("category_id")
+        if category_id:
+            try:
+                cat_id = int(category_id)
+                queryset = queryset.filter(product__category_id=cat_id)
+            except (ValueError, TypeError):
+                pass
+
+        # Get facet counts
+        try:
+            facets = FacetedSearchService.get_facet_counts(queryset)
+        except Exception:
+            facets = {}
+
+        # Get price range
         price_stats = queryset.aggregate(min_price=Min("listed_price"), max_price=Max("listed_price"))
 
+        # Get available colors
+        colors = list(queryset.values_list("color", flat=True).distinct().exclude(color__isnull=True))
+
+        # Get available sizes
+        sizes = list(queryset.values_list("size", flat=True).distinct().exclude(size__isnull=True))
+
         return Response(
-            {"facets": facets, "price_range": {"min": price_stats["min_price"] or 0, "max": price_stats["max_price"] or 0}}
+            {
+                "facets": facets,
+                "price_range": {"min": float(price_stats["min_price"] or 0), "max": float(price_stats["max_price"] or 0)},
+                "available_colors": colors,
+                "available_sizes": sizes,
+            }
         )
 
 
@@ -127,7 +336,17 @@ class ProductFacetsView(APIView):
 def product_filter_options(request):
     """
     Get all available filter options and their possible values.
-    Useful for building filter dropdowns.
+    Useful for building filter dropdowns and UI elements.
+
+    Returns:
+    - categories: All active categories
+    - brands: All active brands
+    - sizes: All available size options
+    - colors: All available colors with normalization info
+    - price_ranges: Predefined price ranges for quick filtering
+    - stock_statuses: Available stock status options
+    - delivery_times: Available delivery time slots
+    - sort_options: Available sorting methods
     """
     from producer.models import Brand, Category, MarketplaceProduct
 
@@ -140,8 +359,16 @@ def product_filter_options(request):
     # Size options
     sizes = [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.SizeChoices.choices]
 
-    # Color options
-    colors = [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.ColorChoices.choices]
+    # Color options with normalization info
+    from producer.search_utils import COLOR_ALIASES
+
+    colors_with_aliases = []
+    for color_value, color_label in MarketplaceProduct.ColorChoices.choices:
+        color_lower = color_value.lower()
+        aliases = COLOR_ALIASES.get(color_lower, [])
+        colors_with_aliases.append(
+            {"value": color_value, "label": color_label, "aliases": aliases, "normalized_value": color_lower}
+        )
 
     # Price ranges
     price_ranges = [
@@ -167,15 +394,17 @@ def product_filter_options(request):
         {"value": "1_week", "label": "Within 1 Week"},
     ]
 
-    # Sort options
+    # Sort options with descriptions
     sort_options = [
-        {"value": "relevance", "label": "Relevance"},
-        {"value": "price_asc", "label": "Price: Low to High"},
-        {"value": "price_desc", "label": "Price: High to Low"},
-        {"value": "newest", "label": "Newest First"},
-        {"value": "popular", "label": "Most Popular"},
-        {"value": "rating", "label": "Highest Rated"},
-        {"value": "discount", "label": "Biggest Discount"},
+        {"value": "relevance", "label": "Relevance (Default)", "description": "Most relevant results first"},
+        {"value": "price_asc", "label": "Price: Low to High", "description": "Cheapest products first"},
+        {"value": "price_desc", "label": "Price: High to Low", "description": "Most expensive products first"},
+        {"value": "newest", "label": "Newest First", "description": "Recently added products"},
+        {"value": "popular", "label": "Most Popular", "description": "Products with most views"},
+        {"value": "rating", "label": "Highest Rated", "description": "Best reviewed products"},
+        {"value": "discount", "label": "Biggest Discount", "description": "Products with highest discount %"},
+        {"value": "name_asc", "label": "Name: A-Z", "description": "Alphabetical order"},
+        {"value": "name_desc", "label": "Name: Z-A", "description": "Reverse alphabetical order"},
     ]
 
     return Response(
@@ -183,7 +412,7 @@ def product_filter_options(request):
             "categories": categories,
             "brands": brands,
             "sizes": sizes,
-            "colors": colors,
+            "colors": colors_with_aliases,
             "price_ranges": price_ranges,
             "stock_statuses": stock_statuses,
             "delivery_times": delivery_times,
@@ -264,10 +493,7 @@ def advanced_product_search(request):
     result = get_filtered_products_with_facets(filter_params)
 
     # Serialize
-    page = request.query_params.get("page", 1)
     page_size = request.query_params.get("page_size", 20)
-
-    from rest_framework.pagination import PageNumberPagination
 
     paginator = PageNumberPagination()
     paginator.page_size = int(page_size)

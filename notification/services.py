@@ -275,7 +275,7 @@ class SMSNotificationService(NotificationServiceInterface):
         self.api_key = getattr(settings, "SPARROWSMS_API_KEY", "")
         self.sender_id = getattr(settings, "SPARROWSMS_SENDER_ID", "")
         self.endpoint = getattr(settings, "SPARROWSMS_ENDPOINT", "")
-        
+
         # Validate configuration
         if not self.api_key or not self.sender_id or not self.endpoint:
             logger.warning(
@@ -313,9 +313,7 @@ class SMSNotificationService(NotificationServiceInterface):
                 "text": f"{notification.title}\n{notification.body}",
             }
 
-            logger.info(
-                f"Sending SMS to {notification.user.phone_number} via {self.endpoint}"
-            )
+            logger.info(f"Sending SMS to {notification.user.phone_number} via {self.endpoint}")
 
             # Send SMS via SparrowSMS API
             response = requests.post(self.endpoint, data=sms_data, timeout=30)

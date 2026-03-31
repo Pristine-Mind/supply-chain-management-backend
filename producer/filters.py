@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 import django_filters
-from django.db.models import Count, Q
+from django import models
+from django.db.models import Coalesce, Count, DecimalField, Q
 
 from user.models import UserProfile
 
@@ -135,7 +138,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
     category_id = django_filters.CharFilter(method="filter_category_id", label="Category ID")
     subcategory_id = django_filters.CharFilter(method="filter_subcategory_id", label="Subcategory ID")
     sub_subcategory_id = django_filters.CharFilter(method="filter_sub_subcategory_id", label="Sub-subcategory ID")
-    city = django_filters.CharFilter(field_name="product__location__name", lookup_expr="exact")
+    city = django_filters.CharFilter(method="filter_city", label="City")
     profile_type = django_filters.ChoiceFilter(
         choices=UserProfile.BusinessType.choices,
         field_name="product__user__user_profile__business_type",
@@ -161,6 +164,16 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         method="filter_has_additional_info", label="Has Additional Information"
     )
 
+    # Price range filters
+    min_price = django_filters.NumberFilter(method="filter_min_price", label="Minimum Price")
+    max_price = django_filters.NumberFilter(method="filter_max_price", label="Maximum Price")
+
+    # Rating filter
+    min_rating = django_filters.NumberFilter(method="filter_min_rating", label="Minimum Rating")
+
+    # Delivery time filter
+    delivery_days = django_filters.NumberFilter(method="filter_delivery_days", label="Delivery Days")
+
     class Meta:
         model = MarketplaceProduct
         fields = [
@@ -176,12 +189,48 @@ class MarketplaceProductFilter(django_filters.FilterSet):
             "size",
             "color",
             "has_additional_info",
+            "min_price",
+            "max_price",
+            "min_rating",
+            "delivery_days",
         ]
 
     def filter_search(self, queryset, name, value):
-        if value:
-            return queryset.filter(product__name__icontains=value).distinct()
+        """Enhanced search with case-insensitive matching"""
+        if not value:
+            return queryset
+
+        # Import search utilities
+        from django.db.models import DecimalField, F
+
+        from producer.search_utils import SearchFilter, build_relevance_score_case
+
+        # Apply search with relevance ranking
+        queryset = queryset.filter(Q(product__name__icontains=value) | Q(product__description__icontains=value)).distinct()
+
+        # Annotate with relevance score
+        relevance_case = build_relevance_score_case(value)
+        queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
+
+        # Sort by relevance, then by rating and popularity
+        queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date")
+
         return queryset
+
+    def filter_city(self, queryset, name, value):
+        """Enhanced city filter with case-insensitive matching"""
+        if not value:
+            return queryset
+
+        # Try as city ID first
+        try:
+            city_id = int(value)
+            return queryset.filter(Q(product__location__id=city_id) | Q(product__user__user_profile__city__id=city_id))
+        except (ValueError, TypeError):
+            # Fall back to city name (case-insensitive)
+            return queryset.filter(
+                Q(product__location__name__iexact=value) | Q(product__user__user_profile__city__name__iexact=value)
+            )
 
     def filter_category(self, queryset, name, value):
         """Filter by category - supports both old codes (FA, EG, etc.) and new category names/codes"""
@@ -237,24 +286,88 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         return queryset.filter(product__sub_subcategory_id=value)
 
     def filter_size(self, queryset, name, value):
-        """Filter by size - checks both marketplace and product size"""
+        """Filter by size - checks both marketplace and product size with case normalization"""
         if not value:
             return queryset
-        # Filter by marketplace size or inherited product size
+        # Filter by marketplace size or inherited product size (case-insensitive)
         size_q = Q()
         for size in value:
-            size_q |= Q(size=size) | Q(size__isnull=True, product__size=size)
-        return queryset.filter(size_q)
+            size_q |= Q(size__iexact=size) | Q(size__isnull=True, product__size__iexact=size)
+        return queryset.filter(size_q).distinct()
 
     def filter_color(self, queryset, name, value):
-        """Filter by color - checks both marketplace and product color"""
+        """Filter by color with normalization"""
         if not value:
             return queryset
-        # Filter by marketplace color or inherited product color
-        color_q = Q()
-        for color in value:
-            color_q |= Q(color=color) | Q(color__isnull=True, product__color=color)
-        return queryset.filter(color_q)
+
+        # Import normalization function
+        from producer.search_utils import normalize_color
+
+        # Normalize all input colors
+        normalized_colors = [normalize_color(c) for c in value]
+        normalized_colors = [c for c in normalized_colors if c]
+
+        if not normalized_colors:
+            return queryset
+
+        # Create filter for marketplace color or product color
+        color_filter = Q()
+        for color in normalized_colors:
+            color_filter |= Q(color__iexact=color) | Q(product__color__iexact=color)
+
+        return queryset.filter(color_filter).distinct()
+
+    def filter_min_price(self, queryset, name, value):
+        """Filter products with minimum price"""
+        if not value:
+            return queryset
+
+        try:
+            min_val = Decimal(str(value))
+            queryset = queryset.filter(Coalesce("discounted_price", "listed_price", output_field=DecimalField()) >= min_val)
+        except (ValueError, TypeError):
+            pass
+
+        return queryset
+
+    def filter_max_price(self, queryset, name, value):
+        """Filter products with maximum price"""
+        if not value:
+            return queryset
+
+        try:
+            max_val = Decimal(str(value))
+            queryset = queryset.filter(Coalesce("discounted_price", "listed_price", output_field=DecimalField()) <= max_val)
+        except (ValueError, TypeError):
+            pass
+
+        return queryset
+
+    def filter_min_rating(self, queryset, name, value):
+        """Filter products with minimum rating"""
+        if not value:
+            return queryset
+
+        try:
+            min_rating = Decimal(str(value))
+            queryset = queryset.filter(average_rating__gte=min_rating)
+        except (ValueError, TypeError):
+            pass
+
+        return queryset
+
+    def filter_delivery_days(self, queryset, name, value):
+        """Filter products by maximum delivery days"""
+        if not value:
+            return queryset
+
+        try:
+            days = int(value)
+            queryset = queryset.filter(Q(estimated_delivery_days__isnull=True) | Q(estimated_delivery_days__lte=days))
+        except (ValueError, TypeError):
+            pass
+
+        return queryset
 
     def filter_has_additional_info(self, queryset, name, value):
         """Filter by presence of additional information"""

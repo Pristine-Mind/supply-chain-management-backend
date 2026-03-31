@@ -605,7 +605,10 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     fieldsets = (
         ("Product Information", {"fields": ("product",)}),
         ("Product Attributes", {"fields": ("size", "color", "additional_information")}),
-        ("Pricing & Offers", {"fields": ("listed_price", "discounted_price", "discount_percentage", "offer_start", "offer_end")}),
+        (
+            "Pricing & Offers",
+            {"fields": ("listed_price", "discounted_price", "discount_percentage", "offer_start", "offer_end")},
+        ),
         (
             "B2B Sales",
             {
@@ -614,7 +617,10 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
                 "description": "Configure business-to-business pricing and requirements",
             },
         ),
-        ("Availability & Shipping", {"fields": ("is_available", "min_order", "estimated_delivery_days", "is_delivery_free", "shipping_cost")}),        
+        (
+            "Availability & Shipping",
+            {"fields": ("is_available", "min_order", "estimated_delivery_days", "is_delivery_free", "shipping_cost")},
+        ),
         ("Marketing & Features", {"fields": ("is_featured", "is_made_in_nepal", "rank_score", "made_for_you")}),
         (
             "Geographic Restrictions",

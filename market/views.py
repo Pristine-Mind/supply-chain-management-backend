@@ -109,13 +109,13 @@ from .serializers import (
     FeedbackSerializer,
     MarketplaceOrderSerializer,
     MarketplaceSaleSerializer,
-    PaymentStatusUpdateSerializer,
     MarketplaceUserProductSerializer,
     NegotiationLockSerializer,
     NegotiationReleaseLockSerializer,
     NegotiationSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
+    PaymentStatusUpdateSerializer,
     ProductChatMessageSerializer,
     ProductTagSerializer,
     PurchaseSerializer,
@@ -379,7 +379,7 @@ def verify_khalti_payment(request):
     API view to verify Khalti payment using the payment token.
     Follows Khalti official API documentation.
     Updates MarketplaceOrder payment status on success.
-    
+
     Accepts:
     - token: Khalti payment token
     - amount: Amount in paisa (required)
@@ -394,71 +394,55 @@ def verify_khalti_payment(request):
 
     # Khalti verification endpoint
     url = "https://khalti.com/api/v2/payment/verify/"
-    payload = {
-        "token": token,
-        "amount": int(amount)  # Amount in paisa
-    }
-    headers = {
-        "Authorization": f"Key {settings.KHALTI_SECRET_KEY}",
-        "Content-Type": "application/json"
-    }
+    payload = {"token": token, "amount": int(amount)}  # Amount in paisa
+    headers = {"Authorization": f"Key {settings.KHALTI_SECRET_KEY}", "Content-Type": "application/json"}
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
-        
+
         if response.status_code == 200:
             response_data = response.json()
             khalti_transaction_id = response_data.get("idx")  # Khalti transaction ID
-            
+
             if not khalti_transaction_id:
-                return Response(
-                    {"error": "Invalid payment response from Khalti."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
+                return Response({"error": "Invalid payment response from Khalti."}, status=status.HTTP_400_BAD_REQUEST)
+
             # Get the MarketplaceOrder
             marketplace_order = None
-            
+
             if order_id:
                 # If order_id is provided, use it
                 try:
                     marketplace_order = MarketplaceOrder.objects.get(
-                        id=order_id,
-                        customer=request.user,
-                        payment_status=PaymentStatus.PENDING
+                        id=order_id, customer=request.user, payment_status=PaymentStatus.PENDING
                     )
                 except MarketplaceOrder.DoesNotExist:
-                    return Response(
-                        {"error": "Order not found or already paid."}, 
-                        status=status.HTTP_404_NOT_FOUND
-                    )
+                    return Response({"error": "Order not found or already paid."}, status=status.HTTP_404_NOT_FOUND)
             else:
                 # Find the user's latest pending order
                 try:
-                    marketplace_order = MarketplaceOrder.objects.filter(
-                        customer=request.user,
-                        payment_status=PaymentStatus.PENDING,
-                        is_deleted=False
-                    ).order_by("-created_at").first()
-                    
+                    marketplace_order = (
+                        MarketplaceOrder.objects.filter(
+                            customer=request.user, payment_status=PaymentStatus.PENDING, is_deleted=False
+                        )
+                        .order_by("-created_at")
+                        .first()
+                    )
+
                     if not marketplace_order:
                         return Response(
-                            {"error": "No pending orders found for your account."}, 
-                            status=status.HTTP_404_NOT_FOUND
+                            {"error": "No pending orders found for your account."}, status=status.HTTP_404_NOT_FOUND
                         )
                 except Exception as e:
                     logger.error(f"Error finding pending order: {str(e)}")
-                    return Response(
-                        {"error": "Unable to find pending order."}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            
+                    return Response({"error": "Unable to find pending order."}, status=status.HTTP_400_BAD_REQUEST)
+
             # Update MarketplaceOrder with payment information
             marketplace_order.payment_status = PaymentStatus.PAID
             marketplace_order.transaction_id = khalti_transaction_id
             marketplace_order.payment_method = "khalti"
             marketplace_order.save(update_fields=["payment_status", "transaction_id", "payment_method"])
-            
+
             # Mark related cart as inactive after successful payment
             try:
                 # Find and deactivate the cart that was used for this order
@@ -468,57 +452,52 @@ def verify_khalti_payment(request):
                     active_carts.update(is_active=False)
             except Exception as e:
                 logger.warning(f"Failed to deactivate cart after payment: {str(e)}")
-            
+
             # Create Payment record for audit trail
             Payment.objects.update_or_create(
                 transaction_id=khalti_transaction_id,
                 defaults={
                     "amount": float(Decimal(str(amount / 100))),  # Convert paisa to rupees
                     "status": "completed",
-                    "payment_method": "khalti"
-                }
+                    "payment_method": "khalti",
+                },
             )
-            
+
             # Send SMS confirmation
             try:
                 sms_service.send_payment_confirmation_sms(marketplace_order)
             except Exception as e:
                 logger.warning(f"Failed to send SMS confirmation: {str(e)}")
-            
-            return Response({
-                "success": True,
-                "message": "Payment verified successfully.",
-                "transaction_id": khalti_transaction_id,
-                "order_number": marketplace_order.order_number,
-                "amount": float(marketplace_order.total_amount),
-                "order_id": marketplace_order.id
-            }, status=status.HTTP_200_OK)
-        
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Payment verified successfully.",
+                    "transaction_id": khalti_transaction_id,
+                    "order_number": marketplace_order.order_number,
+                    "amount": float(marketplace_order.total_amount),
+                    "order_id": marketplace_order.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         else:
             error_data = response.json() if response.status_code != 500 else {}
             error_message = error_data.get("detail", "Payment verification failed.")
-            
-            return Response({
-                "error": error_message,
-                "status_code": response.status_code
-            }, status=status.HTTP_400_BAD_REQUEST)
-    
+
+            return Response(
+                {"error": error_message, "status_code": response.status_code}, status=status.HTTP_400_BAD_REQUEST
+            )
+
     except requests.exceptions.Timeout:
-        return Response(
-            {"error": "Khalti verification timeout. Please try again."}, 
-            status=status.HTTP_504_GATEWAY_TIMEOUT
-        )
+        return Response({"error": "Khalti verification timeout. Please try again."}, status=status.HTTP_504_GATEWAY_TIMEOUT)
     except requests.exceptions.RequestException as e:
         logger.error(f"Khalti verification error: {str(e)}")
-        return Response(
-            {"error": "Unable to verify payment with Khalti."}, 
-            status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
+        return Response({"error": "Unable to verify payment with Khalti."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     except Exception as e:
         logger.error(f"Payment verification error: {str(e)}")
         return Response(
-            {"error": "An error occurred during payment verification."}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {"error": "An error occurred during payment verification."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -998,7 +977,7 @@ class CartItemDeleteView(generics.DestroyAPIView):
 
 class CartStatusUpdateView(generics.UpdateAPIView):
     """Update cart status (mark as active/inactive)."""
-    
+
     serializer_class = CartStatusUpdateSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "id"
@@ -1012,25 +991,25 @@ class CartStatusUpdateView(generics.UpdateAPIView):
         """Handle cart status update."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        
+
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
         # Return detailed response
         return Response(
             {
                 "success": True,
                 "message": f"Cart {instance.id} marked as {'active' if instance.is_active else 'inactive'}",
-                "cart": CartSerializer(instance).data
+                "cart": CartSerializer(instance).data,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
 
 class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
     """Update marketplace order payment status."""
-    
+
     serializer_class = PaymentStatusUpdateSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "id"
@@ -1044,35 +1023,35 @@ class MarketplaceOrderPaymentStatusUpdateView(generics.UpdateAPIView):
         """Handle payment status update."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        
+
         old_status = instance.payment_status
-        
+
         # Set default payment_status to "paid" if not provided
-        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
-        if 'payment_status' not in data:
-            data['payment_status'] = 'paid'
-        
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        if "payment_status" not in data:
+            data["payment_status"] = "paid"
+
         serializer = self.get_serializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
         new_status = instance.payment_status
-        
+
         # If payment status is set to paid, deactivate user's active carts
         if new_status == "paid" and old_status != "paid":
             try:
                 Cart.objects.filter(user=instance.customer, is_active=True).update(is_active=False)
             except Exception as e:
                 logger.warning(f"Failed to deactivate cart after payment status update: {str(e)}")
-        
+
         # Return detailed response
         return Response(
             {
                 "success": True,
                 "message": f"Payment status updated from {old_status} to {new_status}",
-                "order": MarketplaceOrderSerializer(instance).data
+                "order": MarketplaceOrderSerializer(instance).data,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
 
@@ -1942,8 +1921,9 @@ class MarketplaceOrderViewSet(viewsets.ReadOnlyModelViewSet):
 def create_order(request):
     """Create a new order from cart items."""
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     serializer = CreateOrderSerializer(data=request.data, context={"request": request})
 
     if serializer.is_valid():
@@ -1954,6 +1934,7 @@ def create_order(request):
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             import traceback
+
             error_msg = f"Failed to create order: {str(e)}"
             logger.error(f"{error_msg}\n{traceback.format_exc()}")
             return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
