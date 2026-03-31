@@ -87,10 +87,10 @@ class CustomPasswordValidator:
         # Check against user information if provided
         if user:
             user_info = [
-                user.username.lower(),
-                user.first_name.lower(),
-                user.last_name.lower(),
-                user.email.lower().split("@")[0],
+                user.username.lower() if user.username else None,
+                user.first_name.lower() if user.first_name else None,
+                user.last_name.lower() if user.last_name else None,
+                user.email.lower().split("@")[0] if user.email else None,
             ]
 
             for info in user_info:
