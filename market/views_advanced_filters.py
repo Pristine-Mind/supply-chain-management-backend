@@ -112,8 +112,8 @@ class AdvancedProductSearchView(APIView):
         # Annotate Rating Information
         # ========================
         queryset = queryset.annotate(
-            average_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
-            total_reviews=Count("reviews", distinct=True)
+            avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
+            num_reviews=Count("reviews", distinct=True)
         )
 
         # ========================
@@ -185,7 +185,7 @@ class AdvancedProductSearchView(APIView):
         if min_rating:
             try:
                 rating = Decimal(str(min_rating))
-                queryset = queryset.filter(average_rating__gte=rating)
+                queryset = queryset.filter(avg_rating__gte=rating)
             except (ValueError, TypeError):
                 pass
 
@@ -226,7 +226,7 @@ class AdvancedProductSearchView(APIView):
         # Apply Sorting
         # ========================
         if sort_by == "rating":
-            queryset = queryset.order_by("-average_rating", "-total_reviews", "-listed_date").distinct()
+            queryset = queryset.order_by("-avg_rating", "-num_reviews", "-listed_date").distinct()
         elif sort_by == "price_asc" or sort_by == "price_low":
             queryset = queryset.annotate(
                 effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
@@ -256,7 +256,7 @@ class AdvancedProductSearchView(APIView):
             queryset = queryset.order_by("-product__name").distinct()
         else:  # Default: relevance or newest
             if has_search:
-                queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date").distinct()
+                queryset = queryset.order_by("-relevance_score", "-avg_rating", "-view_count", "-listed_date").distinct()
             else:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
 
