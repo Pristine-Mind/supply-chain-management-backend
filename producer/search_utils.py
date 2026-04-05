@@ -6,6 +6,7 @@ Handles relevance ranking, color normalization, and advanced filtering.
 from decimal import Decimal
 
 from django.db.models import Avg, Case, Count, DecimalField, F, Q, Value, When
+from django.db.models.functions import Coalesce
 
 # Color normalization mapping
 COLOR_ALIASES = {
@@ -128,8 +129,9 @@ class SearchFilter:
 
         # Sort by relevance, then by rating and popularity
         queryset = queryset.annotate(
-            search_score=F("relevance_score") + (F("reviews__rating") * 5) + (F("view_count") * 0.1)
-        ).order_by("-search_score", "-average_rating", "-view_count", "-listed_date")
+            search_score=F("relevance_score") + (F("reviews__rating") * 5) + (F("view_count") * 0.1),
+            avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField())
+        ).order_by("-search_score", "-avg_rating", "-view_count", "-listed_date").distinct()
 
         return queryset
 
@@ -309,6 +311,8 @@ class RatingFilter:
 
         try:
             rating = Decimal(str(min_rating))
-            return queryset.filter(average_rating__gte=rating)
+            return queryset.annotate(
+                avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField())
+            ).filter(avg_rating__gte=rating)
         except (ValueError, TypeError):
             return queryset

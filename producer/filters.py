@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import django_filters
 from django.db import models
-from django.db.models import Count, DecimalField, Q
+from django.db.models import Avg, Count, DecimalField, Q
 from django.db.models.functions import Coalesce
 
 from user.models import UserProfile
@@ -209,12 +209,15 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         # Apply search with relevance ranking
         queryset = queryset.filter(Q(product__name__icontains=value) | Q(product__description__icontains=value)).distinct()
 
-        # Annotate with relevance score
+        # Annotate with relevance score and average rating
         relevance_case = build_relevance_score_case(value)
-        queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
+        queryset = queryset.annotate(
+            relevance_score=relevance_case,
+            avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())
+        ).filter(relevance_score__gt=0)
 
         # Sort by relevance, then by rating and popularity
-        queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date")
+        queryset = queryset.order_by("-relevance_score", "-avg_rating", "-view_count", "-listed_date")
 
         return queryset
 
@@ -351,7 +354,10 @@ class MarketplaceProductFilter(django_filters.FilterSet):
 
         try:
             min_rating = Decimal(str(value))
-            queryset = queryset.filter(average_rating__gte=min_rating)
+            # Annotate average rating if not already annotated
+            queryset = queryset.annotate(
+                avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())
+            ).filter(avg_rating__gte=min_rating)
         except (ValueError, TypeError):
             pass
 
