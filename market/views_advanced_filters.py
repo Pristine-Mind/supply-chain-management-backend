@@ -5,7 +5,7 @@ Enhanced with search relevance ranking, color normalization, and comprehensive f
 
 from decimal import Decimal
 
-from django.db.models import Case, DecimalField, F, Q, Value, When
+from django.db.models import Avg, Case, Count, DecimalField, F, Q, Value, When
 from django.db.models.functions import Coalesce
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
@@ -107,6 +107,14 @@ class AdvancedProductSearchView(APIView):
             queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
         else:
             queryset = queryset.annotate(relevance_score=Value(0, output_field=DecimalField()))
+
+        # ========================
+        # Annotate Rating Information
+        # ========================
+        queryset = queryset.annotate(
+            average_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
+            total_reviews=Count("reviews", distinct=True)
+        )
 
         # ========================
         # Apply Category Filters
@@ -218,19 +226,19 @@ class AdvancedProductSearchView(APIView):
         # Apply Sorting
         # ========================
         if sort_by == "rating":
-            queryset = queryset.order_by("-average_rating", "-total_reviews", "-listed_date")
+            queryset = queryset.order_by("-average_rating", "-total_reviews", "-listed_date").distinct()
         elif sort_by == "price_asc" or sort_by == "price_low":
             queryset = queryset.annotate(
                 effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
-            ).order_by("effective_price")
+            ).order_by("effective_price").distinct()
         elif sort_by == "price_desc" or sort_by == "price_high":
             queryset = queryset.annotate(
                 effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
-            ).order_by("-effective_price")
+            ).order_by("-effective_price").distinct()
         elif sort_by == "newest":
-            queryset = queryset.order_by("-listed_date")
+            queryset = queryset.order_by("-listed_date").distinct()
         elif sort_by == "popular":
-            queryset = queryset.order_by("-view_count", "-recent_purchases_count")
+            queryset = queryset.order_by("-view_count", "-recent_purchases_count").distinct()
         elif sort_by == "discount":
             queryset = queryset.annotate(
                 discount_pct=Case(
@@ -241,16 +249,16 @@ class AdvancedProductSearchView(APIView):
                     default=Value(0, output_field=DecimalField()),
                     output_field=DecimalField(),
                 )
-            ).order_by("-discount_pct")
+            ).order_by("-discount_pct").distinct()
         elif sort_by == "name_asc":
-            queryset = queryset.order_by("product__name")
+            queryset = queryset.order_by("product__name").distinct()
         elif sort_by == "name_desc":
-            queryset = queryset.order_by("-product__name")
+            queryset = queryset.order_by("-product__name").distinct()
         else:  # Default: relevance or newest
             if has_search:
-                queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date")
+                queryset = queryset.order_by("-relevance_score", "-average_rating", "-view_count", "-listed_date").distinct()
             else:
-                queryset = queryset.order_by("-listed_date", "-view_count")
+                queryset = queryset.order_by("-listed_date", "-view_count").distinct()
 
         # ========================
         # Get Total Count
