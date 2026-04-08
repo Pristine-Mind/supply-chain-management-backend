@@ -1416,7 +1416,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
         """Get all products in this sale with calculated discounted prices."""
         sale = self.get_queryset().get(pk=pk)
         # Optimized with select_related to avoid N+1 queries
-        products = sale.products.select_related("product", "product__brand", "product__user").prefetch_related("images")[
+        products = sale.products.select_related("product", "product__brand", "product__user").prefetch_related("product__images")[
             :500
         ]
 
@@ -1465,7 +1465,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
         # Optimized query with all necessary prefetch to avoid N+1
         products = sale.products.select_related(
             "product", "product__brand", "product__user", "product__category"
-        ).prefetch_related("images")[:500]
+        ).prefetch_related("product__images")[:500]
 
         # Group by brand
         brands_dict = {}
