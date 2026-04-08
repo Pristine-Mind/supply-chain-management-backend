@@ -1434,7 +1434,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
                     "discounted_price": round(discounted_price, 2),
                     "discount_amount": round(discount_amount, 2),
                     "discount_percentage": float(sale.discount_percentage),
-                    "product_details": MarketplaceProductSerializer(product).data,
+                    "product_details": MarketplaceProductSerializer(product, context={"request": request}).data,
                 }
             )
 
@@ -1477,7 +1477,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
             if brand_name not in brands_dict:
                 brands_dict[brand_name] = {"brand_id": brand_id, "products": []}
 
-            brands_dict[brand_name]["products"].append(MarketplaceProductSerializer(product).data)
+            brands_dict[brand_name]["products"].append(MarketplaceProductSerializer(product, context={"request": request}).data)
 
         # Convert to sorted list
         result = [
