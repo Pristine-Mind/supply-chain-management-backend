@@ -1321,7 +1321,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
             "products",
             queryset=MarketplaceProduct.objects.select_related(
                 "product", "product__brand", "product__category", "product__user"
-            ).prefetch_related("images"),
+            ).prefetch_related("product__images"),
         )
 
         return NewYearSale.objects.prefetch_related(products_prefetch, "created_by")
