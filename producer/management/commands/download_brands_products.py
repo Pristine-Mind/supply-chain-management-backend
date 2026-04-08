@@ -3,11 +3,12 @@ Django management command to download brands and sample products from Excel shee
 Usage: python manage.py download_brands_products --samples 5 --format json
 """
 
-from django.core.management.base import BaseCommand
-from pathlib import Path
 import json
-import pandas as pd
 from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
@@ -15,29 +16,26 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--samples',
-            type=int,
-            default=3,
-            help='Number of sample products to extract per brand (default: 3)'
+            "--samples", type=int, default=3, help="Number of sample products to extract per brand (default: 3)"
         )
         parser.add_argument(
-            '--format',
+            "--format",
             type=str,
-            choices=['json', 'csv', 'html', 'all'],
-            default='all',
-            help='Output format: json, csv, html, or all (default: all)'
+            choices=["json", "csv", "html", "all"],
+            default="all",
+            help="Output format: json, csv, html, or all (default: all)",
         )
         parser.add_argument(
-            '--output-dir',
+            "--output-dir",
             type=str,
-            default='brand_downloads',
-            help='Output directory for downloaded files (default: brand_downloads)'
+            default="brand_downloads",
+            help="Output directory for downloaded files (default: brand_downloads)",
         )
 
     def handle(self, *args, **options):
-        samples_per_brand = options['samples']
-        output_format = options['format']
-        output_dir = Path(options['output_dir'])
+        samples_per_brand = options["samples"]
+        output_format = options["format"]
+        output_dir = Path(options["output_dir"])
         output_dir.mkdir(exist_ok=True)
 
         # Get the producer app directory
@@ -68,20 +66,20 @@ class Command(BaseCommand):
                 price_col = None
 
                 for col in df.columns:
-                    if any(x in col for x in ['product', 'name', 'title']):
+                    if any(x in col for x in ["product", "name", "title"]):
                         product_col = col
-                    if any(x in col for x in ['price', 'cost', 'rate', 'amount']):
+                    if any(x in col for x in ["price", "cost", "rate", "amount"]):
                         price_col = col
 
                 if product_col is None:
                     for col in df.columns:
-                        if df[col].dtype == 'object':
+                        if df[col].dtype == "object":
                             product_col = col
                             break
 
                 if price_col is None:
                     for col in df.columns:
-                        if df[col].dtype in ['float64', 'int64']:
+                        if df[col].dtype in ["float64", "int64"]:
                             price_col = col
                             break
 
@@ -89,12 +87,14 @@ class Command(BaseCommand):
                 if product_col and price_col:
                     df_clean = df[[product_col, price_col]].dropna()
                     df_unique = df_clean.drop_duplicates(subset=[product_col])
-                    
+
                     for idx, row in df_unique.head(samples_per_brand).iterrows():
-                        samples.append({
-                            "product_name": str(row[product_col]).strip(),
-                            "price": float(row[price_col]) if pd.notna(row[price_col]) else 0.0,
-                        })
+                        samples.append(
+                            {
+                                "product_name": str(row[product_col]).strip(),
+                                "price": float(row[price_col]) if pd.notna(row[price_col]) else 0.0,
+                            }
+                        )
 
                 brand_data = {
                     "brand_name": brand_name,
@@ -110,13 +110,13 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"✗ Error: {str(e)}"))
 
         # Save outputs
-        if output_format in ['json', 'all']:
+        if output_format in ["json", "all"]:
             self._save_json(brands_data, output_dir)
 
-        if output_format in ['csv', 'all']:
+        if output_format in ["csv", "all"]:
             self._save_csv(brands_data, output_dir)
 
-        if output_format in ['html', 'all']:
+        if output_format in ["html", "all"]:
             self._save_html(brands_data, output_dir)
 
         # Print summary
@@ -125,7 +125,7 @@ class Command(BaseCommand):
     def _save_json(self, brands_data, output_dir):
         """Save as JSON"""
         output_file = output_dir / f"brands_products_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        
+
         output_data = {
             "timestamp": datetime.now().isoformat(),
             "total_brands": len(brands_data),
@@ -140,18 +140,20 @@ class Command(BaseCommand):
     def _save_csv(self, brands_data, output_dir):
         """Save as CSV"""
         output_file = output_dir / f"brands_products_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        
+
         rows = []
         for brand_data in brands_data:
             brand_name = brand_data.get("brand_name", "Unknown")
             for idx, sample in enumerate(brand_data.get("samples", []), 1):
-                rows.append({
-                    "brand": brand_name,
-                    "product_name": sample.get("product_name", ""),
-                    "price": sample.get("price", 0.0),
-                    "sample_number": idx,
-                    "total_in_brand": brand_data.get("total_products", 0),
-                })
+                rows.append(
+                    {
+                        "brand": brand_name,
+                        "product_name": sample.get("product_name", ""),
+                        "price": sample.get("price", 0.0),
+                        "sample_number": idx,
+                        "total_in_brand": brand_data.get("total_products", 0),
+                    }
+                )
 
         df = pd.DataFrame(rows)
         df.to_csv(output_file, index=False)
@@ -160,7 +162,7 @@ class Command(BaseCommand):
     def _save_html(self, brands_data, output_dir):
         """Save as HTML"""
         output_file = output_dir / f"brands_products_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        
+
         html = f"""
         <!DOCTYPE html>
         <html lang="en">
@@ -244,7 +246,7 @@ class Command(BaseCommand):
         self.stdout.write("=" * 60)
 
         total_samples = sum(len(b.get("samples", [])) for b in brands_data)
-        
+
         self.stdout.write(f"\nTotal Brands: {len(brands_data)}")
         self.stdout.write(f"Total Sample Products: {total_samples}")
 
@@ -257,7 +259,7 @@ class Command(BaseCommand):
             self.stdout.write(f"\n{brand_name}")
             self.stdout.write(f"  Total Products: {brand_data.get('total_products', 0)}")
             self.stdout.write(f"  Samples: {len(samples)}")
-            
+
             if samples:
                 for idx, sample in enumerate(samples, 1):
                     self.stdout.write(f"    {idx}. {sample.get('product_name', '')} - ${sample.get('price', 0.0):.2f}")

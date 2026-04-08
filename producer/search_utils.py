@@ -128,10 +128,14 @@ class SearchFilter:
         queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
 
         # Sort by relevance, then by rating and popularity
-        queryset = queryset.annotate(
-            search_score=F("relevance_score") + (F("reviews__rating") * 5) + (F("view_count") * 0.1),
-            avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField())
-        ).order_by("-search_score", "-avg_rating", "-view_count", "-listed_date").distinct()
+        queryset = (
+            queryset.annotate(
+                search_score=F("relevance_score") + (F("reviews__rating") * 5) + (F("view_count") * 0.1),
+                avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
+            )
+            .order_by("-search_score", "-avg_rating", "-view_count", "-listed_date")
+            .distinct()
+        )
 
         return queryset
 

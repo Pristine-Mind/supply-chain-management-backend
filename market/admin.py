@@ -32,6 +32,7 @@ from .models import (
     MarketplaceOrderItem,
     MarketplaceSale,
     MarketplaceUserProduct,
+    NewYearSale,
     Notification,
     OrderTrackingEvent,
     Payment,
@@ -361,6 +362,81 @@ class MarketplaceSaleAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for obj in queryset:
             obj.delete()  # Uses soft delete
+
+
+@admin.register(NewYearSale)
+class NewYearSaleAdmin(admin.ModelAdmin):
+    """Admin interface for New Year Sale campaigns."""
+
+    list_display = (
+        "name",
+        "discount_percentage",
+        "start_date",
+        "end_date",
+        "sale_status",
+        "product_count",
+        "is_active",
+        "created_at",
+    )
+    list_filter = ("is_active", "start_date", "created_at")
+    search_fields = ("name", "description")
+    readonly_fields = ("created_at", "updated_at", "created_by", "sale_status", "is_sale_active_now", "days_remaining")
+    filter_horizontal = ("products",)
+
+    fieldsets = (
+        (
+            "Sale Information",
+            {
+                "fields": (
+                    "name",
+                    "description",
+                    "discount_percentage",
+                )
+            },
+        ),
+        (
+            "Date & Status",
+            {
+                "fields": (
+                    "start_date",
+                    "end_date",
+                    "is_active",
+                    "sale_status",
+                    "is_sale_active_now",
+                    "days_remaining",
+                )
+            },
+        ),
+        (
+            "Products",
+            {
+                "fields": ("products",),
+                "description": "Select products to include in this sale.",
+            },
+        ),
+        (
+            "Metadata",
+            {
+                "fields": ("created_by", "created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def product_count(self, obj):
+        return obj.products.count()
+
+    product_count.short_description = "Products"
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # Editing
+            return self.readonly_fields + ("discount_percentage", "name")
+        return self.readonly_fields
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Delivery)

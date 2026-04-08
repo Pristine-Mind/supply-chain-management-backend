@@ -34,6 +34,7 @@ from .models import (
     MarketplaceUserProduct,
     Negotiation,
     NegotiationHistory,
+    NewYearSale,
     Notification,
     OrderTrackingEvent,
     Payment,
@@ -684,6 +685,73 @@ class MarketplaceSaleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"status": "Cannot mark as delivered with unpaid order."})
 
         return super().update(instance, validated_data)
+
+
+class NewYearSaleSerializer(serializers.ModelSerializer):
+    """Serializer for the NewYearSale model with N+1 query optimization."""
+
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+    product_count = serializers.SerializerMethodField()
+    sale_status = serializers.CharField(read_only=True)
+    is_sale_active_now = serializers.BooleanField(read_only=True)
+    days_remaining = serializers.IntegerField(read_only=True)
+    products_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NewYearSale
+        fields = [
+            "id",
+            "name",
+            "description",
+            "discount_percentage",
+            "start_date",
+            "end_date",
+            "is_active",
+            "sale_status",
+            "is_sale_active_now",
+            "days_remaining",
+            "products",
+            "products_detail",
+            "product_count",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "created_by_username",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "created_by_username",
+            "sale_status",
+            "is_sale_active_now",
+            "days_remaining",
+            "products_detail",
+            "product_count",
+        ]
+
+    def get_product_count(self, obj):
+        """Get the count of products in this sale using cached prefetch_related."""
+        # Use the prefetch_related data without additional queries
+        if hasattr(obj, "_prefetched_objects_cache"):
+            return len(obj.products.all())
+        return obj.products.count()
+
+    def get_products_detail(self, obj):
+        """Get products detail - uses prefetch_related to avoid N+1 queries."""
+        # Only include a limited set of details to avoid serialization overhead
+        products = obj.products.all()[:50]
+        return [
+            {
+                "id": p.id,
+                "name": p.product.name if p.product else "Unknown",
+                "price": float(p.price),
+                "listed_price": float(p.listed_price),
+                "is_available": p.is_available,
+            }
+            for p in products
+        ]
 
 
 class DeliverySerializer(serializers.ModelSerializer):

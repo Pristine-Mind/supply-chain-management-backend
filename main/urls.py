@@ -47,6 +47,7 @@ from market.views import (
     MarketplaceUserProductViewSet,
     MarkNotificationAsReadView,
     NegotiationViewSet,
+    NewYearSaleViewSet,
     NotificationListView,
     OrderTrackingEventViewSet,
     ProductChatMessageViewSet,
@@ -178,6 +179,7 @@ router.register(r"b2b-verified-users-products", B2BVerifiedUsersProductsView, ba
 router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, basename="shoppable-video-categories")
 router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
 router.register(r"coupons", CouponViewSet, basename="coupons")
+router.register(r"new-year-sales", NewYearSaleViewSet, basename="new-year-sale")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
