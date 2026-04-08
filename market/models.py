@@ -1061,6 +1061,106 @@ class MarketplaceSale(models.Model):
         return label_file
 
 
+class NewYearSale(models.Model):
+    """
+    Represents a New Year Sale promotion/campaign.
+
+    This model tracks special New Year sale events where products
+    can be offered at discounted prices for a limited time period.
+    """
+
+    name = models.CharField(max_length=255, verbose_name=_("Sale Name"), help_text=_("e.g., 'New Year Sale 2024'"))
+    description = models.TextField(
+        blank=True, null=True, verbose_name=_("Description"), help_text=_("Details about the sale")
+    )
+    discount_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name=_("Discount Percentage"),
+        help_text=_("Discount percentage (0-100)"),
+    )
+
+    # Date range for the sale
+    start_date = models.DateTimeField(verbose_name=_("Sale Start Date"), help_text=_("When the sale begins"))
+    end_date = models.DateTimeField(verbose_name=_("Sale End Date"), help_text=_("When the sale ends"))
+
+    # Status flags
+    is_active = models.BooleanField(default=True, verbose_name=_("Is Active"))
+
+    # Products involved in the sale
+    products = models.ManyToManyField(
+        MarketplaceProduct,
+        related_name="new_year_sales",
+        verbose_name=_("Products"),
+        help_text=_("Products participating in this New Year sale"),
+        blank=True,
+    )
+
+    # Tracking fields
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_new_year_sales",
+        verbose_name=_("Created By"),
+    )
+
+    class Meta:
+        verbose_name = _("New Year Sale")
+        verbose_name_plural = _("New Year Sales")
+        ordering = ["-start_date"]
+        indexes = [
+            models.Index(fields=["is_active", "start_date", "end_date"]),
+            models.Index(fields=["start_date", "end_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.discount_percentage}% off) - {self.start_date.strftime('%Y-%m-%d')} to {self.end_date.strftime('%Y-%m-%d')}"
+
+    @property
+    def is_sale_active_now(self):
+        """Check if the sale is currently active based on current time."""
+        now = timezone.now()
+        return self.is_active and self.start_date <= now <= self.end_date
+
+    @property
+    def sale_status(self):
+        """Get the current sale status."""
+        now = timezone.now()
+        if not self.is_active:
+            return "inactive"
+        if now < self.start_date:
+            return "upcoming"
+        if now > self.end_date:
+            return "expired"
+        return "active"
+
+    @property
+    def days_remaining(self):
+        """Get the number of days remaining until the sale ends."""
+        if not self.is_sale_active_now:
+            return 0
+        delta = self.end_date - timezone.now()
+        return max(0, delta.days)
+
+    def get_discounted_price(self, original_price):
+        """Calculate the discounted price for a product."""
+        discount_amount = (original_price * self.discount_percentage) / Decimal("100")
+        return original_price - discount_amount
+
+    def clean(self):
+        """Validate model fields."""
+        super().clean()
+        if self.start_date >= self.end_date:
+            raise ValidationError({"end_date": _("Sale end date must be after the start date.")})
+
+        if self.discount_percentage < 0 or self.discount_percentage > 100:
+            raise ValidationError({"discount_percentage": _("Discount percentage must be between 0 and 100.")})
+
+
 class ProductView(models.Model):
     """
     Logs a view of a marketplace product for analytics and ranking.

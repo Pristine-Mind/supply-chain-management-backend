@@ -212,8 +212,7 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         # Annotate with relevance score and average rating
         relevance_case = build_relevance_score_case(value)
         queryset = queryset.annotate(
-            relevance_score=relevance_case,
-            avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())
+            relevance_score=relevance_case, avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())
         ).filter(relevance_score__gt=0)
 
         # Sort by relevance, then by rating and popularity
@@ -355,9 +354,9 @@ class MarketplaceProductFilter(django_filters.FilterSet):
         try:
             min_rating = Decimal(str(value))
             # Annotate average rating if not already annotated
-            queryset = queryset.annotate(
-                avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())
-            ).filter(avg_rating__gte=min_rating)
+            queryset = queryset.annotate(avg_rating=Coalesce(Avg("reviews__rating"), 0, output_field=DecimalField())).filter(
+                avg_rating__gte=min_rating
+            )
         except (ValueError, TypeError):
             pass
 

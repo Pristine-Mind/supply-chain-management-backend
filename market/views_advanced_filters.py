@@ -113,7 +113,7 @@ class AdvancedProductSearchView(APIView):
         # ========================
         queryset = queryset.annotate(
             avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
-            num_reviews=Count("reviews", distinct=True)
+            num_reviews=Count("reviews", distinct=True),
         )
 
         # ========================
@@ -228,28 +228,36 @@ class AdvancedProductSearchView(APIView):
         if sort_by == "rating":
             queryset = queryset.order_by("-avg_rating", "-num_reviews", "-listed_date").distinct()
         elif sort_by == "price_asc" or sort_by == "price_low":
-            queryset = queryset.annotate(
-                effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
-            ).order_by("effective_price").distinct()
+            queryset = (
+                queryset.annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                .order_by("effective_price")
+                .distinct()
+            )
         elif sort_by == "price_desc" or sort_by == "price_high":
-            queryset = queryset.annotate(
-                effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
-            ).order_by("-effective_price").distinct()
+            queryset = (
+                queryset.annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                .order_by("-effective_price")
+                .distinct()
+            )
         elif sort_by == "newest":
             queryset = queryset.order_by("-listed_date").distinct()
         elif sort_by == "popular":
             queryset = queryset.order_by("-view_count", "-recent_purchases_count").distinct()
         elif sort_by == "discount":
-            queryset = queryset.annotate(
-                discount_pct=Case(
-                    When(
-                        discounted_price__isnull=False,
-                        then=(F("listed_price") - F("discounted_price")) / F("listed_price") * 100,
-                    ),
-                    default=Value(0, output_field=DecimalField()),
-                    output_field=DecimalField(),
+            queryset = (
+                queryset.annotate(
+                    discount_pct=Case(
+                        When(
+                            discounted_price__isnull=False,
+                            then=(F("listed_price") - F("discounted_price")) / F("listed_price") * 100,
+                        ),
+                        default=Value(0, output_field=DecimalField()),
+                        output_field=DecimalField(),
+                    )
                 )
-            ).order_by("-discount_pct").distinct()
+                .order_by("-discount_pct")
+                .distinct()
+            )
         elif sort_by == "name_asc":
             queryset = queryset.order_by("product__name").distinct()
         elif sort_by == "name_desc":

@@ -30,9 +30,11 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page, never_cache
 from django.views.decorators.csrf import csrf_exempt
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status, views, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import (
     AllowAny,
     IsAdminUser,
@@ -77,6 +79,7 @@ from .models import (
     MarketplaceUserProduct,
     Negotiation,
     NegotiationHistory,
+    NewYearSale,
     Notification,
     OrderStatus,
     Payment,
@@ -113,6 +116,7 @@ from .serializers import (
     NegotiationLockSerializer,
     NegotiationReleaseLockSerializer,
     NegotiationSerializer,
+    NewYearSaleSerializer,
     NotificationSerializer,
     OrderTrackingEventSerializer,
     PaymentStatusUpdateSerializer,
@@ -1283,6 +1287,210 @@ class MarketplaceSaleViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         """Override delete to use soft delete."""
         instance.delete()
+
+
+class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ReadOnly viewset for viewing New Year promotional sales.
+    Supports filtering, searching, and sorting with built-in DRF filters.
+    Optimized with prefetch_related to eliminate N+1 queries.
+    """
+
+    queryset = NewYearSale.objects.all()
+    serializer_class = NewYearSaleSerializer
+    filterset_fields = ["is_active", "start_date", "end_date", "discount_percentage"]
+    search_fields = [
+        "name",
+        "description",
+        "products__product__name",
+        "products__product__brand__name",
+        "products__product__category__name",
+    ]
+    ordering_fields = ["start_date", "created_at", "discount_percentage", "end_date"]
+    ordering = ["-start_date"]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+
+    def _get_optimized_queryset(self):
+        """
+        Get queryset with all necessary prefetch_related to avoid N+1 queries.
+        """
+        from django.db.models import Prefetch
+
+        # Prefetch products with all their related data
+        products_prefetch = Prefetch(
+            "products",
+            queryset=MarketplaceProduct.objects.select_related(
+                "product", "product__brand", "product__category", "product__user"
+            ).prefetch_related("images"),
+        )
+
+        return NewYearSale.objects.prefetch_related(products_prefetch, "created_by")
+
+    def get_queryset(self):
+        """
+        Return sales filtered based on user role and query parameters.
+        Admin can see all sales, regular users can see only active/upcoming sales or their created ones.
+        Supports filtering by status (active, upcoming, expired).
+        Optimized to prevent N+1 queries.
+        """
+        queryset = self._get_optimized_queryset().order_by(self.ordering[0] if self.ordering else "-start_date")
+
+        # Filter by sale status if provided
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            now = timezone.now()
+            if status_param.lower() == "active":
+                queryset = queryset.filter(start_date__lte=now, end_date__gte=now, is_active=True)
+            elif status_param.lower() == "upcoming":
+                queryset = queryset.filter(start_date__gt=now, is_active=True)
+            elif status_param.lower() == "expired":
+                queryset = queryset.filter(end_date__lt=now)
+
+        # Filter by date range if provided
+        start_date = self.request.query_params.get("start_date_from")
+        if start_date:
+            queryset = queryset.filter(start_date__gte=start_date)
+
+        end_date = self.request.query_params.get("end_date_to")
+        if end_date:
+            queryset = queryset.filter(end_date__lte=end_date)
+
+        # Filter by discount range if provided
+        min_discount = self.request.query_params.get("discount_min")
+        max_discount = self.request.query_params.get("discount_max")
+        if min_discount:
+            queryset = queryset.filter(discount_percentage__gte=min_discount)
+        if max_discount:
+            queryset = queryset.filter(discount_percentage__lte=max_discount)
+
+        return queryset
+
+    @extend_schema(
+        summary="List active promotional sales",
+        description="Get all currently active (running) New Year promotional sales.",
+        responses={200: NewYearSaleSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"])
+    def active_sales(self, request):
+        """Get all currently active sales with real-time status."""
+        now = timezone.now()
+        sales = self.get_queryset().filter(start_date__lte=now, end_date__gte=now, is_active=True)[:100]
+        serializer = self.get_serializer(sales, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="List upcoming promotional sales",
+        description="Get all upcoming New Year promotional sales that haven't started yet.",
+        responses={200: NewYearSaleSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"])
+    def upcoming_sales(self, request):
+        """Get all upcoming sales not yet started."""
+        now = timezone.now()
+        sales = self.get_queryset().filter(start_date__gt=now, is_active=True)[:100]
+        serializer = self.get_serializer(sales, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get sale products with discounted prices",
+        description="Retrieve all products in a sale with calculated discounted prices.",
+        responses={
+            200: {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "integer"},
+                        "name": {"type": "string"},
+                        "original_price": {"type": "number"},
+                        "discounted_price": {"type": "number"},
+                        "discount_amount": {"type": "number"},
+                        "discount_percentage": {"type": "number"},
+                    },
+                },
+            }
+        },
+    )
+    @action(detail=True, methods=["get"])
+    def discounted_products(self, request, pk=None):
+        """Get all products in this sale with calculated discounted prices."""
+        sale = self.get_queryset().get(pk=pk)
+        # Optimized with select_related to avoid N+1 queries
+        products = sale.products.select_related("product", "product__brand", "product__user").prefetch_related("images")[
+            :500
+        ]
+
+        discounted_products = []
+        for product in products:
+            original_price = float(product.price)
+            discounted_price = float(sale.get_discounted_price(Decimal(str(original_price))))
+            discount_amount = original_price - discounted_price
+
+            discounted_products.append(
+                {
+                    "id": product.id,
+                    "name": product.product.name if product.product else "Unknown",
+                    "original_price": original_price,
+                    "discounted_price": round(discounted_price, 2),
+                    "discount_amount": round(discount_amount, 2),
+                    "discount_percentage": float(sale.discount_percentage),
+                    "product_details": MarketplaceProductSerializer(product).data,
+                }
+            )
+
+        return Response(discounted_products)
+
+    @extend_schema(
+        summary="Get products grouped by brand",
+        description="Retrieve all products in this sale, grouped by their brand with product counts.",
+        responses={
+            200: {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "brand_name": {"type": "string"},
+                        "brand_id": {"type": "integer"},
+                        "product_count": {"type": "integer"},
+                        "products": {"type": "array"},
+                    },
+                },
+            }
+        },
+    )
+    @action(detail=True, methods=["get"])
+    def products_by_brand(self, request, pk=None):
+        """Get all products in this sale, grouped and organized by brand."""
+        sale = self.get_queryset().get(pk=pk)
+        # Optimized query with all necessary prefetch to avoid N+1
+        products = sale.products.select_related(
+            "product", "product__brand", "product__user", "product__category"
+        ).prefetch_related("images")[:500]
+
+        # Group by brand
+        brands_dict = {}
+        for product in products:
+            brand = product.product.brand if product.product else None
+            brand_name = brand.name if brand else "No Brand"
+            brand_id = brand.id if brand else None
+
+            if brand_name not in brands_dict:
+                brands_dict[brand_name] = {"brand_id": brand_id, "products": []}
+
+            brands_dict[brand_name]["products"].append(MarketplaceProductSerializer(product).data)
+
+        # Convert to sorted list
+        result = [
+            {
+                "brand_name": brand_name,
+                "brand_id": data["brand_id"],
+                "product_count": len(data["products"]),
+                "products": data["products"],
+            }
+            for brand_name, data in sorted(brands_dict.items())
+        ]
+
+        return Response(result)
 
 
 @api_view(["POST"])

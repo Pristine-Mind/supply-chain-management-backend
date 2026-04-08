@@ -34,6 +34,7 @@ from market.views import (
     MarkNotificationAsReadView,
     MoreFromSellerView,
     NegotiationViewSet,
+    NewYearSaleViewSet,
     NotificationListView,
     OrderTrackingEventViewSet,
     ProductFeedbackView,
@@ -139,6 +140,7 @@ router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-ord
 router.register(r"stock-history", StockHistoryViewSet, basename="stockhistory")
 router.register(r"direct-sales", DirectSaleViewSet, basename="direct-sale")
 router.register(r"marketplace-sales", MarketplaceSaleViewSet, basename="marketplace-sale")
+router.register(r"new-year-sales", NewYearSaleViewSet, basename="new-year-sale")
 router.register(r"deliveries-main", DeliveryViewSet, basename="delivery")
 router.register(r"reviews", MarketplaceProductReviewViewSet, basename="reviews")
 router.register(r"shoppable-videos", ShoppableVideoViewSet, basename="shoppable-videos")
