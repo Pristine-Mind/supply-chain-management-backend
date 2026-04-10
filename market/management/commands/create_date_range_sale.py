@@ -44,8 +44,7 @@ from market.models import NewYearSale
 from producer.models import Brand, MarketplaceProduct
 
 BRAND_DISCOUNT_MAP = {
-    32: 17,
-    33: 17,
+    34: 10
 }
 
 
