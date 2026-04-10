@@ -43,35 +43,9 @@ from django.utils import timezone
 from market.models import NewYearSale
 from producer.models import Brand, MarketplaceProduct
 
-# Pre-configured brand discount mapping
 BRAND_DISCOUNT_MAP = {
-    15: 5,  # Brand 15 -> 5%
-    3: 5,  # Brand 3 -> 5%
-    22: 8,  # Brand 22 -> 8%
-    30: 8,  # Brand 30 -> 8%
-    13: 7,  # Brand 13 -> 7%
-    6: 8,  # Brand 6 -> 8%
-    26: 8,  # Brand 26 -> 8%
-    10: 10,  # Brand 10 -> 10%
-    20: 12,  # Brand 20 -> 12%
-    28: 12,  # Brand 28 -> 12%
-    16: 12,  # Brand 16 -> 12%
-    4: 17,  # Brand 4 -> 17%
-    11: 8,  # Brand 11 -> 8%
-    24: 10,  # Brand 24 -> 10%
-    31: 8,  # Brand 31 -> 8%
-    21: 12,  # Brand 21 -> 12%
-    29: 8,  # Brand 29 -> 8%
-    2: 15,  # Brand 2 -> 15%
-    8: 12,  # Brand 8 -> 12%
-    17: 40,  # Brand 17 -> 40%
-    18: 10,  # Brand 18 -> 10%
-    14: 12,  # Brand 14 -> 12%
-    12: 12,  # Brand 12 -> 12%
-    7: 12,  # Brand 7 -> 12%
-    27: 12,  # Brand 27 -> 12%
-    19: 12,  # Brand 19 -> 12%
-    23: 10,  # Brand 23 -> 10%
+    32: 17,
+    33: 17,
 }
 
 
