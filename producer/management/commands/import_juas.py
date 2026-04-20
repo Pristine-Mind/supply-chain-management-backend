@@ -2,7 +2,9 @@ import io
 import logging
 import os
 from decimal import Decimal
+from urllib.parse import urlparse
 
+import requests
 import pandas as pd
 from django.core.files import File
 from django.core.files.base import ContentFile
@@ -187,6 +189,31 @@ class Command(BaseCommand):
 
         return None, None
 
+    def download_image_from_url(self, url, product_name):
+        """Download image from URL and return (filename, BytesIO) or (None, None)"""
+        try:
+            url = str(url).strip()
+            if not url or url.lower() == "nan":
+                return None, None
+
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+
+            image_bytes = io.BytesIO(response.content)
+            pil_image = PILImage.open(image_bytes)
+            extension = (pil_image.format or "jpeg").lower()
+            image_bytes.seek(0)
+
+            safe_name = "".join(c for c in product_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            safe_name = safe_name.replace(" ", "_")[:50]
+            filename = f"{safe_name}.{extension}"
+
+            logging.info(f"Downloaded image from URL for '{product_name}': {filename}")
+            return filename, image_bytes
+        except Exception as e:
+            logging.warning(f"Failed to download image from URL '{url}': {e}")
+            return None, None
+
     def handle(self, *args, **options):
         excel_file_path = options["excel_file"]
         producer_id = options["producer_id"]
@@ -327,13 +354,18 @@ class Command(BaseCommand):
                                 self.style.SUCCESS(f"Row {row_num}: Updated product: {product_name} (MRP: {mrp})")
                             )
 
-                        # Extract and attach embedded image
+                        # Extract and attach image (embedded first, then URL fallback)
                         try:
                             filename, image_bytes = self.extract_embedded_image(ws, row_num, product_name)
 
+                            # Fallback: download from URL column if no embedded image
+                            if not filename or not image_bytes:
+                                image_url = row.get("product_image") or row.get("image") or row.get("image_url")
+                                if pd.notna(image_url) and str(image_url).strip():
+                                    filename, image_bytes = self.download_image_from_url(image_url, product_name)
+
                             if filename and image_bytes:
-                                # Create ProductImage instance with the image
-                                image_bytes.seek(0)  # Ensure we're at the start
+                                image_bytes.seek(0)
                                 product_image = ProductImage(
                                     product=product,
                                     alt_text=product_name,
