@@ -55,6 +55,7 @@ from market.views import (
     RelatedProductsView,
     SellerChatMessageViewSet,
     SellerProductsView,
+    SellerProfileWithProductsViewSet,
     ShoppableVideoCategoryViewSet,
     ShoppableVideoViewSet,
     UserBidViewSet,
@@ -182,6 +183,7 @@ router.register(r"shoppable-video-categories", ShoppableVideoCategoryViewSet, ba
 router.register(r"negotiations", NegotiationViewSet, basename="negotiations")
 router.register(r"coupons", CouponViewSet, basename="coupons")
 router.register(r"new-year-sales", NewYearSaleViewSet, basename="new-year-sale")
+router.register(r"seller-profiles", SellerProfileWithProductsViewSet, basename="seller-profiles")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
