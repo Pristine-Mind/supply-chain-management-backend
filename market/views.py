@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import random
 from decimal import Decimal
@@ -3775,24 +3776,27 @@ class UserMarketplaceProductViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Returns **user profiles as the root object**, with all their available
-    ``MarketplaceProduct`` records nested under ``marketplace_products``.
+    Returns **user profiles as the root object**, with their available
+    ``MarketplaceProduct`` records.
 
     Endpoints
     ---------
     GET /api/v1/seller-profiles/
-        Paginated list of all sellers who have at least one available
-        marketplace product, each with their full product catalogue.
+        Paginated list of sellers. Products are NOT embedded here — only
+        ``total_products`` count is returned per seller (fast, no prefetch).
     GET /api/v1/seller-profiles/{id}/
-        Single seller (by User PK) with all their available products.
+        Single seller with paginated marketplace products.
 
-    Query Parameters (list only)
-    ----------------------------
-    search      – partial match on username, first_name, last_name,
-                  or registered_business_name
-    business_type – "distributor" or "retailer"
-    b2b_verified  – "true" / "false"
+    Query Parameters
+    ----------------
+    list:
+        search, business_type, b2b_verified, page, page_size
+    retrieve:
+        products_page      – product page number (default 1)
+        products_page_size – products per page   (default 50, max 200)
     """
+
+    _CACHE_TTL = 300  # 5 minutes
 
     permission_classes = [AllowAny]
     filter_backends = [SearchFilter]
@@ -3809,36 +3813,33 @@ class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
         return SellerWithMarketplaceProductsSerializer
 
     def get_queryset(self):
-        from django.db.models import Prefetch
+        """
+        list  → lightweight queryset: no product prefetch, annotated mp_count.
+        retrieve → minimal queryset: just the user + profile selects.
+                   Products are fetched separately in retrieve() with LIMIT/OFFSET.
+        """
+        action = getattr(self, "action", "list")
 
-        from producer.models import MarketplaceProduct as MP
-        from producer.models import Product
-
-        available_mp_qs = (
-            MP.objects.filter(is_available=True)
-            .select_related(
-                "product",
-                "product__category",
-                "product__subcategory",
-                "product__producer",
+        if action == "retrieve":
+            qs = (
+                User.objects.filter(product__marketplaceproduct__is_available=True)
+                .distinct()
+                .select_related("user_profile", "user_profile__role", "user_profile__location")
             )
-            .prefetch_related("bulk_price_tiers", "b2b_price_tiers", "variants", "reviews")
-        )
-
-        products_qs = Product.objects.prefetch_related(Prefetch("marketplaceproduct_set", queryset=available_mp_qs))
-
-        qs = (
-            User.objects.filter(product__marketplaceproduct__is_available=True)
-            .distinct()
-            .select_related(
-                "user_profile",
-                "user_profile__role",
-                "user_profile__location",
+        else:
+            qs = (
+                User.objects.filter(product__marketplaceproduct__is_available=True)
+                .distinct()
+                .select_related("user_profile", "user_profile__role", "user_profile__location")
+                .annotate(
+                    mp_count=Count(
+                        "product__marketplaceproduct",
+                        filter=Q(product__marketplaceproduct__is_available=True),
+                        distinct=True,
+                    )
+                )
             )
-            .prefetch_related(Prefetch("product_set", queryset=products_qs))
-        )
 
-        # Optional filters
         business_type = self.request.query_params.get("business_type")
         b2b_verified = self.request.query_params.get("b2b_verified")
 
@@ -3849,13 +3850,17 @@ class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
 
         return qs
 
+    def _cache_key(self, request):
+        return "market:seller_profiles:" + hashlib.sha256(request.get_full_path().encode("utf-8")).hexdigest()
+
     @extend_schema(
-        summary="List seller profiles with their marketplace products",
+        summary="List seller profiles (with product counts)",
         description=(
-            "Returns a paginated list of all users who have at least one available "
-            "marketplace product. The root object is the **seller profile** — "
-            "all their available marketplace products are nested under "
-            "`marketplace_products`.\n\n"
+            "Returns a paginated list of all sellers who have at least one available "
+            "marketplace product. For performance, **products are not embedded** in the "
+            "list response — only `total_products` count is included per seller.\n\n"
+            "Use `GET /api/v1/seller-profiles/{id}/` to retrieve a single seller with "
+            "their full paginated product list.\n\n"
             "**Query Parameters**\n"
             "- `search` — Match on username, first_name, last_name, or business name.\n"
             "- `business_type` — `distributor` or `retailer`.\n"
@@ -3863,49 +3868,148 @@ class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
             "- `page` / `page_size` — Pagination controls."
         ),
         parameters=[
-            {
-                "name": "search",
-                "in": "query",
-                "required": False,
-                "schema": {"type": "string"},
-                "description": "Partial match on username, name, or business name.",
-            },
+            {"name": "search", "in": "query", "required": False, "schema": {"type": "string"}},
             {
                 "name": "business_type",
                 "in": "query",
                 "required": False,
                 "schema": {"type": "string", "enum": ["distributor", "retailer"]},
-                "description": "Filter by business type.",
             },
             {
                 "name": "b2b_verified",
                 "in": "query",
                 "required": False,
                 "schema": {"type": "string", "enum": ["true", "false"]},
-                "description": "Filter by B2B verification status.",
             },
         ],
         responses={200: "SellerWithMarketplaceProductsSerializer(many=True)"},
         tags=["Seller Profiles"],
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        cache_key = self._cache_key(request)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        qs = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(qs)
+
+        # skip_products=True: serializer returns [] for marketplace_products
+        # get_total_products will use obj.mp_count annotation instead
+        ctx = self.get_serializer_context()
+        ctx["skip_products"] = True
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context=ctx)
+            response = self.get_paginated_response(serializer.data)
+        else:
+            serializer = self.get_serializer(qs, many=True, context=ctx)
+            response = Response(serializer.data)
+
+        try:
+            cache.set(cache_key, response.data, self._CACHE_TTL)
+        except Exception:
+            pass
+        return response
 
     @extend_schema(
-        summary="Retrieve a seller profile with all their marketplace products",
+        summary="Retrieve a seller profile with paginated marketplace products",
         description=(
-            "Returns the full profile of a single seller identified by User PK, "
-            "with all their currently available marketplace products nested under "
-            "`marketplace_products`."
+            "Returns the full profile of a single seller with their marketplace "
+            "products **paginated at the DB level** — safe for sellers with thousands "
+            "of products.\n\n"
+            "**Product Pagination Parameters**\n"
+            "- `products_page` — Page number for products (default 1).\n"
+            "- `products_page_size` — Products per page (default 50, max 200)."
         ),
+        parameters=[
+            {
+                "name": "products_page",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "integer", "default": 1, "minimum": 1},
+                "description": "Page number for the seller's products.",
+            },
+            {
+                "name": "products_page_size",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200},
+                "description": "Number of products per page (max 200).",
+            },
+        ],
         responses={
             200: "SellerWithMarketplaceProductsSerializer",
             404: {
-                "description": "User not found or has no available products.",
+                "description": "Seller not found.",
                 "content": {"application/json": {"example": {"detail": "No User matches the given query."}}},
             },
         },
         tags=["Seller Profiles"],
     )
     def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+        from producer.models import MarketplaceProduct as MP
+        from producer.serializers import MarketplaceProductSerializer as MPSerializer
+
+        pk = kwargs.get("pk")
+
+        try:
+            products_page_size = max(1, min(int(request.query_params.get("products_page_size", 50)), 200))
+            products_page = max(1, int(request.query_params.get("products_page", 1)))
+        except (TypeError, ValueError):
+            products_page_size = 50
+            products_page = 1
+
+        cache_key = f"market:seller_profile:{pk}:{products_page}:{products_page_size}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        # Fetch seller with profile only (no product prefetch)
+        instance = get_object_or_404(
+            User.objects.select_related("user_profile", "user_profile__role", "user_profile__location")
+            .filter(product__marketplaceproduct__is_available=True)
+            .distinct(),
+            pk=pk,
+        )
+
+        # Flat paginated product query — DB-level LIMIT/OFFSET, no 2000-row load
+        mp_qs = (
+            MP.objects.filter(product__user=instance, is_available=True)
+            .select_related(
+                "product",
+                "product__category",
+                "product__subcategory",
+                "product__producer",
+            )
+            .prefetch_related("bulk_price_tiers", "b2b_price_tiers", "variants", "reviews")
+            .order_by("-listed_date")
+        )
+
+        total = mp_qs.count()  # single COUNT query
+        offset = (products_page - 1) * products_page_size
+        page_mps = list(mp_qs[offset : offset + products_page_size])  # LIMIT/OFFSET
+
+        ctx = self.get_serializer_context()
+        ctx["skip_products"] = True  # avoid iterating product_set in serializer
+        ctx["total_products_override"] = total  # feed total to get_total_products
+
+        profile_data = dict(self.get_serializer(instance, context=ctx).data)
+
+        # Replace the placeholder values with real data
+        profile_data["total_products"] = total
+        profile_data["marketplace_products"] = MPSerializer(page_mps, many=True, context=ctx).data
+        profile_data["products_pagination"] = {
+            "page": products_page,
+            "page_size": products_page_size,
+            "total": total,
+            "total_pages": max(1, (total + products_page_size - 1) // products_page_size),
+            "has_next": (products_page * products_page_size) < total,
+            "has_previous": products_page > 1,
+        }
+
+        try:
+            cache.set(cache_key, profile_data, self._CACHE_TTL)
+        except Exception:
+            pass
+        return Response(profile_data)

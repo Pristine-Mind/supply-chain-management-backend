@@ -2490,19 +2490,29 @@ class SellerWithMarketplaceProductsSerializer(serializers.ModelSerializer):
     def get_marketplace_products(self, obj):
         """
         Flatten User → product_set → marketplaceproduct_set into a single list.
-        All data comes from the pre-fetched querysets — no extra queries here.
+        Skipped entirely when context["skip_products"] is True (used by the list
+        endpoint which does not embed products for performance).
         """
-        results = []
-        for product in obj.product_set.all():
-            for mp in product.marketplaceproduct_set.all():
-                results.append(MarketplaceProductSerializer(mp, context=self.context).data)
-        return results
+        if self.context.get("skip_products"):
+            return []
+        all_mps = [mp for product in obj.product_set.all() for mp in product.marketplaceproduct_set.all()]
+        limit = self.context.get("products_limit")
+        if limit:
+            all_mps = all_mps[:limit]
+        if not all_mps:
+            return []
+        return MarketplaceProductSerializer(all_mps, many=True, context=self.context).data
 
     def get_total_products(self, obj):
-        total = 0
-        for product in obj.product_set.all():
-            total += len(product.marketplaceproduct_set.all())
-        return total
+        # 1. DB annotation set by the list queryset (fastest)
+        if hasattr(obj, "mp_count"):
+            return obj.mp_count
+        # 2. Value injected by the retrieve override (avoids re-querying)
+        override = self.context.get("total_products_override")
+        if override is not None:
+            return override
+        # 3. Fallback: iterate pre-fetched data
+        return sum(len(product.marketplaceproduct_set.all()) for product in obj.product_set.all())
 
 
 # Monkey patch request object to store user location
