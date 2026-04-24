@@ -43,9 +43,7 @@ from django.utils import timezone
 from market.models import NewYearSale
 from producer.models import Brand, MarketplaceProduct
 
-BRAND_DISCOUNT_MAP = {
-    34: 10
-}
+BRAND_DISCOUNT_MAP = {34: 10}
 
 
 def _validate_brand_discount_map():

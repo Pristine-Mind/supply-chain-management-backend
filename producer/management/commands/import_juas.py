@@ -4,8 +4,8 @@ import os
 from decimal import Decimal
 from urllib.parse import urlparse
 
-import requests
 import pandas as pd
+import requests
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand

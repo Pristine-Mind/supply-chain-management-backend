@@ -16,7 +16,6 @@ from django.db import transaction
 
 from producer.models import Brand, MarketplaceProduct
 
-
 # Brand discount mapping (same as in create_date_range_sale.py)
 BRAND_DISCOUNT_MAP = {
     32: 17,
@@ -50,15 +49,11 @@ class Command(BaseCommand):
         reset = options.get("reset", False)
         brand_id = options.get("brand_id")
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"\n📊 Applying brand-specific discounts to marketplace products"
-            )
-        )
-        
+        self.stdout.write(self.style.SUCCESS(f"\n📊 Applying brand-specific discounts to marketplace products"))
+
         if dry_run:
             self.stdout.write(self.style.WARNING("🔍 DRY RUN MODE - No changes will be applied"))
-        
+
         if reset:
             self.stdout.write(self.style.WARNING("⚠️  First resetting all marketplace product discounts to 0"))
 
@@ -66,9 +61,7 @@ class Command(BaseCommand):
         if reset and not dry_run:
             with transaction.atomic():
                 reset_count = MarketplaceProduct.objects.filter(discount_percentage__gt=0).update(discount_percentage=0)
-                self.stdout.write(
-                    self.style.SUCCESS(f"✓ Reset {reset_count} products to 0% discount")
-                )
+                self.stdout.write(self.style.SUCCESS(f"✓ Reset {reset_count} products to 0% discount"))
         elif reset and dry_run:
             reset_count = MarketplaceProduct.objects.filter(discount_percentage__gt=0).count()
             self.stdout.write(f"[DRY RUN] Would reset {reset_count} products to 0% discount")
@@ -88,30 +81,20 @@ class Command(BaseCommand):
                     brand = Brand.objects.get(id=brand_id_map)
                 except Brand.DoesNotExist:
                     brands_not_found.append(brand_id_map)
-                    self.stdout.write(
-                        self.style.WARNING(f"⚠️  Brand ID {brand_id_map} not found")
-                    )
+                    self.stdout.write(self.style.WARNING(f"⚠️  Brand ID {brand_id_map} not found"))
                     continue
 
                 # Get products for this brand
-                products_queryset = MarketplaceProduct.objects.filter(
-                    product__brand=brand
-                )
+                products_queryset = MarketplaceProduct.objects.filter(product__brand=brand)
 
                 if not products_queryset.exists():
                     brands_no_products.append(brand.name)
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"⚠️  Brand '{brand.name}' has no marketplace products"
-                        )
-                    )
+                    self.stdout.write(self.style.WARNING(f"⚠️  Brand '{brand.name}' has no marketplace products"))
                     continue
 
                 # Apply discount
                 if not dry_run:
-                    updated_count = products_queryset.update(
-                        discount_percentage=Decimal(str(discount_percentage))
-                    )
+                    updated_count = products_queryset.update(discount_percentage=Decimal(str(discount_percentage)))
                 else:
                     updated_count = products_queryset.count()
 
@@ -127,15 +110,11 @@ class Command(BaseCommand):
 
         # Summary
         self.stdout.write("\n" + "=" * 80)
-        
+
         if dry_run:
-            self.stdout.write(
-                self.style.WARNING(f"🔍 [DRY RUN] Would update {total_updated} products total")
-            )
+            self.stdout.write(self.style.WARNING(f"🔍 [DRY RUN] Would update {total_updated} products total"))
         else:
-            self.stdout.write(
-                self.style.SUCCESS(f"✓ Updated {total_updated} products total with brand-specific discounts")
-            )
+            self.stdout.write(self.style.SUCCESS(f"✓ Updated {total_updated} products total with brand-specific discounts"))
 
         # Discount breakdown
         self.stdout.write("\n📊 Products by discount percentage:")
@@ -143,26 +122,16 @@ class Command(BaseCommand):
             self.stdout.write(f"  {discount}% discount: {count} products")
 
         if brands_not_found:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"\n⚠️  Brands not found: {', '.join(map(str, brands_not_found))}"
-                )
-            )
+            self.stdout.write(self.style.WARNING(f"\n⚠️  Brands not found: {', '.join(map(str, brands_not_found))}"))
 
         if brands_no_products:
             self.stdout.write(
-                self.style.WARNING(
-                    f"\n⚠️  Brands with no marketplace products: {', '.join(brands_no_products)}"
-                )
+                self.style.WARNING(f"\n⚠️  Brands with no marketplace products: {', '.join(brands_no_products)}")
             )
 
         self.stdout.write("=" * 80)
 
         if dry_run:
-            self.stdout.write(
-                self.style.SUCCESS("\n✓ Dry run complete. Run without --dry-run to apply changes.")
-            )
+            self.stdout.write(self.style.SUCCESS("\n✓ Dry run complete. Run without --dry-run to apply changes."))
         else:
-            self.stdout.write(
-                self.style.SUCCESS("\n✓ Discounts applied successfully!")
-            )
+            self.stdout.write(self.style.SUCCESS("\n✓ Discounts applied successfully!"))

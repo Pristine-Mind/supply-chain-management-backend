@@ -41,12 +41,14 @@ from market.views import (
     RelatedProductsView,
     SalesBannerStatsView,
     SellerProductsView,
+    SellerProfileWithProductsViewSet,
     ShoppableVideoCategoryViewSet,
     ShoppableVideoViewSet,
     UserBidViewSet,
     UserCartView,
     UserFeedbackView,
     UserFollowViewSet,
+    UserMarketplaceProductViewSet,
     VideoCommentViewSet,
     VideoReportViewSet,
     affiliate_redirect,
@@ -129,6 +131,8 @@ router.register(r"marketplace", MarketplaceProductViewSet, basename="marketplace
 router.register(r"marketplace-trending", TrendingProductsViewSet, basename="marketplace-trending")
 router.register(r"location-products", LocationBasedProductViewSet, basename="location-products")
 router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, basename="marketplace-user-products")
+router.register(r"user-marketplace-products", UserMarketplaceProductViewSet, basename="user-marketplace-products")
+router.register(r"seller-profiles", SellerProfileWithProductsViewSet, basename="seller-profiles")
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
 router.register(r"user-bids", UserBidViewSet, basename="user-bids")

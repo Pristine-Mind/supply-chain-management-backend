@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from re import M
 
+from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
 from rest_framework import serializers
 
@@ -730,6 +731,14 @@ class MarketplaceProductReviewSerializer(serializers.ModelSerializer):
         return data
 
 
+class SellerInfoSerializer(serializers.ModelSerializer):
+    """Lightweight seller profile embedded in MarketplaceProduct responses."""
+
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+
+
 class MarketplaceProductSerializer(serializers.ModelSerializer):
     product_details = ProductSerializer(source="product", read_only=True)
     latitude = serializers.FloatField(source="product.user.user_profile.latitude", read_only=True)
@@ -765,6 +774,8 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     effective_size = serializers.SerializerMethodField()
     effective_color = serializers.SerializerMethodField()
     effective_additional_information = serializers.SerializerMethodField()
+
+    seller = SellerInfoSerializer(source="product.user", read_only=True)
 
     class Meta:
         model = MarketplaceProduct
@@ -819,6 +830,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "brand_name",
             "brand_info",
             "is_branded_product",
+            "seller",
         ]
 
     def get_b2b_price_tiers(self, obj):

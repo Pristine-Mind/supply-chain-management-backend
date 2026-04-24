@@ -61,6 +61,7 @@ from market.views import (
     UserCartView,
     UserFeedbackView,
     UserFollowViewSet,
+    UserMarketplaceProductViewSet,
     VideoCommentViewSet,
     VideoReportViewSet,
     affiliate_redirect,
@@ -154,6 +155,7 @@ router.register(r"stocklist", StockListView)
 router.register(r"marketplace", MarketplaceProductViewSet, basename="marketplace")
 router.register(r"marketplace-trending", TrendingProductsViewSet, basename="marketplace-trending")
 router.register(r"marketplace-user-products", MarketplaceUserProductViewSet, basename="marketplace-user-products")
+router.register(r"user-marketplace-products", UserMarketplaceProductViewSet, basename="user-marketplace-products")
 router.register(r"bids", BidViewSet, basename="bids")
 router.register(r"chats", ChatMessageViewSet, basename="chats")
 router.register(r"seller-chats", SellerChatMessageViewSet, basename="seller-chats")

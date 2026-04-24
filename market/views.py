@@ -506,7 +506,16 @@ def verify_khalti_payment(request):
 
 
 class MarketplaceUserProductViewSet(viewsets.ModelViewSet):
-    queryset = MarketplaceUserProduct.objects.filter(is_sold=False, is_verified=True)
+    queryset = (
+        MarketplaceUserProduct.objects.filter(is_sold=False, is_verified=True)
+        .select_related(
+            "user",
+            "user__user_profile",
+            "user__user_profile__role",
+            "location",
+        )
+        .prefetch_related("images")
+    )
     serializer_class = MarketplaceUserProductSerializer
     permission_classes = [IsAuthenticated]
 
@@ -1414,14 +1423,21 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["get"])
     def discounted_products(self, request, pk=None):
         """Get all products in this sale with calculated discounted prices."""
+        from rest_framework.pagination import PageNumberPagination
+
         sale = self.get_queryset().get(pk=pk)
         # Optimized with select_related to avoid N+1 queries
-        products = sale.products.select_related("product", "product__brand", "product__user").prefetch_related("product__images")[
-            :500
-        ]
+        products = sale.products.select_related("product", "product__brand", "product__user").prefetch_related(
+            "product__images"
+        )
+
+        # Apply pagination before processing
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get("limit", 10))
+        paginated_products = paginator.paginate_queryset(products, request)
 
         discounted_products = []
-        for product in products:
+        for product in paginated_products:
             original_price = float(product.price)
             discounted_price = float(sale.get_discounted_price(Decimal(str(original_price))))
             discount_amount = original_price - discounted_price
@@ -1438,7 +1454,7 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
                 }
             )
 
-        return Response(discounted_products)
+        return paginator.get_paginated_response(discounted_products)
 
     @extend_schema(
         summary="Get products grouped by brand",
@@ -1461,11 +1477,13 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["get"])
     def products_by_brand(self, request, pk=None):
         """Get all products in this sale, grouped and organized by brand."""
+        from rest_framework.pagination import PageNumberPagination
+
         sale = self.get_queryset().get(pk=pk)
         # Optimized query with all necessary prefetch to avoid N+1
         products = sale.products.select_related(
             "product", "product__brand", "product__user", "product__category"
-        ).prefetch_related("product__images")[:500]
+        ).prefetch_related("product__images")
 
         # Group by brand
         brands_dict = {}
@@ -1477,7 +1495,9 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
             if brand_name not in brands_dict:
                 brands_dict[brand_name] = {"brand_id": brand_id, "products": []}
 
-            brands_dict[brand_name]["products"].append(MarketplaceProductSerializer(product, context={"request": request}).data)
+            brands_dict[brand_name]["products"].append(
+                MarketplaceProductSerializer(product, context={"request": request}).data
+            )
 
         # Convert to sorted list
         result = [
@@ -1490,7 +1510,12 @@ class NewYearSaleViewSet(viewsets.ReadOnlyModelViewSet):
             for brand_name, data in sorted(brands_dict.items())
         ]
 
-        return Response(result)
+        # Apply pagination to brands list
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get("limit", 10))
+        paginated_result = paginator.paginate_queryset(result, request)
+
+        return paginator.get_paginated_response(paginated_result)
 
 
 @api_view(["POST"])
@@ -3517,3 +3542,370 @@ class SalesBannerStatsView(views.APIView):
 
         serializer = SalesBannerStatsSerializer(stats)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserMarketplaceProductViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only viewset that lists / retrieves all available MarketplaceProducts
+    together with full seller (user + UserProfile) information.
+
+    Query parameters
+    ----------------
+    user_id   : int   – filter to a specific seller by User pk
+    username  : str   – filter to a specific seller by username (case-insensitive)
+    category  : str   – filter by product category code
+    search    : str   – partial match on product name
+
+    Endpoints
+    ---------
+    GET /api/v1/user-marketplace-products/
+        List all available marketplace products with seller info (paginated).
+    GET /api/v1/user-marketplace-products/<pk>/
+        Retrieve a single marketplace product with seller info.
+    GET /api/v1/user-marketplace-products/by_seller/<user_id>/
+        Shortcut – all available products listed by a specific seller.
+    """
+
+    permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ["product__name", "product__description"]
+    ordering_fields = ["listed_price", "listed_date", "view_count", "rank_score"]
+    ordering = ["-listed_date"]
+
+    def get_serializer_class(self):
+        from .serializers import MarketplaceProductWithSellerSerializer
+
+        return MarketplaceProductWithSellerSerializer
+
+    def get_queryset(self):
+        from producer.models import MarketplaceProduct as MP
+
+        qs = (
+            MP.objects.filter(is_available=True)
+            .select_related(
+                "product",
+                "product__user",
+                "product__user__user_profile",
+                "product__user__user_profile__role",
+                "product__category",
+                "product__subcategory",
+                "product__producer",
+            )
+            .prefetch_related(
+                "bulk_price_tiers",
+                "b2b_price_tiers",
+                "variants",
+                "reviews",
+            )
+        )
+
+        # Optional filters
+        user_id = self.request.query_params.get("user_id")
+        username = self.request.query_params.get("username")
+        category = self.request.query_params.get("category")
+
+        if user_id:
+            qs = qs.filter(product__user_id=user_id)
+        if username:
+            qs = qs.filter(product__user__username__iexact=username)
+        if category:
+            qs = qs.filter(product__category__code__iexact=category)
+
+        return qs
+
+    @extend_schema(
+        summary="List marketplace products with seller info",
+        description=(
+            "Returns a paginated list of all available marketplace products. "
+            "Each product includes complete seller information (user account details + business profile). "
+            "Supports filtering, searching, and ordering.\n\n"
+            "**Query Parameters**\n"
+            "- `user_id` — Filter to products listed by a specific seller (User PK).\n"
+            "- `username` — Filter to products listed by a specific seller (case-insensitive username).\n"
+            "- `category` — Filter by category code (e.g. `FA`, `EG`).\n"
+            "- `search` — Partial match on product name or description.\n"
+            "- `ordering` — Sort field. Prefix with `-` for descending. "
+            "Allowed: `listed_price`, `listed_date`, `view_count`, `rank_score`.\n"
+            "- `page` / `page_size` — Pagination controls.\n\n"
+            "**Seller object fields**\n"
+            "`id`, `username`, `first_name`, `last_name`, `email`, `phone_number`, "
+            "`profile_image`, `registered_business_name`, `business_type`, "
+            "`b2b_verified`, `shop_id`, `role`"
+        ),
+        parameters=[
+            {
+                "name": "user_id",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "integer"},
+                "description": "Filter products by seller User ID.",
+            },
+            {
+                "name": "username",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Filter products by seller username (case-insensitive).",
+            },
+            {
+                "name": "category",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Filter products by category code (e.g. FA, EG, GE).",
+            },
+            {
+                "name": "search",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Search by product name or description.",
+            },
+            {
+                "name": "ordering",
+                "in": "query",
+                "required": False,
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "listed_price",
+                        "-listed_price",
+                        "listed_date",
+                        "-listed_date",
+                        "view_count",
+                        "-view_count",
+                        "rank_score",
+                        "-rank_score",
+                    ],
+                },
+                "description": "Field to sort results by. Prefix with `-` for descending.",
+            },
+        ],
+        responses={200: "MarketplaceProductWithSellerSerializer(many=True)"},
+        tags=["User Marketplace Products"],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Retrieve a single marketplace product with seller info",
+        description=(
+            "Returns full details for a single available marketplace product, "
+            "including the complete seller profile (user account + business profile).\n\n"
+            "**Seller object fields**\n"
+            "`id`, `username`, `first_name`, `last_name`, `email`, `phone_number`, "
+            "`profile_image`, `registered_business_name`, `business_type`, "
+            "`b2b_verified`, `shop_id`, `role`"
+        ),
+        responses={
+            200: "MarketplaceProductWithSellerSerializer",
+            404: {
+                "description": "Product not found or not available.",
+                "content": {"application/json": {"example": {"detail": "No MarketplaceProduct matches the given query."}}},
+            },
+        },
+        tags=["User Marketplace Products"],
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="List all products by a specific seller",
+        description=(
+            "Shortcut endpoint that returns all available marketplace products "
+            "belonging to the seller identified by `user_id`. "
+            "Response includes full seller info on every item and is paginated.\n\n"
+            "Equivalent to `GET /api/v1/user-marketplace-products/?user_id=<user_id>` "
+            "but accessible as a named action."
+        ),
+        parameters=[
+            {
+                "name": "user_id",
+                "in": "path",
+                "required": True,
+                "schema": {"type": "integer"},
+                "description": "Primary key of the seller (User ID).",
+            },
+            {
+                "name": "search",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Search within this seller's products.",
+            },
+            {
+                "name": "ordering",
+                "in": "query",
+                "required": False,
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "listed_price",
+                        "-listed_price",
+                        "listed_date",
+                        "-listed_date",
+                        "view_count",
+                        "-view_count",
+                        "rank_score",
+                        "-rank_score",
+                    ],
+                },
+                "description": "Sort field.",
+            },
+        ],
+        responses={
+            200: "MarketplaceProductWithSellerSerializer(many=True)",
+            404: {
+                "description": "Seller not found (no products returned for unknown user).",
+            },
+        },
+        tags=["User Marketplace Products"],
+    )
+    @action(detail=False, methods=["get"], url_path=r"by_seller/(?P<user_id>\d+)")
+    def by_seller(self, request, user_id=None):
+        """Return all available products listed by the given seller (user_id)."""
+        qs = self.filter_queryset(self.get_queryset().filter(product__user_id=user_id))
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+
+
+class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Returns **user profiles as the root object**, with all their available
+    ``MarketplaceProduct`` records nested under ``marketplace_products``.
+
+    Endpoints
+    ---------
+    GET /api/v1/seller-profiles/
+        Paginated list of all sellers who have at least one available
+        marketplace product, each with their full product catalogue.
+    GET /api/v1/seller-profiles/{id}/
+        Single seller (by User PK) with all their available products.
+
+    Query Parameters (list only)
+    ----------------------------
+    search      – partial match on username, first_name, last_name,
+                  or registered_business_name
+    business_type – "distributor" or "retailer"
+    b2b_verified  – "true" / "false"
+    """
+
+    permission_classes = [AllowAny]
+    filter_backends = [SearchFilter]
+    search_fields = [
+        "username",
+        "first_name",
+        "last_name",
+        "user_profile__registered_business_name",
+    ]
+
+    def get_serializer_class(self):
+        from .serializers import SellerWithMarketplaceProductsSerializer
+
+        return SellerWithMarketplaceProductsSerializer
+
+    def get_queryset(self):
+        from django.db.models import Prefetch
+
+        from producer.models import MarketplaceProduct as MP
+        from producer.models import Product
+
+        available_mp_qs = (
+            MP.objects.filter(is_available=True)
+            .select_related(
+                "product",
+                "product__category",
+                "product__subcategory",
+                "product__producer",
+            )
+            .prefetch_related("bulk_price_tiers", "b2b_price_tiers", "variants", "reviews")
+        )
+
+        products_qs = Product.objects.prefetch_related(Prefetch("marketplaceproduct_set", queryset=available_mp_qs))
+
+        qs = (
+            User.objects.filter(product__marketplaceproduct__is_available=True)
+            .distinct()
+            .select_related(
+                "user_profile",
+                "user_profile__role",
+                "user_profile__location",
+            )
+            .prefetch_related(Prefetch("product_set", queryset=products_qs))
+        )
+
+        # Optional filters
+        business_type = self.request.query_params.get("business_type")
+        b2b_verified = self.request.query_params.get("b2b_verified")
+
+        if business_type:
+            qs = qs.filter(user_profile__business_type=business_type)
+        if b2b_verified is not None:
+            qs = qs.filter(user_profile__b2b_verified=(b2b_verified.lower() == "true"))
+
+        return qs
+
+    @extend_schema(
+        summary="List seller profiles with their marketplace products",
+        description=(
+            "Returns a paginated list of all users who have at least one available "
+            "marketplace product. The root object is the **seller profile** — "
+            "all their available marketplace products are nested under "
+            "`marketplace_products`.\n\n"
+            "**Query Parameters**\n"
+            "- `search` — Match on username, first_name, last_name, or business name.\n"
+            "- `business_type` — `distributor` or `retailer`.\n"
+            "- `b2b_verified` — `true` or `false`.\n"
+            "- `page` / `page_size` — Pagination controls."
+        ),
+        parameters=[
+            {
+                "name": "search",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Partial match on username, name, or business name.",
+            },
+            {
+                "name": "business_type",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string", "enum": ["distributor", "retailer"]},
+                "description": "Filter by business type.",
+            },
+            {
+                "name": "b2b_verified",
+                "in": "query",
+                "required": False,
+                "schema": {"type": "string", "enum": ["true", "false"]},
+                "description": "Filter by B2B verification status.",
+            },
+        ],
+        responses={200: "SellerWithMarketplaceProductsSerializer(many=True)"},
+        tags=["Seller Profiles"],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Retrieve a seller profile with all their marketplace products",
+        description=(
+            "Returns the full profile of a single seller identified by User PK, "
+            "with all their currently available marketplace products nested under "
+            "`marketplace_products`."
+        ),
+        responses={
+            200: "SellerWithMarketplaceProductsSerializer",
+            404: {
+                "description": "User not found or has no available products.",
+                "content": {"application/json": {"example": {"detail": "No User matches the given query."}}},
+            },
+        },
+        tags=["Seller Profiles"],
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)

@@ -366,8 +366,82 @@ class UserProductImageSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class SellerInfoSerializer(serializers.ModelSerializer):
+    """Compact user + profile information embedded in marketplace product listings.
+
+    All UserProfile fields are resolved from the pre-fetched ``user_profile``
+    reverse-OneToOne relation so that the caller's queryset must include
+    ``select_related("user__user_profile", "user__user_profile__role")`` to
+    avoid any extra queries here.
+    """
+
+    phone_number = serializers.SerializerMethodField()
+    profile_image = serializers.SerializerMethodField()
+    registered_business_name = serializers.SerializerMethodField()
+    business_type = serializers.SerializerMethodField()
+    b2b_verified = serializers.SerializerMethodField()
+    shop_id = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "profile_image",
+            "registered_business_name",
+            "business_type",
+            "b2b_verified",
+            "shop_id",
+            "role",
+        ]
+
+    def _profile(self, obj):
+        return getattr(obj, "user_profile", None)
+
+    def get_phone_number(self, obj):
+        p = self._profile(obj)
+        return p.phone_number if p else None
+
+    def get_profile_image(self, obj):
+        p = self._profile(obj)
+        if p and p.profile_image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(p.profile_image.url)
+            return p.profile_image.url
+        return None
+
+    def get_registered_business_name(self, obj):
+        p = self._profile(obj)
+        return p.registered_business_name if p else None
+
+    def get_business_type(self, obj):
+        p = self._profile(obj)
+        return p.business_type if p else None
+
+    def get_b2b_verified(self, obj):
+        p = self._profile(obj)
+        return p.b2b_verified if p else False
+
+    def get_shop_id(self, obj):
+        p = self._profile(obj)
+        return str(p.shop_id) if p and p.shop_id else None
+
+    def get_role(self, obj):
+        p = self._profile(obj)
+        if p and p.role_id:
+            return {"id": p.role_id, "name": p.role.name if p.role else None}
+        return None
+
+
 class MarketplaceUserProductSerializer(serializers.ModelSerializer):
     images = UserProductImageSerializer(many=True, required=False)
+    seller = SellerInfoSerializer(source="user", read_only=True)
 
     class Meta:
         model = MarketplaceUserProduct
@@ -383,11 +457,11 @@ class MarketplaceUserProductSerializer(serializers.ModelSerializer):
             "is_verified",
             "created_at",
             "updated_at",
-            "user",
+            "seller",
             "location",
             "images",
         ]
-        extra_kwargs = {"user": {"read_only": True}}
+        extra_kwargs = {"user": {"write_only": True, "required": False}}
 
     def validate_price(self, value):
         if value <= 0:
@@ -2256,6 +2330,179 @@ class DeliveryCalculationRequestSerializer(serializers.Serializer):
     product_type = serializers.ChoiceField(choices=["marketplace", "user"])
     delivery_latitude = serializers.FloatField(min_value=-90, max_value=90)
     delivery_longitude = serializers.FloatField(min_value=-180, max_value=180)
+
+
+class MarketplaceProductWithSellerSerializer(MarketplaceProductSerializer):
+    seller = SellerInfoSerializer(source="product.user", read_only=True)
+
+    class Meta(MarketplaceProductSerializer.Meta):
+        fields = MarketplaceProductSerializer.Meta.fields + ["seller"]
+
+
+class SellerWithMarketplaceProductsSerializer(serializers.ModelSerializer):
+    """
+    User-profile-first serializer.
+
+    Root object is a ``User``. All available ``MarketplaceProduct`` records
+    belonging to that user are nested under ``marketplace_products``.
+
+    Required queryset:
+        User.objects.filter(product__marketplaceproduct__is_available=True)
+            .distinct()
+            .select_related("user_profile", "user_profile__role", "user_profile__location")
+            .prefetch_related(
+                Prefetch(
+                    "product_set",
+                    queryset=Product.objects.prefetch_related(
+                        Prefetch(
+                            "marketplaceproduct_set",
+                            queryset=MarketplaceProduct.objects.filter(is_available=True)
+                                .select_related("product", "product__category")
+                                .prefetch_related("bulk_price_tiers", "b2b_price_tiers", "variants", "reviews"),
+                        )
+                    ),
+                )
+            )
+    """
+
+    # ── UserProfile fields ────────────────────────────────────────────────────
+    phone_number = serializers.SerializerMethodField()
+    profile_image = serializers.SerializerMethodField()
+    registered_business_name = serializers.SerializerMethodField()
+    business_type = serializers.SerializerMethodField()
+    b2b_verified = serializers.SerializerMethodField()
+    shop_id = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
+    location = serializers.SerializerMethodField()
+    bio = serializers.SerializerMethodField()
+    city = serializers.SerializerMethodField()
+    state = serializers.SerializerMethodField()
+    country = serializers.SerializerMethodField()
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
+    has_access_to_marketplace = serializers.SerializerMethodField()
+
+    # ── Nested products ───────────────────────────────────────────────────────
+    marketplace_products = serializers.SerializerMethodField()
+    total_products = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "profile_image",
+            "registered_business_name",
+            "business_type",
+            "b2b_verified",
+            "shop_id",
+            "role",
+            "location",
+            "bio",
+            "city",
+            "state",
+            "country",
+            "latitude",
+            "longitude",
+            "has_access_to_marketplace",
+            "total_products",
+            "marketplace_products",
+        ]
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+    def _profile(self, obj):
+        return getattr(obj, "user_profile", None)
+
+    # ── UserProfile field getters ─────────────────────────────────────────────
+    def get_phone_number(self, obj):
+        p = self._profile(obj)
+        return p.phone_number if p else None
+
+    def get_profile_image(self, obj):
+        p = self._profile(obj)
+        if p and p.profile_image:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(p.profile_image.url)
+            return p.profile_image.url
+        return None
+
+    def get_registered_business_name(self, obj):
+        p = self._profile(obj)
+        return p.registered_business_name if p else None
+
+    def get_business_type(self, obj):
+        p = self._profile(obj)
+        return p.business_type if p else None
+
+    def get_b2b_verified(self, obj):
+        p = self._profile(obj)
+        return p.b2b_verified if p else False
+
+    def get_shop_id(self, obj):
+        p = self._profile(obj)
+        return str(p.shop_id) if p and p.shop_id else None
+
+    def get_role(self, obj):
+        p = self._profile(obj)
+        if p and p.role_id:
+            return {"id": p.role_id, "name": p.role.name if p.role else None}
+        return None
+
+    def get_location(self, obj):
+        p = self._profile(obj)
+        if p and p.location:
+            return {"id": p.location.id, "name": p.location.name}
+        return None
+
+    def get_bio(self, obj):
+        p = self._profile(obj)
+        return p.bio if p else None
+
+    def get_city(self, obj):
+        p = self._profile(obj)
+        return p.city if p else None
+
+    def get_state(self, obj):
+        p = self._profile(obj)
+        return p.state if p else None
+
+    def get_country(self, obj):
+        p = self._profile(obj)
+        return p.country if p else None
+
+    def get_latitude(self, obj):
+        p = self._profile(obj)
+        return p.latitude if p else None
+
+    def get_longitude(self, obj):
+        p = self._profile(obj)
+        return p.longitude if p else None
+
+    def get_has_access_to_marketplace(self, obj):
+        p = self._profile(obj)
+        return p.has_access_to_marketplace if p else False
+
+    def get_marketplace_products(self, obj):
+        """
+        Flatten User → product_set → marketplaceproduct_set into a single list.
+        All data comes from the pre-fetched querysets — no extra queries here.
+        """
+        results = []
+        for product in obj.product_set.all():
+            for mp in product.marketplaceproduct_set.all():
+                results.append(MarketplaceProductSerializer(mp, context=self.context).data)
+        return results
+
+    def get_total_products(self, obj):
+        total = 0
+        for product in obj.product_set.all():
+            total += len(product.marketplaceproduct_set.all())
+        return total
 
 
 # Monkey patch request object to store user location
