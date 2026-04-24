@@ -169,7 +169,7 @@ class Command(BaseCommand):
 
                 # Create user with username "health_beauty_store"
                 username = f"habre_and_yeti"
-                user = User.objects.get(id=114)
+                user = User.objects.get(id=185)
                 # user, user_created = User.objects.get_or_create(
                 #     username=username,
                 #     defaults={
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                 #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer = Producer.objects.get(id=89)
+                producer = Producer.objects.get(id=147)
                 # producer, producer_created = Producer.objects.get_or_create(
                 #     registration_number="HB1025",
                 #     defaults={
@@ -229,14 +229,14 @@ class Command(BaseCommand):
                 # else:
                 #     self.stdout.write(self.style.WARNING(f"Producer already exists: {producer.name}"))
 
-                # # Get or create "Health & Beauty" category
+                # # Get or create "Pet & Baby Care" category
                 try:
-                    health_beauty = Category.objects.get(code="HB")
+                    pet_baby_care = Category.objects.get(code="PB")
                 except Category.DoesNotExist:
-                    health_beauty = Category.objects.create(
-                        code="HB", name="Health & Beauty", description="Health and beauty products"
+                    pet_baby_care = Category.objects.create(
+                        code="PB", name="Pet & Baby Care", description="Pet and baby care products"
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Created category: {health_beauty.name}"))
+                    self.stdout.write(self.style.SUCCESS(f"Created category: {pet_baby_care.name}"))
 
                 # Process each row in the Excel file
                 products_created = 0
@@ -285,8 +285,8 @@ class Command(BaseCommand):
                             defaults={
                                 "description": description,
                                 "user": user,
-                                "category": health_beauty,
-                                "old_category": Product.ProductCategory.HEALTH_BEAUTY,
+                                "category": pet_baby_care,
+                                "old_category": Product.ProductCategory.PET_BABY_CARE,
                                 "additional_information": additional_information,
                                 "price": price,
                                 "cost_price": price,
@@ -307,12 +307,12 @@ class Command(BaseCommand):
                             product.description = description
                             product.price = price
                             product.cost_price = price
-                            product.category = health_beauty
-                            product.old_category = Product.ProductCategory.HEALTH_BEAUTY
+                            product.category = pet_baby_care
+                            product.old_category = Product.ProductCategory.PET_BABY_CARE
                             product.additional_information = additional_information
                             product.color = color
                             if not product.sku:
-                                product.sku = f'HB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
+                                product.sku = f'PB-{product_name[:10].upper().replace(" ", "")}-{int(price)}'
                             product.save()
                             products_updated += 1
                             self.stdout.write(
