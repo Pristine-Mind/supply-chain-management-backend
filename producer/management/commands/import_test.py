@@ -169,7 +169,7 @@ class Command(BaseCommand):
 
                 # Create user with username "health_beauty_store"
                 username = f"habre_and_yeti"
-                user = User.objects.get(id=186)
+                user = User.objects.get(id=189)
                 # user, user_created = User.objects.get_or_create(
                 #     username=username,
                 #     defaults={
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                 #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer = Producer.objects.get(id=148)
+                producer = Producer.objects.get(id=151)
                 # producer, producer_created = Producer.objects.get_or_create(
                 #     registration_number="HB1025",
                 #     defaults={
@@ -231,12 +231,12 @@ class Command(BaseCommand):
 
                 # # Get or create "Fashion & Apparel" category
                 try:
-                    fashion_apparel = Category.objects.get(code="FA")
+                    electronics_gadgets = Category.objects.get(code="EG")
                 except Category.DoesNotExist:
-                    fashion_apparel = Category.objects.create(
-                        code="FA", name="Fashion & Apparel",
+                    electronics_gadgets = Category.objects.create(
+                        code="EG", name="Electronics & Gadgets", description="Products related to electronics and gadgets."
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Created category: {fashion_apparel.name}"))
+                    self.stdout.write(self.style.SUCCESS(f"Created category: {electronics_gadgets.name}"))
 
                 # Process each row in the Excel file
                 products_created = 0
@@ -285,8 +285,8 @@ class Command(BaseCommand):
                             defaults={
                                 "description": description,
                                 "user": user,
-                                "category": fashion_apparel,
-                                "old_category": Product.ProductCategory.FASHION_APPAREL,
+                                "category": electronics_gadgets,
+                                "old_category": Product.ProductCategory.ELECTRONICS_GADGETS,
                                 "additional_information": additional_information,
                                 "price": price,
                                 "cost_price": price,
@@ -307,8 +307,8 @@ class Command(BaseCommand):
                             product.description = description
                             product.price = price
                             product.cost_price = price
-                            product.category = fashion_apparel
-                            product.old_category = Product.ProductCategory.FASHION_APPAREL
+                            product.category = electronics_gadgets
+                            product.old_category = Product.ProductCategory.ELECTRONICS_GADGETS
                             product.additional_information = additional_information
                             product.color = color
                             if not product.sku:
