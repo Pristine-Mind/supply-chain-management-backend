@@ -169,7 +169,7 @@ class Command(BaseCommand):
 
                 # Create user with username "health_beauty_store"
                 username = f"habre_and_yeti"
-                user = User.objects.get(id=189)
+                user = User.objects.get(id=155)
                 # user, user_created = User.objects.get_or_create(
                 #     username=username,
                 #     defaults={
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                 #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer = Producer.objects.get(id=151)
+                producer = Producer.objects.get(id=152)
                 # producer, producer_created = Producer.objects.get_or_create(
                 #     registration_number="HB1025",
                 #     defaults={

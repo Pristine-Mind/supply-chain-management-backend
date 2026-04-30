@@ -155,6 +155,10 @@ class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
         return qs.none()
 
+    def save_model(self, request, obj, form, change):
+        if not change or not obj.user_id:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
@@ -238,6 +242,11 @@ class CustomerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     search_fields = ("name", "email", "customer_type")
     list_filter = ("customer_type", "created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not change or not obj.user_id:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Product)
@@ -342,6 +351,11 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         ),
         ("Metadata", {"fields": ("is_marketplace_created", "created_at", "updated_at"), "classes": ("collapse",)}),
     )
+
+    def save_model(self, request, obj, form, change):
+        if not change or not obj.user_id:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Order)
@@ -604,7 +618,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
 
     fieldsets = (
         ("Product Information", {"fields": ("product",)}),
-        ("Product Attributes", {"fields": ("size", "color", "additional_information")}),
+        ("Product Attributes", {"fields": ("size", "color", "additional_information", "search_tags")}),
         (
             "Pricing & Offers",
             {"fields": ("listed_price", "discounted_price", "discount_percentage", "offer_start", "offer_end")},
