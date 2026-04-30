@@ -1338,6 +1338,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 | SQ(search_tags__contains=phrase)
                 | SQ(brand__contains=phrase)
                 | SQ(sku__contains=phrase)
+                | SQ(search_tags__contains=phrase)
             )
             sqs = sqs.filter(combined).order_by("-_score")
         except Exception:
@@ -1436,7 +1437,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
 
         # Optimize: Paginate the SearchQuerySet directly to avoid fetching all objects from DB
         paginator = PageNumberPagination()
-        paginator.page_size = int(request.query_params.get("page_size", 20))
+        paginator.page_size = int(request.query_params.get("page_size", 100))
 
         # This returns a list of SearchResult objects for the current page
         page_results = paginator.paginate_queryset(sqs, request, view=self)

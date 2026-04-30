@@ -91,9 +91,6 @@ class AdvancedProductSearchView(APIView):
         sort_by = request.query_params.get("sort_by", "relevance")
         brand_ids = request.query_params.getlist("brand_id")
 
-        # ========================
-        # Apply Search with Relevance Ranking
-        # ========================
         has_search = search_query and len(search_query) >= 2
         if has_search:
             queryset = queryset.filter(
@@ -108,17 +105,11 @@ class AdvancedProductSearchView(APIView):
         else:
             queryset = queryset.annotate(relevance_score=Value(0, output_field=DecimalField()))
 
-        # ========================
-        # Annotate Rating Information
-        # ========================
         queryset = queryset.annotate(
             avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
             num_reviews=Count("reviews", distinct=True),
         )
 
-        # ========================
-        # Apply Category Filters
-        # ========================
         if category_id:
             try:
                 cat_id = int(category_id)
@@ -140,27 +131,15 @@ class AdvancedProductSearchView(APIView):
             except (ValueError, TypeError):
                 pass
 
-        # ========================
-        # Apply City Filter (Case-Insensitive)
-        # ========================
         if city:
             queryset = CityFilter.apply_city_filter(queryset, city)
 
-        # ========================
-        # Apply Color Filter (Normalized)
-        # ========================
         if colors:
             queryset = ColorFilter.apply_color_filter(queryset, colors)
 
-        # ========================
-        # Apply Size Filter (Case-Insensitive)
-        # ========================
         if sizes:
             queryset = SizeFilter.apply_size_filter(queryset, sizes)
 
-        # ========================
-        # Apply Price Filters
-        # ========================
         if min_price:
             try:
                 min_val = Decimal(str(min_price))
@@ -179,9 +158,6 @@ class AdvancedProductSearchView(APIView):
             except (ValueError, TypeError):
                 pass
 
-        # ========================
-        # Apply Rating Filter
-        # ========================
         if min_rating:
             try:
                 rating = Decimal(str(min_rating))
@@ -189,9 +165,6 @@ class AdvancedProductSearchView(APIView):
             except (ValueError, TypeError):
                 pass
 
-        # ========================
-        # Apply Delivery Time Filter
-        # ========================
         if delivery_days:
             try:
                 days = int(delivery_days)
@@ -199,9 +172,6 @@ class AdvancedProductSearchView(APIView):
             except (ValueError, TypeError):
                 pass
 
-        # ========================
-        # Apply Brand Filter
-        # ========================
         if brand_ids:
             try:
                 brand_ids = [int(b) for b in brand_ids if b]
@@ -210,9 +180,6 @@ class AdvancedProductSearchView(APIView):
             except (ValueError, TypeError):
                 pass
 
-        # ========================
-        # Apply Flags and Availability
-        # ========================
         if made_in_nepal and made_in_nepal.lower() == "true":
             queryset = queryset.filter(is_made_in_nepal=True)
 
@@ -222,9 +189,6 @@ class AdvancedProductSearchView(APIView):
         if has_discount and has_discount.lower() == "true":
             queryset = queryset.filter(discounted_price__isnull=False, discounted_price__lt=F("listed_price"))
 
-        # ========================
-        # Apply Sorting
-        # ========================
         if sort_by == "rating":
             queryset = queryset.order_by("-avg_rating", "-num_reviews", "-listed_date").distinct()
         elif sort_by == "price_asc" or sort_by == "price_low":
@@ -267,15 +231,7 @@ class AdvancedProductSearchView(APIView):
                 queryset = queryset.order_by("-relevance_score", "-avg_rating", "-view_count", "-listed_date").distinct()
             else:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
-
-        # ========================
-        # Get Total Count
-        # ========================
         total_count = queryset.count()
-
-        # ========================
-        # Paginate Results
-        # ========================
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
 
