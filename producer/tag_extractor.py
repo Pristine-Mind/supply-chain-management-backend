@@ -396,7 +396,7 @@ class TagExtractor:
 
         # Get product info
         product = marketplace_product.product
-        category_code = product.category.category_code if product.category else None
+        category_code = product.category.code if product.category else None
 
         product_name = product.name.lower()
         product_description = (product.description or "").lower()
