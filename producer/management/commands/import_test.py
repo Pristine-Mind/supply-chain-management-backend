@@ -169,7 +169,7 @@ class Command(BaseCommand):
 
                 # Create user with username "health_beauty_store"
                 username = f"habre_and_yeti"
-                user = User.objects.get(id=190)
+                user = User.objects.get(id=201)
                 # user, user_created = User.objects.get_or_create(
                 #     username=username,
                 #     defaults={
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                 #     self.stdout.write(self.style.WARNING(f"Updated user profile for: {username}"))
 
                 # Create producer
-                producer = Producer.objects.get(id=153)
+                producer = Producer.objects.get(id=155)
                 # producer, producer_created = Producer.objects.get_or_create(
                 #     registration_number="HB1025",
                 #     defaults={
@@ -229,14 +229,14 @@ class Command(BaseCommand):
                 # else:
                 #     self.stdout.write(self.style.WARNING(f"Producer already exists: {producer.name}"))
 
-                # # Get or create "Fashion & Apparel" category
+                # # Get or create "Groceries & Essentials" category
                 try:
-                    electronics_gadgets = Category.objects.get(code="EG")
+                    groceries_essentials = Category.objects.get(code="GE")
                 except Category.DoesNotExist:
-                    electronics_gadgets = Category.objects.create(
-                        code="EG", name="Electronics & Gadgets", description="Products related to electronics and gadgets."
+                    groceries_essentials = Category.objects.create(
+                        code="GE", name="Groceries & Essentials", description="Products related to groceries and essentials."
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Created category: {electronics_gadgets.name}"))
+                    self.stdout.write(self.style.SUCCESS(f"Created category: {groceries_essentials.name}"))
 
                 # Process each row in the Excel file
                 products_created = 0
@@ -282,11 +282,12 @@ class Command(BaseCommand):
                             name=product_name,
                             producer=producer,
                             additional_information=additional_information,
+                            brand=36
                             defaults={
                                 "description": description,
                                 "user": user,
-                                "category": electronics_gadgets,
-                                "old_category": Product.ProductCategory.ELECTRONICS_GADGETS,
+                                "category": groceries_essentials,
+                                "old_category": Product.ProductCategory.GROCERIES_ESSENTIALS,
                                 "additional_information": additional_information,
                                 "price": price,
                                 "cost_price": price,
@@ -307,8 +308,8 @@ class Command(BaseCommand):
                             product.description = description
                             product.price = price
                             product.cost_price = price
-                            product.category = electronics_gadgets
-                            product.old_category = Product.ProductCategory.ELECTRONICS_GADGETS
+                            product.category = groceries_essentials  
+                            product.old_category = Product.ProductCategory.GROCERIES_ESSENTIALS
                             product.additional_information = additional_information
                             product.color = color
                             if not product.sku:
