@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import time
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -189,29 +190,79 @@ class Command(BaseCommand):
 
         return None, None
 
-    def download_image_from_url(self, url, product_name):
-        """Download image from URL and return (filename, BytesIO) or (None, None)"""
+    def download_image_from_url(self, url, product_name, max_retries=3, initial_wait=2):
+        """Download image from URL with retry logic for rate limiting.
+        
+        Args:
+            url: Image URL
+            product_name: Name of the product (for filename)
+            max_retries: Number of retries for 429 errors (default: 3)
+            initial_wait: Initial wait time in seconds before retry (default: 2)
+        
+        Returns:
+            (filename, BytesIO) or (None, None)
+        """
         try:
             url = str(url).strip()
             if not url or url.lower() == "nan":
                 return None, None
 
-            response = requests.get(url, timeout=15)
-            response.raise_for_status()
+            # Add proper headers to avoid being blocked
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            wait_time = initial_wait
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = requests.get(url, timeout=15, headers=headers)
+                    
+                    # Handle rate limiting with exponential backoff
+                    if response.status_code == 429:
+                        if attempt < max_retries - 1:
+                            logging.warning(f"Rate limited (429) for {product_name}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})")
+                            time.sleep(wait_time)
+                            wait_time *= 2  # Exponential backoff
+                            continue
+                        else:
+                            logging.warning(f"Rate limited (429) for {product_name}. Max retries exceeded.")
+                            return None, None
+                    
+                    response.raise_for_status()
 
-            image_bytes = io.BytesIO(response.content)
-            pil_image = PILImage.open(image_bytes)
-            extension = (pil_image.format or "jpeg").lower()
-            image_bytes.seek(0)
+                    image_bytes = io.BytesIO(response.content)
+                    pil_image = PILImage.open(image_bytes)
+                    extension = (pil_image.format or "jpeg").lower()
+                    image_bytes.seek(0)
 
-            safe_name = "".join(c for c in product_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
-            safe_name = safe_name.replace(" ", "_")[:50]
-            filename = f"{safe_name}.{extension}"
+                    safe_name = "".join(c for c in product_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+                    safe_name = safe_name.replace(" ", "_")[:50]
+                    filename = f"{safe_name}.{extension}"
 
-            logging.info(f"Downloaded image from URL for '{product_name}': {filename}")
-            return filename, image_bytes
+                    logging.info(f"Downloaded image from URL for '{product_name}': {filename}")
+                    
+                    # Add delay between successful requests to avoid rate limiting
+                    time.sleep(1)
+                    
+                    return filename, image_bytes
+                    
+                except requests.exceptions.RequestException as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        logging.debug(f"Error downloading image (attempt {attempt + 1}/{max_retries}): {e}")
+                        time.sleep(wait_time)
+                        wait_time *= 2
+                    continue
+                    
+            # If all retries failed
+            if last_error:
+                logging.warning(f"Failed to download image from URL '{url}' after {max_retries} attempts: {last_error}")
+            return None, None
+            
         except Exception as e:
-            logging.warning(f"Failed to download image from URL '{url}': {e}")
+            logging.warning(f"Error processing image URL '{url}': {e}")
             return None, None
 
     def handle(self, *args, **options):
