@@ -141,4 +141,21 @@ for r in recs:
 - `recommendations/engine/content_based.py` — attribute scoring helpers, text/geo/price functions.
 - `recommendations/engine/hybrid.py` — orchestration, normalization, aggregation, API endpoint.
 
+# Current Limitations
+
+- Repeated database queries inside loops
+- No interaction time decay
+- No caching/precomputed recommendations
+- Basic scoring normalization
+- Cold-start problem for new users
+
+---
+
+# Possible Future Enhancements
+
+## Performance Improvements
+- Optimize database queries
+- Add caching
+- Precompute recommendations
+
 
