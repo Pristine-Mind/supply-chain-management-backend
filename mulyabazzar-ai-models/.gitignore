@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+# Ignore cached data files
+data/*_cache.json
+data/user_profiles*.json
+
+# Ignore compiled PyTorch graphs
+engine/compiled_graphs/
+*.pt
+
+# Standard Python ignores
+__pycache__/
+*.pyc
+.venv/

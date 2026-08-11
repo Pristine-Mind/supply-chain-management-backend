@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  ai-model-engine:
+    build: .
+    container_name: mulyabazzar-ai-engine
+    volumes:
+      - .:/app
