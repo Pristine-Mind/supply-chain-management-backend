@@ -7,11 +7,12 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, status
+from market import filters
+from rest_framework import generics, status, viewsets
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -60,6 +61,17 @@ from .serializers import (
     UserProfileDetailSerializer,
     VerifyOTPSerializer,
 )
+
+
+class IsSuperAdmin(BasePermission):
+    """
+    Permission class to allow only super admins (is_superuser=True) to access the view.
+    """
+
+    message = "Only super admins can access this API."
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -998,3 +1010,28 @@ class BusinessDirectoryView(APIView):
             ],
             "distance": "Businesses within specified radius if user location provided",
         }
+
+
+
+class AllUserViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet to list all users with distributor and retailer roles.
+    Only super admins can access this API.
+    
+    Filters users to show only those with:
+    - business_type: "distributor" or "retailer"
+    
+    Accessible by: Super admins only (is_superuser=True)
+    """
+
+    serializer_class = UserProfileDetailSerializer
+    permission_classes = [IsSuperAdmin]
+    
+    def get_queryset(self):
+        """
+        Returns UserProfile objects filtered by business_type
+        (distributor or retailer only).
+        """
+        return UserProfile.objects.filter(
+            business_type__in=["distributor", "retailer"]
+        ).select_related("user", "role", "location")
