@@ -232,6 +232,7 @@ class UserProfileDetailSerializer(serializers.ModelSerializer):
     """Serializer for UserProfile with additional user fields"""
 
     # User fields
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     email = serializers.EmailField(source="user.email", read_only=True)
     first_name = serializers.CharField(source="user.first_name")
@@ -250,6 +251,7 @@ class UserProfileDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = [
+            "user_id",
             "username",
             "email",
             "first_name",
@@ -569,3 +571,32 @@ class RecommendedBusinessSerializer(serializers.ModelSerializer):
             return round(distance, 2)
         except (ValueError, TypeError):
             return None
+
+
+class AllUserSerializer(serializers.ModelSerializer):
+    """Serializer for AllUserViewSet - returns minimal user info with business details"""
+
+    username = serializers.CharField(source="user.username", read_only=True)
+    id = serializers.IntegerField(source="user.id", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    role = serializers.SerializerMethodField()
+    b2b_verified = serializers.BooleanField(read_only=True)
+    has_access_to_marketplace = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = UserProfile
+        fields = [
+            "username",
+            "id",
+            "email",
+            "business_type",
+            "role",
+            "has_access_to_marketplace",
+            "b2b_verified",
+        ]
+
+    def get_role(self, obj):
+        """Return role code instead of full role object"""
+        if obj.role:
+            return obj.role.code
+        return None

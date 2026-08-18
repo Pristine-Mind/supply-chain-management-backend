@@ -45,6 +45,7 @@ from transport.serializers import (
 from .filters import BusinessFilter
 from .models import Contact, PhoneOTP, UserProfile
 from .serializers import (
+    AllUserSerializer,
     BusinessListSerializer,
     BusinessRegisterSerializer,
     ChangePasswordSerializer,
@@ -1022,9 +1023,18 @@ class AllUserViewSet(viewsets.ReadOnlyModelViewSet):
     - business_type: "distributor" or "retailer"
     
     Accessible by: Super admins only (is_superuser=True)
+    
+    Response includes:
+    - username: User's username
+    - id: User's ID
+    - email: User's email
+    - business_type: "distributor" or "retailer"
+    - role: Role code (e.g., "business_owner")
+    - has_access_to_marketplace: Marketplace access flag
+    - b2b_verified: B2B verification status
     """
 
-    serializer_class = UserProfileDetailSerializer
+    serializer_class = AllUserSerializer
     permission_classes = [IsSuperAdmin]
     
     def get_queryset(self):
