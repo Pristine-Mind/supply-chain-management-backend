@@ -821,6 +821,14 @@ class MarkNotificationAsReadView(views.APIView):
 
         return Response({"detail": "Notification marked as read."}, status=status.HTTP_200_OK)
 
+class DeleteNotificationView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, user=request.user)
+        notification.delete()
+        return Response({"detail": "Notification deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
 
 class WithdrawBidView(views.APIView):
     permission_classes = [IsAuthenticated]
