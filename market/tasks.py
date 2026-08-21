@@ -95,84 +95,87 @@ def send_email(self, to_email, subject, template_name, context):
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_sms(self, to_number: str, body: str) -> dict:
-    """
-    Send an SMS via SparrowSMS.
-    Retries up to 3 times on failure, waiting 60s between attempts.
-    Returns a dict with keys: code, status, message, sms_code.
-    """
     payload = {
         "token": settings.SPARROWSMS_API_KEY,
         "from": settings.SPARROWSMS_SENDER_ID,
         "to": to_number,
         "text": body,
     }
-    headers = {
-        "Authorization": settings.SPARROWSMS_API_KEY,
-        "Idempotency-Key": f"{to_number}",
-        "Accept": "application/json",
-        "Accept-Language": "en-us",
-        "Content-Type": "application/json",
-    }
 
     try:
-        resp = requests.post(settings.SPARROWSMS_ENDPOINT, json=payload, headers=headers, timeout=10)
-        resp.raise_for_status()
+        resp = requests.post(
+            settings.SPARROWSMS_ENDPOINT,
+            data=payload,
+            timeout=10,
+        )
+
         data = resp.json()
-    except RequestException as exc:
-        if exc.response is not None:
-            try:
-                data = exc.response.json()
-            except ValueError:
-                # If we can't parse JSON, retry for network issues
-                if self.request.retries < self.max_retries:
-                    raise self.retry(exc=exc, countdown=60)
-                raise Exception(f"SparrowSMS network error: {exc}")
-        else:
-            # Network issues - retry
-            if self.request.retries < self.max_retries:
-                raise self.retry(exc=exc, countdown=60)
-            raise Exception(f"SparrowSMS connection error: {exc}")
 
-    code = str(data.get("response_code", ""))
-    mapping = {
-        "200": {"code": 200, "status": "success", "message": "Message sent successfully", "sms_code": "200"},
-        "1007": {"code": 401, "status": "error", "message": "Invalid Receiver", "sms_code": "1007"},
-        "1607": {"code": 401, "status": "error", "message": "Authentication Failure", "sms_code": "1607"},
-        "1002": {"code": 401, "status": "error", "message": "Invalid Token", "sms_code": "1002"},
-        "1011": {"code": 401, "status": "error", "message": "Unknown Receiver", "sms_code": "1011"},
-        "1001": {"code": 400, "status": "error", "message": "General API Error", "sms_code": "1001"},
-    }
+    except requests.RequestException as exc:
+        logger.exception("SparrowSMS request failed")
 
-    result = mapping.get(
-        code,
-        {
-            "code": 400,
-            "status": "error",
-            "message": data.get("message", "Unknown error"),
-            "sms_code": code or "0000",
-        },
-    )
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
 
-    # For known temporary errors (like 1001), retry
-    if code in ["1001"] and self.request.retries < self.max_retries:
-        raise self.retry(exc=Exception(f"SparrowSMS temporary error: {result}"), countdown=60)
-
-    # For unknown errors that might be temporary, also retry
-    if result["code"] != 200 and code not in mapping and self.request.retries < self.max_retries:
-        raise self.retry(exc=Exception(f"SparrowSMS unknown error: {result}"), countdown=60)
-
-    # Log errors but don't raise exceptions to avoid breaking task chains
-    if result["code"] != 200:
-        logger.error(f"SMS failed to {to_number} after {self.max_retries} retries: {result}")
         return {
-            "code": result["code"],
+            "code": 500,
             "status": "failed",
-            "message": f"SMS failed: {result['message']}",
-            "sms_code": result["sms_code"],
+            "message": str(exc),
+            "sms_code": "NETWORK_ERROR",
         }
 
-    logger.info(f"SMS sent successfully to {to_number}")
-    return result
+    except ValueError:
+        logger.error(
+            "Invalid SparrowSMS response: %s",
+            resp.text,
+        )
+
+        return {
+            "code": 500,
+            "status": "failed",
+            "message": "Invalid response from SparrowSMS",
+            "sms_code": "INVALID_RESPONSE",
+        }
+
+    code = str(data.get("response_code", ""))
+
+    if code == "200":
+        logger.info("SMS sent successfully to %s", to_number)
+
+        return {
+            "code": 200,
+            "status": "success",
+            "message": "Message sent successfully",
+            "sms_code": "200",
+        }
+
+    logger.error(
+        "SparrowSMS error: to=%s response=%s",
+        to_number,
+        data,
+    )
+
+    # Only retry actual temporary/unknown errors.
+    # Do NOT retry invalid IP/token/receiver errors.
+    if code not in {
+        "1001",  # Invalid IP / API configuration
+        "1002",  # Invalid token
+        "1007",  # Invalid receiver
+        "1011",  # Unknown receiver
+        "1607",  # Authentication failure
+    }:
+        if self.request.retries < self.max_retries:
+            raise self.retry(
+                exc=Exception(f"SparrowSMS error: {data}"),
+                countdown=60,
+            )
+
+    return {
+        "code": 400,
+        "status": "failed",
+        "message": data.get("message", "SMS failed"),
+        "sms_code": code or "0000",
+    }
 
 
 @shared_task
