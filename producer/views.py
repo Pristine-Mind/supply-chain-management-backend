@@ -30,6 +30,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from loyalty.views import IsAdminUser
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
@@ -2681,3 +2682,14 @@ class SubSubcategoryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(subcategory__category_id=category_id)
 
         return queryset
+
+
+class AllProductViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = (
+        Product.objects.select_related("brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location")
+        .prefetch_related("images")
+        .all()
+        .order_by("-created_at")
+    )
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated]
