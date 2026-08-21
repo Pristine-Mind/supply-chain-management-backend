@@ -488,13 +488,7 @@ class PhoneLoginView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-            # Return success message (OTP not included in production)
-            is_production = not settings.DEBUG
             response_data = {"message": "OTP sent successfully to your phone number. Please enter it to login."}
-
-            # Include OTP only in development mode for testing
-            if not is_production:
-                response_data["otp"] = phone_otp.otp
 
             return Response(response_data)
 
