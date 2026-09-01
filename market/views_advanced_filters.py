@@ -100,8 +100,8 @@ class AdvancedProductSearchView(APIView):
             ).distinct()
 
             # Annotate with relevance score
-            relevance_case = build_relevance_score_case(search_query)
-            queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
+            # relevance_case = build_relevance_score_case(search_query)
+            # queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
         else:
             queryset = queryset.annotate(relevance_score=Value(0, output_field=DecimalField()))
 
