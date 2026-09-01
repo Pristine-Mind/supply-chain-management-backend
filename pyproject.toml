@@ -1,3 +1,8 @@
+[project]
+name = "supply-chain-management"
+version = "0.1.0"
+description = ""
+
 [tool.poetry]
 name = "supply-chain-management"
 version = "0.1.0"
@@ -59,14 +64,16 @@ implicit = "*"
 numpy = "*"
 scipy = "*"
 geopy = "*"
+torch = {version = "*", source = "pytorch"}
+sentence-transformers = "*"
 
-
-[tool.poetry.dev-dependencies]
+# --- CHANGED TO NEW POETRY FORMAT TO FIX WARNINGS ---
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
 pytest-profiling = "*"
 pytest-ordering = "*"
 pytest-django = "*"
-django-stubs = "==4.2.6"  # NOTE: 4.2.7 is messing with TextChoices/IntergerChoices
+django-stubs = "==4.2.6"
 djangorestframework-stubs = { version = "*", allow-prereleases = true }
 celery-types = "*"
 
@@ -120,11 +127,7 @@ django = true
 
 # Add type checking for Django REST framework
 drf = true
-
-# Ignore specific type checking errors
-# [tool.pyright.reportGeneralTypeIssues]
-# reportUnknownMemberType = false
-# reportUnknownVariableType = false
-# reportUnknownArgumentType = false
-# reportUnknownLambdaType = false
-# reportUnknownParameterType = false
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
