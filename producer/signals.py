@@ -3,7 +3,7 @@ from django.dispatch import receiver
 from django.apps import apps
 from django.conf import settings
 from .models import MarketplaceProduct
-from .tag_extractor import TagExtractor
+from .tasks import generate_and_save_product_tags
 
 User = apps.get_model(settings.AUTH_USER_MODEL)
 CreatorProfile = apps.get_model("producer", "CreatorProfile")
@@ -12,9 +12,12 @@ ShoppableVideo = apps.get_model("market", "ShoppableVideo")
 
 @receiver(post_save, sender=MarketplaceProduct)
 def handle_marketplace_product_save(sender, instance, created, **kwargs):
+    update_fields = kwargs.get('update_fields')
+    if update_fields and 'search_tags' in update_fields:
+        return
     if created or not instance.search_tags:
-        extracted_tags = TagExtractor.extract_tags(instance)
-        MarketplaceProduct.objects.filter(pk=instance.pk).update(search_tags=extracted_tags)
+        generate_and_save_product_tags.delay(instance.pk)
+        
     if not created:
         return
         

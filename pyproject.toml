@@ -66,6 +66,7 @@ scipy = "*"
 geopy = "*"
 torch = {version = "*", source = "pytorch"}
 sentence-transformers = "*"
+keybert = "*"
 
 # --- CHANGED TO NEW POETRY FORMAT TO FIX WARNINGS ---
 [tool.poetry.group.dev.dependencies]

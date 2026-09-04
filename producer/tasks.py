@@ -7,11 +7,11 @@ from datetime import timedelta
 from celery import shared_task
 from django.db.models import Sum, functions
 from django.utils import timezone
-
-from .models import Product, Sale, StockList
+from keybert import KeyBERT
+from .models import Product, Sale, StockList, MarketplaceProduct
 
 logger = logging.getLogger(__name__)
-
+kw_model = KeyBERT()
 
 @shared_task
 def move_large_stock_to_stocklist():
@@ -114,3 +114,77 @@ def recalc_inventory_parameters():
     except Exception as e:
         logger.error(f"Critical error in recalc_inventory_parameters: {e}")
         raise
+
+
+@shared_task
+def generate_and_save_product_tags(product_id):
+    """
+    Extracts semantic search tags using KeyBERT and saves them back to the product.
+    Runs asynchronously to prevent blocking the web server during product creation.
+    """
+    try:
+        product = MarketplaceProduct.objects.select_related("product", "product__brand", "product__category").get(id=product_id)
+        base_product = product.product        
+        
+        name = base_product.name if base_product and base_product.name else ""
+        desc = base_product.description if base_product and base_product.description else ""        
+        text_to_analyze = f"{name} {desc}".strip()
+        
+        if not text_to_analyze:
+            logger.warning(f"No text to analyze for product {product_id}")
+            return []
+        
+        static_tags = []
+        if base_product and getattr(base_product, "brand", None):
+            b_name = getattr(base_product.brand, "name", None) or str(base_product.brand)
+            if b_name and not b_name.startswith("dummy_"):
+                static_tags.append(b_name.strip().lower())
+        
+        if not static_tags:
+            try:
+                from .models import Brand
+                for b_name in Brand.objects.values_list("name", flat=True):
+                    if b_name and len(b_name) > 1 and b_name.lower() in text_to_analyze.lower():
+                        static_tags.append(b_name.strip().lower())
+                        break
+            except Exception:
+                pass
+                
+        if not static_tags and name:
+            first_word = name.split()[0].strip()
+            if first_word.isalpha() and len(first_word) >= 2:
+                static_tags.append(first_word.lower())
+        if base_product and getattr(base_product, "category", None):
+            c_name = getattr(base_product.category, "name", None)
+            if c_name:
+                static_tags.append(str(c_name).strip().lower())
+            
+            c_code = getattr(base_product.category, "code", None)
+            if c_code:
+                static_tags.append(str(c_code).strip().lower())
+        keywords = kw_model.extract_keywords(
+            text_to_analyze, 
+            keyphrase_ngram_range=(1, 2), 
+            stop_words='english', 
+            top_n=5
+        )
+        
+        nlp_tags = [kw[0] for kw in keywords]
+        combined_tags = []
+        for tag in static_tags + nlp_tags:
+            clean_tag = tag.strip().lower()
+            if clean_tag and clean_tag not in combined_tags:
+                combined_tags.append(clean_tag)
+                
+        product.search_tags = combined_tags
+        product.save(update_fields=["search_tags"])
+        
+        logger.info(f"AI tagged product {product_id} with: {combined_tags}")
+        return combined_tags
+
+    except MarketplaceProduct.DoesNotExist:
+        logger.error(f"MarketplaceProduct {product_id} not found.")
+        return None
+    except Exception as e:
+        logger.error(f"AI Extraction failed for product {product_id}: {str(e)}")
+        return None
