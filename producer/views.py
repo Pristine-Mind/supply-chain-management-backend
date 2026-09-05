@@ -30,7 +30,6 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from loyalty.views import IsAdminUser
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
@@ -38,6 +37,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from loyalty.views import IsAdminUser
 from market.models import MarketplaceProduct, ShoppableVideo, UserFollow
 from market.serializers import MarketplaceProductSerializer, ShoppableVideoSerializer
 from notification.models import Notification

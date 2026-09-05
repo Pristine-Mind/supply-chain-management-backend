@@ -7,14 +7,15 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
-from market import filters
 from rest_framework import generics, status, viewsets
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated, BasePermission
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from market import filters
 
 # Conditional import for spectacular decorators
 try:
@@ -1007,17 +1008,16 @@ class BusinessDirectoryView(APIView):
         }
 
 
-
 class AllUserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet to list all users with distributor and retailer roles.
     Only super admins can access this API.
-    
+
     Filters users to show only those with:
     - business_type: "distributor" or "retailer"
-    
+
     Accessible by: Super admins only (is_superuser=True)
-    
+
     Response includes:
     - username: User's username
     - id: User's ID
@@ -1030,12 +1030,12 @@ class AllUserViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = AllUserSerializer
     permission_classes = [IsSuperAdmin]
-    
+
     def get_queryset(self):
         """
         Returns UserProfile objects filtered by business_type
         (distributor or retailer only).
         """
-        return UserProfile.objects.filter(
-            business_type__in=["distributor", "retailer"]
-        ).select_related("user", "role", "location")
+        return UserProfile.objects.filter(business_type__in=["distributor", "retailer"]).select_related(
+            "user", "role", "location"
+        )

@@ -1,8 +1,13 @@
-FROM python:3.12-slim-bullseye as base
+FROM python:3.12-slim-bookworm as base
+
 LABEL maintainer="Pristine Dev"
-ENV PYTHONUNBUFFERED 1
+
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /code
+
 COPY pyproject.toml poetry.lock /code/
+
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -20,4 +25,5 @@ RUN apt-get update -y \
     && apt-get remove -y build-essential cmake libproj-dev \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
 COPY . /code/

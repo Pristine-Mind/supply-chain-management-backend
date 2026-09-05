@@ -821,6 +821,7 @@ class MarkNotificationAsReadView(views.APIView):
 
         return Response({"detail": "Notification marked as read."}, status=status.HTTP_200_OK)
 
+
 class DeleteNotificationView(views.APIView):
     permission_classes = [IsAuthenticated]
 
