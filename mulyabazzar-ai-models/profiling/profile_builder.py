@@ -1,9 +1,10 @@
 import json
 import os
 
+
 def build_user_profiles(producers_cache_file: str, output_file: str):
     print(f"Loading raw data from {producers_cache_file}...")
-    
+
     if not os.path.exists(producers_cache_file):
         print("Error: Producers cache not found. Please run data/ingestion.py first.")
         return
@@ -25,16 +26,17 @@ def build_user_profiles(producers_cache_file: str, output_file: str):
                     "business_type": user.get("business_type"),
                     "b2b_verified": user.get("b2b_verified"),
                     "has_access_to_marketplace": user.get("has_access_to_marketplace"),
-                    "associated_producers": [prod.get("id")]
+                    "associated_producers": [prod.get("id")],
                 }
             else:
                 unique_profiles[user_id]["associated_producers"].append(prod.get("id"))
     os.makedirs("data", exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(list(unique_profiles.values()), f, indent=4)
-        
+
     print(f"Success! Extracted {len(unique_profiles)} unique User Profiles based on their business_type.")
     print(f"Profiles saved as a distinct dataset to: {output_file}")
+
 
 if __name__ == "__main__":
     print("--- Running Profiling Pipeline ---")

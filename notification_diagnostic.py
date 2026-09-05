@@ -5,8 +5,10 @@ Run with: python manage.py shell < notification_diagnostic.py
 """
 
 import os
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
+
 from notification.models import Notification
 from notification.services import NotificationServiceFactory
 
@@ -54,13 +56,14 @@ for svc_type, svc_class in NotificationServiceFactory._services.items():
 print("\n5. DATABASE USER DATA")
 print("-" * 40)
 total_users = User.objects.count()
-users_with_email = User.objects.exclude(email__isnull=True).exclude(email__exact='').count()
+users_with_email = User.objects.exclude(email__isnull=True).exclude(email__exact="").count()
 users_with_phone = 0
 
 # Try to check for phone_number field
 try:
     from django.db.models import Q
-    users_with_phone = User.objects.exclude(phone_number__isnull=True).exclude(phone_number__exact='').count()
+
+    users_with_phone = User.objects.exclude(phone_number__isnull=True).exclude(phone_number__exact="").count()
 except:
     users_with_phone = "N/A (phone_number field may not exist)"
 
@@ -80,7 +83,7 @@ if total_users > 0:
     sample_user = User.objects.first()
     print(f"\nSample user (ID: {sample_user.id}):")
     print(f"  Email: {sample_user.email}")
-    if hasattr(sample_user, 'phone_number'):
+    if hasattr(sample_user, "phone_number"):
         print(f"  Phone: {sample_user.phone_number}")
 
 # 6. Check Notification Status
@@ -88,7 +91,11 @@ print("\n6. NOTIFICATION STATUS")
 print("-" * 40)
 from django.db.models import Count, Q
 
-stats = Notification.objects.values('notification_type', 'status').annotate(count=Count('id')).order_by('notification_type', '-count')
+stats = (
+    Notification.objects.values("notification_type", "status")
+    .annotate(count=Count("id"))
+    .order_by("notification_type", "-count")
+)
 
 if stats.exists():
     print("Notification distribution:")
@@ -119,6 +126,7 @@ print("-" * 40)
 # Test SMS Service
 try:
     from notification.services import SMSNotificationService
+
     sms_service = SMSNotificationService()
     print(f"✓ SMS Service initialized")
     if not (sms_api and sms_sender and sms_endpoint):
@@ -129,6 +137,7 @@ except Exception as e:
 # Test Email Service
 try:
     from notification.services import EmailNotificationService
+
     email_service = EmailNotificationService()
     print(f"✓ Email Service initialized")
     if not brevo_key:
@@ -139,6 +148,7 @@ except Exception as e:
 # Test In-App Service
 try:
     from notification.services import InAppNotificationService
+
     inapp_service = InAppNotificationService()
     print(f"✓ In-App Service initialized")
 except Exception as e:
@@ -162,30 +172,24 @@ HARDCODED_PHONE = "984533509"
 
 if total_users > 0:
     test_user = User.objects.first()
-    
+
     # Test In-App Notification
     print("\nTesting In-App Notification:")
     try:
         inapp = Notification.objects.create(
-            user=test_user,
-            notification_type="in_app",
-            title="Test In-App",
-            body="Testing hardcoded values - In-App"
+            user=test_user, notification_type="in_app", title="Test In-App", body="Testing hardcoded values - In-App"
         )
         result = NotificationServiceFactory.send_notification(inapp)
         inapp.refresh_from_db()
         print(f"  Status: {inapp.status} | Success: {result}")
     except Exception as e:
         print(f"  Error: {e}")
-    
+
     # Test Email Notification with hardcoded email
     print(f"\nTesting Email Notification (to {HARDCODED_EMAIL}):")
     try:
         email = Notification.objects.create(
-            user=test_user,
-            notification_type="email",
-            title="Test Email",
-            body="Testing hardcoded email address"
+            user=test_user, notification_type="email", title="Test Email", body="Testing hardcoded email address"
         )
         # Override with hardcoded email for testing
         test_user.email = HARDCODED_EMAIL
@@ -195,15 +199,12 @@ if total_users > 0:
         print(f"  Error: {email.error_message if not result else 'None'}")
     except Exception as e:
         print(f"  Error: {e}")
-    
+
     # Test SMS Notification with hardcoded phone
     print(f"\nTesting SMS Notification (to {HARDCODED_PHONE}):")
     try:
         sms = Notification.objects.create(
-            user=test_user,
-            notification_type="sms",
-            title="Test SMS",
-            body="Testing hardcoded phone number"
+            user=test_user, notification_type="sms", title="Test SMS", body="Testing hardcoded phone number"
         )
         # Override with hardcoded phone for testing
         test_user.phone_number = HARDCODED_PHONE
@@ -213,7 +214,7 @@ if total_users > 0:
         print(f"  Error: {sms.error_message if not result else 'None'}")
     except Exception as e:
         print(f"  Error: {e}")
-    
+
     print("\n" + "=" * 80)
 else:
     print("\nCannot test - no users in database")

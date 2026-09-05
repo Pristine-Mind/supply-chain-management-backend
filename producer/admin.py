@@ -160,6 +160,7 @@ class ProducerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
             obj.user = request.user
         super().save_model(request, obj, form, change)
 
+
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     """Admin interface for Brand model"""
@@ -328,6 +329,7 @@ class ProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_filter = ("is_active", "brand", "size", "color", "category", "created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ["producer", "brand"]
+    ordering = ("-id",)  # Add ordering to fix pagination warning
 
     fieldsets = (
         ("Basic Information", {"fields": ("name", "description", "sku", "producer", "brand", "user")}),
@@ -615,6 +617,7 @@ class MarketplaceProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_filter = ("is_available", "is_made_in_nepal", "is_featured", "product__brand", "size", "color", "listed_date")
     autocomplete_fields = ["product"]
     readonly_fields = ("listed_date", "seller_geo_point", "seller_location_lat", "seller_location_lon")
+    ordering = ("-id",)  # Add ordering to fix pagination warning
 
     fieldsets = (
         ("Product Information", {"fields": ("product",)}),

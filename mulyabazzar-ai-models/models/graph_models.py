@@ -1,20 +1,23 @@
 from enum import Enum
-from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
-# 1. Graph Enums 
+# 1. Graph Enums
+
 
 class NodeType(str, Enum):
-    STORE = "VStore"       
-    PRODUCT = "VProduct"   
-    CATEGORY = "VCategory" 
+    STORE = "VStore"
+    PRODUCT = "VProduct"
+    CATEGORY = "VCategory"
+
 
 class EdgeType(str, Enum):
-    TRANSACTED = "ETransacted"   
-    OFFERS = "EOffers"           
+    TRANSACTED = "ETransacted"
+    OFFERS = "EOffers"
     CATEGORIZED = "ECategorized"
-    ACTION = "EAction"           
+    ACTION = "EAction"
+
 
 class BusinessRole(str, Enum):
     DISTRIBUTOR = "distributor"
@@ -23,13 +26,15 @@ class BusinessRole(str, Enum):
     GENERAL_USER = "general user"
 
 
-# 2. Graph Injection Models 
+# 2. Graph Injection Models
+
 
 class GraphNode(BaseModel):
     node_id: int
     node_type: NodeType
-    raw_text_feature: str 
+    raw_text_feature: str
     business_role: Optional[BusinessRole] = None
+
 
 class GraphEdge(BaseModel):
     source_id: int
