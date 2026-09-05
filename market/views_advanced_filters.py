@@ -228,7 +228,7 @@ class AdvancedProductSearchView(APIView):
             queryset = queryset.order_by("-product__name").distinct()
         else:  # Default: relevance or newest
             if has_search:
-                queryset = queryset.order_by("-relevance_score", "-avg_rating", "-view_count", "-listed_date").distinct()
+                queryset = queryset.order_by("-avg_rating", "-view_count", "-listed_date").distinct()
             else:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
         total_count = queryset.count()
