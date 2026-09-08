@@ -111,7 +111,7 @@ from .serializers import (
     SubSubcategorySerializer,
 )
 from .supply_chain import SupplyChainService
-from .utils import export_queryset_to_excel
+from .utils import export_queryset_to_excel, smart_ai_search
 
 logger = logging.getLogger(__name__)
 
@@ -2693,3 +2693,32 @@ class AllProductViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
+
+
+class AIRecommendationSearchView(APIView):
+    """
+    API Endpoint for AI-powered conversational search.
+    Example URL: /api/v1/search/ai-recommend/?q=show+me+cheap+refrigerators
+    """
+    permission_classes = [AllowAny] 
+
+    def get(self, request, *args, **kwargs):
+        query = request.query_params.get('q', '').strip()
+        
+        if not query:
+            return Response(
+                {"error": "Please provide a search query using the 'q' parameter."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        products, terms, sort_applied = smart_ai_search(query)
+        serializer = MarketplaceProductSerializer(products, many=True, context={'request': request})
+        return Response({
+            "message": "AI Search Successful",
+            "ai_metadata": {
+                "original_query": query,
+                "extracted_search_terms": terms,
+                "applied_database_sort": sort_applied
+            },
+            "count": len(products),
+            "results": serializer.data 
+        }, status=status.HTTP_200_OK)

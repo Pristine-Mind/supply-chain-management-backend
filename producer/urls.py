@@ -8,8 +8,7 @@ from .risk_views import (
     SupplyChainAlertViewSet,
     SupplyChainKPIViewSet,
 )
-from .views import DailyProductStatsView
-
+from .views import DailyProductStatsView, AIRecommendationSearchView
 # Initialize the router for risk management ViewSets
 router = DefaultRouter()
 router.register(r"supplier-scorecards", SupplierScorecardViewSet, basename="supplier-scorecard")
@@ -21,4 +20,5 @@ router.register(r"risk-categories", RiskCategoryViewSet, basename="risk-category
 urlpatterns = [
     path("daily-product-stats/", DailyProductStatsView.as_view(), name="daily-product-stats"),
     path("", include(router.urls)),
+    path('search/ai-recommend/', AIRecommendationSearchView.as_view(), name='ai-recommend-search'),
 ]
