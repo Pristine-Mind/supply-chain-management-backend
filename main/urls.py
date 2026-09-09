@@ -121,7 +121,7 @@ from producer.views import (
     reconciliation_view,
     sales_view,
     stats_dashboard,
-    AIRecommendationSearchView,
+    
 )
 from recommendations.views import business_recommendations
 from search_suggestions.views import SearchSuggestionsAPIView, SuggestionClickAPIView
@@ -237,11 +237,6 @@ urlpatterns = [
     ),
     path(
         "api/v1/marketplace/nl-search/", market.views_semantic_search.natural_language_search, name="natural-language-search"
-    ),
-    path(
-        "api/v1/marketplace/search/ai-recommend/", 
-        AIRecommendationSearchView.as_view(), 
-        name="ai-recommend-search"
     ),
     path("api/v1/", include(router.urls)),
     path("api/login/", LoginAPIView.as_view()),

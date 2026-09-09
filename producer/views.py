@@ -1302,19 +1302,31 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
         if not phrase:
             return Response({"detail": "Empty `keyword` provided."}, status=400)
 
+        use_ai = request.query_params.get("ai", "").lower() in ["true", "1"]
+        conversational_markers = ["under", "below", "above", "between", "cheap", "expensive", "lakh", "lac", "crore", "k "]
+        is_conversational = any(marker in phrase.lower() for marker in conversational_markers)
+
+        if use_ai or is_conversational:
+            qs, ai_metadata = smart_ai_search(phrase)
+
+            paginator = PageNumberPagination()
+            paginator.page_size = int(request.query_params.get("page_size", 100))
+            page = paginator.paginate_queryset(qs, request, view=self)
+
+            serializer = self.get_serializer(page, many=True, context={"request": request})
+            response = paginator.get_paginated_response(serializer.data)
+            response.data["ai_metadata"] = ai_metadata
+            return response
+
         category = request.query_params.get("category")
         sub_category = request.query_params.get("sub_category") or request.query_params.get("subcategory")
         sub_subcategory = request.query_params.get("sub_subcategory")
-
-        # New filters
         brand = request.query_params.get("brand")
         sku = request.query_params.get("sku")
         size = request.query_params.get("size")
         color = request.query_params.get("color")
         min_price = request.query_params.get("min_price")
         max_price = request.query_params.get("max_price")
-
-        # Cache search results for identical queries for a short TTL
         try:
             user_part = str(request.user.id) if getattr(request, "user", None) and request.user.is_authenticated else "anon"
         except Exception:
@@ -1355,7 +1367,6 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                 return val
             from producer.models import Category, Subcategory, SubSubcategory
 
-            # Try category, then subcategory, then sub_subcategory
             try:
                 c = Category.objects.filter(id=int_val).first()
                 if c:
@@ -1387,7 +1398,6 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                     | SQ(sub_subcategory__contains=name_val)
                 )
         else:
-
             def _apply_field_filter(sqs_obj, field_name, value):
                 if not value:
                     return sqs_obj
@@ -1436,27 +1446,21 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
 
-        # Optimize: Paginate the SearchQuerySet directly to avoid fetching all objects from DB
         paginator = PageNumberPagination()
         paginator.page_size = int(request.query_params.get("page_size", 100))
 
-        # This returns a list of SearchResult objects for the current page
         page_results = paginator.paginate_queryset(sqs, request, view=self)
-
-        # Resolve objects only for the current page
         results = [r.object for r in page_results if getattr(r, "object", None) is not None]
 
         serializer = self.get_serializer(results, many=True, context={"request": request})
         response = paginator.get_paginated_response(serializer.data)
 
-        # Cache the response payload for a short TTL
         try:
             cache.set(cache_key, response.data, SEARCH_CACHE_TTL)
         except Exception:
             pass
 
         return response
-
     @action(detail=False, url_path="size-choices", methods=("get",), permission_classes=[AllowAny])
     def get_size_choices(self, request, pk=None):
         """Get available size choices for marketplace products"""
@@ -2693,13 +2697,26 @@ class AllProductViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
+    queryset = (
+        Product.objects.select_related("brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location")
+        .prefetch_related("images")
+        .all()
+        .order_by("-created_at")
+    )
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = (
+        Product.objects.select_related("brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location")
+        .prefetch_related("images")
+        .all()
+        .order_by("-created_at")
+    )
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated]
 
 
-class AIRecommendationSearchView(APIView):
-    """
-    API Endpoint for AI-powered conversational search.
-    Example URL: /api/v1/search/ai-recommend/?q=show+me+cheap+refrigerators
-    """
+
+   
     permission_classes = [AllowAny] 
 
     def get(self, request, *args, **kwargs):
