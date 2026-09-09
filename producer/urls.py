@@ -9,6 +9,7 @@ from .risk_views import (
     SupplyChainKPIViewSet,
 )
 from .views import DailyProductStatsView
+
 # Initialize the router for risk management ViewSets
 router = DefaultRouter()
 router.register(r"supplier-scorecards", SupplierScorecardViewSet, basename="supplier-scorecard")

@@ -1398,6 +1398,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
                     | SQ(sub_subcategory__contains=name_val)
                 )
         else:
+
             def _apply_field_filter(sqs_obj, field_name, value):
                 if not value:
                     return sqs_obj
@@ -1461,6 +1462,7 @@ class MarketplaceProductViewSet(viewsets.ModelViewSet):
             pass
 
         return response
+
     @action(detail=False, url_path="size-choices", methods=("get",), permission_classes=[AllowAny])
     def get_size_choices(self, request, pk=None):
         """Get available size choices for marketplace products"""
@@ -2703,39 +2705,3 @@ class AllProductViewSet(viewsets.ReadOnlyModelViewSet):
         .all()
         .order_by("-created_at")
     )
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
-    queryset = (
-        Product.objects.select_related("brand", "category", "subcategory", "sub_subcategory", "producer", "user", "location")
-        .prefetch_related("images")
-        .all()
-        .order_by("-created_at")
-    )
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
-
-
-
-   
-    permission_classes = [AllowAny] 
-
-    def get(self, request, *args, **kwargs):
-        query = request.query_params.get('q', '').strip()
-        
-        if not query:
-            return Response(
-                {"error": "Please provide a search query using the 'q' parameter."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        products, terms, sort_applied = smart_ai_search(query)
-        serializer = MarketplaceProductSerializer(products, many=True, context={'request': request})
-        return Response({
-            "message": "AI Search Successful",
-            "ai_metadata": {
-                "original_query": query,
-                "extracted_search_terms": terms,
-                "applied_database_sort": sort_applied
-            },
-            "count": len(products),
-            "results": serializer.data 
-        }, status=status.HTTP_200_OK)

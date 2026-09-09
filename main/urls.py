@@ -121,7 +121,6 @@ from producer.views import (
     reconciliation_view,
     sales_view,
     stats_dashboard,
-    
 )
 from recommendations.views import business_recommendations
 from search_suggestions.views import SearchSuggestionsAPIView, SuggestionClickAPIView
