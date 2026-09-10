@@ -1,8 +1,3 @@
-"""
-API Views for Advanced Product Filtering with Faceted Search
-Enhanced with search relevance ranking, color normalization, and comprehensive filtering
-"""
-
 from decimal import Decimal
 
 from django.db.models import Avg, Case, Count, DecimalField, F, Q, Value, When
@@ -19,6 +14,7 @@ from producer.search_utils import (
     SizeFilter,
     build_relevance_score_case,
 )
+from producer.utils import smart_ai_search
 
 from .advanced_filters import (
     FacetedSearchService,
@@ -66,15 +62,7 @@ class AdvancedProductSearchView(APIView):
     def get(self, request):
         from producer.models import MarketplaceProduct
 
-        # Get base queryset
-        queryset = (
-            MarketplaceProduct.objects.filter(is_available=True)
-            .select_related("product", "product__user", "product__category")
-            .prefetch_related("variants", "reviews")
-        )
-
-        # Get all query parameters
-        search_query = request.query_params.get("q") or request.query_params.get("search", "").strip()
+        search_query = (request.query_params.get("q") or "").strip()
         city = request.query_params.get("city")
         category_id = request.query_params.get("category_id")
         subcategory_id = request.query_params.get("subcategory_id")
@@ -91,8 +79,50 @@ class AdvancedProductSearchView(APIView):
         sort_by = request.query_params.get("sort_by", "relevance")
         brand_ids = request.query_params.getlist("brand_id")
 
-        has_search = search_query and len(search_query) >= 2
-        if has_search:
+        use_ai_search = bool(search_query and len(search_query) >= 2)
+
+        ai_features = None
+        if search_query and len(search_query) >= 2:
+            # Always try to extract features for the response
+            try:
+                if use_ai_search:
+                    queryset, ai_features = smart_ai_search(search_query)
+                    queryset = queryset.select_related("product", "product__user", "product__category").prefetch_related(
+                        "variants", "reviews"
+                    )
+                else:
+                    # Extract features only (don't use for filtering)
+                    _, ai_features = smart_ai_search(search_query)
+                    queryset = (
+                        MarketplaceProduct.objects.filter(is_available=True)
+                        .select_related("product", "product__user", "product__category")
+                        .prefetch_related("variants", "reviews")
+                    )
+            except Exception:
+                # Fallback to standard search if AI extraction fails
+                use_ai_search = False
+                ai_features = None
+                queryset = (
+                    MarketplaceProduct.objects.filter(is_available=True)
+                    .select_related("product", "product__user", "product__category")
+                    .prefetch_related("variants", "reviews")
+                )
+        else:
+            # Standard filtering logic (no search query)
+            queryset = (
+                MarketplaceProduct.objects.filter(is_available=True)
+                .select_related("product", "product__user", "product__category")
+                .prefetch_related("variants", "reviews")
+            )
+
+        # Annotate with ratings
+        queryset = queryset.annotate(
+            avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
+            num_reviews=Count("reviews", distinct=True),
+        )
+
+        # Apply text search if not using AI or if AI didn't extract search terms
+        if not use_ai_search and search_query and len(search_query) >= 2:
             queryset = queryset.filter(
                 Q(product__name__icontains=search_query)
                 | Q(product__description__icontains=search_query)
@@ -110,6 +140,7 @@ class AdvancedProductSearchView(APIView):
             num_reviews=Count("reviews", distinct=True),
         )
 
+        # Apply category filters
         if category_id:
             try:
                 cat_id = int(category_id)
@@ -227,30 +258,40 @@ class AdvancedProductSearchView(APIView):
         elif sort_by == "name_desc":
             queryset = queryset.order_by("-product__name").distinct()
         else:  # Default: relevance or newest
-            if has_search:
+            if search_query and len(search_query) >= 2:
                 queryset = queryset.order_by("-avg_rating", "-view_count", "-listed_date").distinct()
             else:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
+
         total_count = queryset.count()
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
-
         if page is not None:
             serializer = MarketplaceProductSerializer(page, many=True, context={"request": request})
-            response_data = {
-                "results": serializer.data,
-                "total_count": total_count,
-                "page_size": self.pagination_class.page_size,
-            }
-            return paginator.get_paginated_response(response_data)
+            paginated_res = paginator.get_paginated_response(serializer.data)
+            paginated_res.data["total_count"] = total_count
+            paginated_res.data["ai_search_enabled"] = use_ai_search
+            paginated_res.data["ai_features"] = ai_features
+            return paginated_res
 
         serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
-        return Response(
-            {
-                "results": serializer.data,
-                "total_count": total_count,
-            }
-        )
+        return Response({
+            "results": serializer.data,
+            "total_count": total_count,
+            "ai_search_enabled": use_ai_search,
+            "ai_features": ai_features,
+        })
+
+        serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
+        response = {
+            "results": serializer.data,
+            "total_count": total_count,
+        }
+        # Always include AI features if available
+        if ai_features:
+            response["ai_search_enabled"] = use_ai_search
+            response["ai_features"] = ai_features
+        return Response(response)
 
 
 class ProductFacetsView(APIView):
