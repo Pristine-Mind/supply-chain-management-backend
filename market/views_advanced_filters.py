@@ -62,7 +62,8 @@ class AdvancedProductSearchView(APIView):
     def get(self, request):
         from producer.models import MarketplaceProduct
 
-        search_query = (request.query_params.get("q") or "").strip()
+        search_query = (request.query_params.get("search") or request.query_params.get("q") or "").strip()
+
         city = request.query_params.get("city")
         category_id = request.query_params.get("category_id")
         subcategory_id = request.query_params.get("subcategory_id")
