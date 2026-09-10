@@ -1,15 +1,16 @@
+import gc
 import logging
 import re
 from datetime import date, datetime
+from django.db.models import Q
+from django.db.models.functions import Coalesce
 from django.utils.timezone import is_naive, localtime, make_aware
 from keybert import KeyBERT
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from django.db.models import Q
 from producer.models import MarketplaceProduct
-
 
 # Lazy-load KeyBERT model to avoid memory bloat at startup
 _kw_model = None
@@ -31,12 +32,13 @@ def unload_keybert_model():
     if _kw_model is not None:
         logger.info("Unloading KeyBERT model to free memory...")
         try:
-            # Try to move model to CPU and clear CUDA cache if available
+            import torch
+
             if hasattr(_kw_model, "model") and hasattr(_kw_model.model, "cpu"):
                 _kw_model.model.cpu()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        except:
+        except Exception:
             pass
         _kw_model = None
         gc.collect()
@@ -89,9 +91,9 @@ def generate_and_save_product_tags(product_id):
     Overwrites any existing tags with the new optimized format.
     """
     try:
-        product = MarketplaceProduct.objects.select_related("product", "product__brand", "product__category").get(
-            id=product_id
-        )
+        product = MarketplaceProduct.objects.select_related(
+            "product", "product__brand", "product__category"
+        ).get(id=product_id)
         base_product = product.product
 
         name = base_product.name if base_product and base_product.name else ""
@@ -115,7 +117,12 @@ def generate_and_save_product_tags(product_id):
 
                 for b_name in Brand.objects.values_list("name", flat=True):
                     b_clean = b_name.strip().lower() if b_name else ""
-                    if b_clean and len(b_clean) > 1 and b_clean != "unbranded" and b_clean in text_to_analyze.lower():
+                    if (
+                        b_clean
+                        and len(b_clean) > 1
+                        and b_clean != "unbranded"
+                        and b_clean in text_to_analyze.lower()
+                    ):
                         static_tags.append(b_clean)
                         break
             except Exception:
@@ -125,12 +132,19 @@ def generate_and_save_product_tags(product_id):
             first_word = name.split()[0].strip().lower()
             if first_word.isalpha() and len(first_word) >= 2 and first_word != "unbranded":
                 static_tags.append(first_word)
+
         if base_product and getattr(base_product, "category", None):
             c_name = getattr(base_product.category, "name", None)
             if c_name:
                 static_tags.append(str(c_name).strip().lower())
+
         kw_model = get_keybert_model()
-        keywords = kw_model.extract_keywords(text_to_analyze, keyphrase_ngram_range=(1, 2), stop_words="english", top_n=5)
+        keywords = kw_model.extract_keywords(
+            text_to_analyze,
+            keyphrase_ngram_range=(1, 2),
+            stop_words="english",
+            top_n=5,
+        )
 
         nlp_tags = [kw[0] for kw in keywords]
         combined_tags = []
@@ -138,6 +152,7 @@ def generate_and_save_product_tags(product_id):
             clean_tag = tag.strip().lower()
             if clean_tag and clean_tag not in combined_tags:
                 combined_tags.append(clean_tag)
+
         product.search_tags = combined_tags
         product.save(update_fields=["search_tags"])
 
@@ -158,7 +173,6 @@ def smart_ai_search(user_query):
     and structured regex parsing for price bounds and denominations.
     Returns the full un-sliced queryset.
     """
-
     query_str = user_query.strip()
     extracted_features = {
         "search_terms": [],
@@ -216,7 +230,6 @@ def smart_ai_search(user_query):
     elif re.search(r"\b(expensive|highest price|premium)\b", query_str, re.IGNORECASE):
         extracted_features["sort_field"] = "-listed_price"
 
-    # Semantic entity extraction using the existing KeyBERT model
     try:
         kw_model = get_keybert_model()
         keywords = kw_model.extract_keywords(
@@ -234,41 +247,58 @@ def smart_ai_search(user_query):
         semantic_terms = [word.lower() for word in re.findall(r"\b[a-zA-Z]{2,}\b", query_str)]
 
     price_stop_words = {
-        "under",
-        "below",
-        "above",
-        "over",
-        "between",
-        "price",
-        "k",
-        "lakh",
-        "lac",
-        "lakhs",
-        "lacs",
-        "crore",
-        "cr",
+        "under", "below", "above", "over", "between", "price", "k", "lakh", "lac",
+        "lakhs", "lacs", "crore", "cr", "thousand", "rs", "npr", "cheap", "cheapest",
+        "lowest", "budget", "affordable", "expensive", "premium", "highest", "to", "and"
     }
-    extracted_features["search_terms"] = [t for t in semantic_terms if t not in price_stop_words]
 
-    queryset = MarketplaceProduct.objects.filter(is_available=True).select_related(
-        "product", "product__brand", "product__category"
+    raw_terms = [t for t in semantic_terms if t not in price_stop_words]
+    clean_terms = []
+    for t in raw_terms:
+        cleaned = re.sub(r"\b\d+[a-zA-Z]*\b|\b[kK]\b|\b[rR][sS]\b", "", t).strip()
+        words = [w for w in cleaned.split() if w not in price_stop_words]
+        final_str = " ".join(words).strip()
+        if final_str and len(final_str) >= 2 and final_str not in clean_terms:
+            clean_terms.append(final_str)
+
+    extracted_features["search_terms"] = clean_terms
+
+    queryset = (
+        MarketplaceProduct.objects.filter(is_available=True)
+        .select_related("product", "product__brand", "product__category")
+        .annotate(effective_price=Coalesce("discounted_price", "listed_price"))
     )
 
     if extracted_features["max_price"] is not None:
-        queryset = queryset.filter(listed_price__lte=extracted_features["max_price"])
+        queryset = queryset.filter(effective_price__lte=extracted_features["max_price"])
 
     if extracted_features["min_price"] is not None:
-        queryset = queryset.filter(listed_price__gte=extracted_features["min_price"])
+        queryset = queryset.filter(effective_price__gte=extracted_features["min_price"])
 
     if extracted_features["is_made_in_nepal"]:
         queryset = queryset.filter(is_made_in_nepal=True)
 
     if extracted_features["search_terms"]:
-        term_filter = Q()
+        distinct_words = set()
         for term in extracted_features["search_terms"]:
-            term_filter |= (
-                Q(search_tags__icontains=term) | Q(product__name__icontains=term) | Q(product__description__icontains=term)
-            )
-        queryset = queryset.filter(term_filter)
+            for word in term.split():
+                w = word.strip()
+                if len(w) >= 2 and w not in price_stop_words:
+                    distinct_words.add(w)
+
+        for term_str in distinct_words:
+            if len(term_str) <= 3:
+                boundary = r"(^|[\s\-_/.,()])" + re.escape(term_str) + r"([\s\-_/.,()]|$)"
+                word_q = (
+                    Q(product__name__iregex=boundary)
+                    | Q(search_tags__iregex=boundary)
+                )
+            else:
+                word_q = (
+                    Q(product__name__icontains=term_str)
+                    | Q(search_tags__icontains=term_str)
+                    | Q(product__description__icontains=term_str)
+                )
+            queryset = queryset.filter(word_q)
 
     return queryset.order_by(extracted_features["sort_field"]), extracted_features

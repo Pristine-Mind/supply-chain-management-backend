@@ -79,7 +79,7 @@ class AdvancedProductSearchView(APIView):
         sort_by = request.query_params.get("sort_by", "relevance")
         brand_ids = request.query_params.getlist("brand_id")
 
-        use_ai_search = search_query and len(search_query) >= 2 and not (category_id or colors or sizes or brand_ids)
+        use_ai_search = bool(search_query and len(search_query) >= 2)
 
         ai_features = None
         if search_query and len(search_query) >= 2:
@@ -266,19 +266,21 @@ class AdvancedProductSearchView(APIView):
         total_count = queryset.count()
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
-
         if page is not None:
             serializer = MarketplaceProductSerializer(page, many=True, context={"request": request})
-            response_data = {
-                "results": serializer.data,
-                "total_count": total_count,
-                "page_size": self.pagination_class.page_size,
-            }
-            # Always include AI features if available
-            if ai_features:
-                response_data["ai_search_enabled"] = use_ai_search
-                response_data["ai_features"] = ai_features
-            return paginator.get_paginated_response(response_data)
+            paginated_res = paginator.get_paginated_response(serializer.data)
+            paginated_res.data["total_count"] = total_count
+            paginated_res.data["ai_search_enabled"] = use_ai_search
+            paginated_res.data["ai_features"] = ai_features
+            return paginated_res
+
+        serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
+        return Response({
+            "results": serializer.data,
+            "total_count": total_count,
+            "ai_search_enabled": use_ai_search,
+            "ai_features": ai_features,
+        })
 
         serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
         response = {
