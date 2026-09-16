@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 
 from django.db.models import Avg, Case, Count, DecimalField, F, Q, Value, When
@@ -62,8 +63,7 @@ class AdvancedProductSearchView(APIView):
     def get(self, request):
         from producer.models import MarketplaceProduct
 
-        search_query = (request.query_params.get("search") or request.query_params.get("q") or "").strip()
-
+        search_query = (request.query_params.get("q") or request.query_params.get("search") or "").strip()
         city = request.query_params.get("city")
         category_id = request.query_params.get("category_id")
         subcategory_id = request.query_params.get("subcategory_id")
@@ -84,45 +84,39 @@ class AdvancedProductSearchView(APIView):
 
         ai_features = None
         if search_query and len(search_query) >= 2:
-            # Always try to extract features for the response
             try:
                 if use_ai_search:
                     queryset, ai_features = smart_ai_search(search_query)
-                    queryset = queryset.select_related("product", "product__user", "product__category").prefetch_related(
-                        "variants", "reviews"
-                    )
+                    queryset = queryset.select_related(
+                        "product", "product__user", "product__category", "product__brand"
+                    ).prefetch_related("variants", "reviews")
                 else:
-                    # Extract features only (don't use for filtering)
                     _, ai_features = smart_ai_search(search_query)
                     queryset = (
                         MarketplaceProduct.objects.filter(is_available=True)
-                        .select_related("product", "product__user", "product__category")
+                        .select_related("product", "product__user", "product__category", "product__brand")
                         .prefetch_related("variants", "reviews")
                     )
             except Exception:
-                # Fallback to standard search if AI extraction fails
                 use_ai_search = False
                 ai_features = None
                 queryset = (
                     MarketplaceProduct.objects.filter(is_available=True)
-                    .select_related("product", "product__user", "product__category")
+                    .select_related("product", "product__user", "product__category", "product__brand")
                     .prefetch_related("variants", "reviews")
                 )
         else:
-            # Standard filtering logic (no search query)
             queryset = (
                 MarketplaceProduct.objects.filter(is_available=True)
-                .select_related("product", "product__user", "product__category")
+                .select_related("product", "product__user", "product__category", "product__brand")
                 .prefetch_related("variants", "reviews")
             )
 
-        # Annotate with ratings
         queryset = queryset.annotate(
             avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
             num_reviews=Count("reviews", distinct=True),
         )
 
-        # Apply text search if not using AI or if AI didn't extract search terms
         if not use_ai_search and search_query and len(search_query) >= 2:
             queryset = queryset.filter(
                 Q(product__name__icontains=search_query)
@@ -130,36 +124,21 @@ class AdvancedProductSearchView(APIView):
                 | Q(search_tags__contains=search_query.lower())
             ).distinct()
 
-            # Annotate with relevance score
-            # relevance_case = build_relevance_score_case(search_query)
-            # queryset = queryset.annotate(relevance_score=relevance_case).filter(relevance_score__gt=0)
-        else:
-            queryset = queryset.annotate(relevance_score=Value(0, output_field=DecimalField()))
-
-        queryset = queryset.annotate(
-            avg_rating=Coalesce(Avg("reviews__rating"), Value(0), output_field=DecimalField()),
-            num_reviews=Count("reviews", distinct=True),
-        )
-
-        # Apply category filters
         if category_id:
             try:
-                cat_id = int(category_id)
-                queryset = queryset.filter(product__category_id=cat_id)
+                queryset = queryset.filter(product__category_id=int(category_id))
             except (ValueError, TypeError):
                 pass
 
         if subcategory_id:
             try:
-                subcat_id = int(subcategory_id)
-                queryset = queryset.filter(product__subcategory_id=subcat_id)
+                queryset = queryset.filter(product__subcategory_id=int(subcategory_id))
             except (ValueError, TypeError):
                 pass
 
         if sub_subcategory_id:
             try:
-                subsubcat_id = int(sub_subcategory_id)
-                queryset = queryset.filter(product__sub_subcategory_id=subsubcat_id)
+                queryset = queryset.filter(product__sub_subcategory_id=int(sub_subcategory_id))
             except (ValueError, TypeError):
                 pass
 
@@ -192,23 +171,24 @@ class AdvancedProductSearchView(APIView):
 
         if min_rating:
             try:
-                rating = Decimal(str(min_rating))
-                queryset = queryset.filter(avg_rating__gte=rating)
+                queryset = queryset.filter(avg_rating__gte=Decimal(str(min_rating)))
             except (ValueError, TypeError):
                 pass
 
         if delivery_days:
             try:
                 days = int(delivery_days)
-                queryset = queryset.filter(Q(estimated_delivery_days__isnull=True) | Q(estimated_delivery_days__lte=days))
+                queryset = queryset.filter(
+                    Q(estimated_delivery_days__isnull=True) | Q(estimated_delivery_days__lte=days)
+                )
             except (ValueError, TypeError):
                 pass
 
         if brand_ids:
             try:
-                brand_ids = [int(b) for b in brand_ids if b]
-                if brand_ids:
-                    queryset = queryset.filter(product__brand_id__in=brand_ids)
+                valid_bids = [int(b) for b in brand_ids if b]
+                if valid_bids:
+                    queryset = queryset.filter(product__brand_id__in=valid_bids)
             except (ValueError, TypeError):
                 pass
 
@@ -223,15 +203,19 @@ class AdvancedProductSearchView(APIView):
 
         if sort_by == "rating":
             queryset = queryset.order_by("-avg_rating", "-num_reviews", "-listed_date").distinct()
-        elif sort_by == "price_asc" or sort_by == "price_low":
+        elif sort_by in ["price_asc", "price_low"]:
             queryset = (
-                queryset.annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                queryset.annotate(
+                    effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
+                )
                 .order_by("effective_price")
                 .distinct()
             )
-        elif sort_by == "price_desc" or sort_by == "price_high":
+        elif sort_by in ["price_desc", "price_high"]:
             queryset = (
-                queryset.annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                queryset.annotate(
+                    effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField())
+                )
                 .order_by("-effective_price")
                 .distinct()
             )
@@ -258,13 +242,75 @@ class AdvancedProductSearchView(APIView):
             queryset = queryset.order_by("product__name").distinct()
         elif sort_by == "name_desc":
             queryset = queryset.order_by("-product__name").distinct()
-        else:  # Default: relevance or newest
-            if search_query and len(search_query) >= 2:
-                queryset = queryset.order_by("-avg_rating", "-view_count", "-listed_date").distinct()
-            else:
+        else:
+            if not use_ai_search:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
 
         total_count = queryset.count()
+        is_fallback = False
+        fallback_reason = None
+        suggested_keywords = []
+
+        if total_count == 0 and search_query:
+            synonym_meta = ai_features.get("synonym_resolution") if ai_features else None
+
+            if synonym_meta and synonym_meta.get("canonical_term"):
+                target = synonym_meta["canonical_term"].strip()
+                if len(target) <= 3:
+                    boundary = r"(^|[\s\-_/.,()])" + re.escape(target) + r"([\s\-_/.,()]|$)"
+                    term_q = Q(product__name__iregex=boundary) | Q(search_tags__iregex=boundary)
+                else:
+                    term_q = Q(product__name__icontains=target) | Q(search_tags__icontains=target)
+
+                fallback_qs = (
+                    MarketplaceProduct.objects.filter(is_available=True)
+                    .annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                    .filter(term_q)
+                    .select_related("product", "product__brand", "product__category")
+                    .prefetch_related("variants", "reviews")
+                    .order_by("-listed_date")
+                )
+                if ai_features:
+                    if ai_features.get("max_price") is not None:
+                        fallback_qs = fallback_qs.filter(effective_price__lte=ai_features["max_price"])
+                    if ai_features.get("min_price") is not None:
+                        fallback_qs = fallback_qs.filter(effective_price__gte=ai_features["min_price"])
+                if fallback_qs.exists():
+                    queryset = fallback_qs
+                    is_fallback = True
+                    fallback_reason = f"Exact match unavailable. Showing items matching '{target}'."
+                    suggested_keywords = synonym_meta.get("trending_suggestions", [])
+
+            if not is_fallback and synonym_meta and synonym_meta.get("category"):
+                cat_name = synonym_meta["category"]
+                fallback_qs = (
+                    MarketplaceProduct.objects.filter(is_available=True)
+                    .annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                    .filter(product__category__name__icontains=cat_name)
+                    .select_related("product", "product__brand", "product__category")
+                    .prefetch_related("variants", "reviews")
+                    .order_by("-listed_date")
+                )
+                if fallback_qs.exists():
+                    queryset = fallback_qs
+                    is_fallback = True
+                    fallback_reason = f"Showing popular items from category '{cat_name}'."
+                    suggested_keywords = synonym_meta.get("trending_suggestions", [])
+
+            if not is_fallback:
+                queryset = (
+                    MarketplaceProduct.objects.filter(is_available=True)
+                    .annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
+                    .select_related("product", "product__brand", "product__category")
+                    .prefetch_related("variants", "reviews")
+                    .order_by("-listed_date")
+                )
+                is_fallback = True
+                fallback_reason = "No direct matches found. Showing trending products."
+                suggested_keywords = ["Inverter AC", "Single Door Refrigerator", "Electric Geyser"]
+
+            total_count = queryset.count()
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
         if page is not None:
@@ -273,6 +319,9 @@ class AdvancedProductSearchView(APIView):
             paginated_res.data["total_count"] = total_count
             paginated_res.data["ai_search_enabled"] = use_ai_search
             paginated_res.data["ai_features"] = ai_features
+            paginated_res.data["is_fallback"] = is_fallback
+            paginated_res.data["fallback_reason"] = fallback_reason
+            paginated_res.data["trending_suggestions"] = suggested_keywords
             return paginated_res
 
         serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
@@ -281,19 +330,10 @@ class AdvancedProductSearchView(APIView):
             "total_count": total_count,
             "ai_search_enabled": use_ai_search,
             "ai_features": ai_features,
+            "is_fallback": is_fallback,
+            "fallback_reason": fallback_reason,
+            "trending_suggestions": suggested_keywords,
         })
-
-        serializer = MarketplaceProductSerializer(queryset, many=True, context={"request": request})
-        response = {
-            "results": serializer.data,
-            "total_count": total_count,
-        }
-        # Always include AI features if available
-        if ai_features:
-            response["ai_search_enabled"] = use_ai_search
-            response["ai_features"] = ai_features
-        return Response(response)
-
 
 class ProductFacetsView(APIView):
     """
