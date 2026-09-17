@@ -1,0 +1,343 @@
+{
+  "ac": {
+    "canonical": "ac",
+    "category": "Air Conditioners",
+    "aliases": [
+      "air conditioner",
+      "split ac",
+      "inverter ac",
+      "chiso machine",
+      "chiso banaune machine",
+      "cooler ac"
+    ],
+    "trending_suggestions": [
+      "1.5 ton split ac",
+      "inverter ac",
+      "hitech ac"
+    ]
+  },
+  "refrigerator": {
+    "canonical": "refrigerator",
+    "category": "Refrigerators",
+    "aliases": [
+      "fridge",
+      "chiso dabba",
+      "single door fridge",
+      "double door fridge"
+    ],
+    "trending_suggestions": [
+      "single door refrigerator",
+      "double door refrigerator"
+    ]
+  },
+  "freezer": {
+    "canonical": "freezer",
+    "category": "Deep Freezers",
+    "aliases": [
+      "deep freezer",
+      "chest freezer"
+    ],
+    "trending_suggestions": [
+      "chest freezer",
+      "convertible chest freezer"
+    ]
+  },
+  "geyser": {
+    "canonical": "geyser",
+    "category": "Water Heaters",
+    "aliases": [
+      "water heater",
+      "tato pani",
+      "tato pani machine",
+      "instant geyser",
+      "gas geyser"
+    ],
+    "trending_suggestions": [
+      "electric geyser",
+      "instant water heater",
+      "15l geyser"
+    ]
+  },
+  "washing_machine": {
+    "canonical": "washing machine",
+    "category": "Washing Machines",
+    "aliases": [
+      "washer",
+      "dryer",
+      "luga dhune machine",
+      "dhune machine",
+      "front load",
+      "top load"
+    ],
+    "trending_suggestions": [
+      "front load washing machine",
+      "top load washing machine"
+    ]
+  },
+  "television": {
+    "canonical": "tv",
+    "category": "Televisions",
+    "aliases": [
+      "television",
+      "smart tv",
+      "led tv",
+      "android tv",
+      "4k tv"
+    ],
+    "trending_suggestions": [
+      "32 inch smart tv",
+      "43 inch 4k tv"
+    ]
+  },
+  "laptop": {
+    "canonical": "laptop",
+    "category": "Mobile & Computing",
+    "aliases": [
+      "laptops",
+      "computer",
+      "notebook",
+      "pc"
+    ],
+    "trending_suggestions": [
+      "gaming laptop",
+      "i5 laptop",
+      "budget laptop"
+    ]
+  },
+  "air_cooler": {
+    "canonical": "cooler",
+    "category": "Air Coolers",
+    "aliases": [
+      "air cooler",
+      "room cooler",
+      "desert cooler"
+    ],
+    "trending_suggestions": [
+      "room cooler",
+      "air cooler"
+    ]
+  },
+  "fan": {
+    "canonical": "fan",
+    "category": "Fans",
+    "aliases": [
+      "ceiling fan",
+      "stand fan",
+      "table fan",
+      "pankha"
+    ],
+    "trending_suggestions": [
+      "ceiling fan",
+      "stand fan"
+    ]
+  },
+  "mixer_grinder": {
+    "canonical": "mixer",
+    "category": "Kitchen & Dining",
+    "aliases": [
+      "mixer grinder",
+      "blender",
+      "grinder",
+      "masala pisne",
+      "mixie"
+    ],
+    "trending_suggestions": [
+      "mixer grinder",
+      "juicer blender"
+    ]
+  },
+  "ethnic_wear": {
+    "canonical": "ethnic wear",
+    "category": "Clothing",
+    "aliases": [
+      "kurtha",
+      "sari",
+      "saree",
+      "lehenga",
+      "traditional wear",
+      "daura suruwal"
+    ],
+    "trending_suggestions": [
+      "cotton kurtha set",
+      "designer saree",
+      "party lehenga"
+    ]
+  },
+  "menswear": {
+    "canonical": "menswear",
+    "category": "Clothing",
+    "aliases": [
+      "men clothing",
+      "keta ko luga",
+      "tshirt",
+      "jeans",
+      "shirt"
+    ],
+    "trending_suggestions": [
+      "men cotton t-shirt",
+      "formal shirt",
+      "slim fit jeans"
+    ]
+  },
+  "footwear": {
+    "canonical": "shoes",
+    "category": "Footwear",
+    "aliases": [
+      "footwear",
+      "shoes",
+      "sneakers",
+      "jutta",
+      "chappal",
+      "sandals"
+    ],
+    "trending_suggestions": [
+      "sneakers",
+      "casual shoes",
+      "running shoes"
+    ]
+  },
+  "home_decor": {
+    "canonical": "home decor",
+    "category": "Home Decor",
+    "aliases": [
+      "curtains",
+      "bedsheet",
+      "parda",
+      "rug",
+      "wall art"
+    ],
+    "trending_suggestions": [
+      "cotton bedsheet",
+      "living room curtains"
+    ]
+  },
+  "pantry_essentials": {
+    "canonical": "groceries",
+    "category": "Groceries & Essentials",
+    "aliases": [
+      "rice",
+      "chamal",
+      "oil",
+      "tel",
+      "masala",
+      "dal"
+    ],
+    "trending_suggestions": [
+      "jeera masino rice",
+      "sunflower oil",
+      "pure ghee"
+    ]
+  },
+  "eg": {
+    "canonical": "electronics & gadgets",
+    "category": "Electronics & Gadgets",
+    "aliases": [
+      "electronics & gadgets"
+    ],
+    "trending_suggestions": [
+      "4k Dual Scree Action Camera with Externa",
+      "Abingo Hybrid ANC Active Noise Cancellin",
+      "Action Camera Battery 900mh For Chinese "
+    ]
+  },
+  "fa": {
+    "canonical": "fashion & apparel",
+    "category": "Fashion & Apparel",
+    "aliases": [
+      "fashion & apparel"
+    ],
+    "trending_suggestions": [
+      "Fashion & Apparel"
+    ]
+  },
+  "food_beverages": {
+    "canonical": "food & beverages",
+    "category": "Food & Beverages",
+    "aliases": [
+      "food & beverages"
+    ],
+    "trending_suggestions": [
+      "Premium Gundruk Achar",
+      "Masala Dalle Achar",
+      "Mix Veg Achar 400 Gram"
+    ]
+  },
+  "ge": {
+    "canonical": "groceries & essentials",
+    "category": "Groceries & Essentials",
+    "aliases": [
+      "groceries & essentials"
+    ],
+    "trending_suggestions": [
+      "Desna Chatkilo Mango Achar (Refill Pack)",
+      "Desna Chatkilo Mango Achar (Amilo Aapko ",
+      "Desna Sweet Bomb Mango Pickle (Guliyo Aa"
+    ]
+  },
+  "hb": {
+    "canonical": "health & beauty",
+    "category": "Health & Beauty",
+    "aliases": [
+      "health & beauty"
+    ],
+    "trending_suggestions": [
+      "Sugar Control LI4 Acupressure Point Clip",
+      "VaryGood Perfumes Acqua Breeze Attar Rol",
+      "VaryGood 4-in-1 Attar Collection (4x6ml)"
+    ]
+  },
+  "hl": {
+    "canonical": "home & living",
+    "category": "Home & Living",
+    "aliases": [
+      "home & living"
+    ],
+    "trending_suggestions": [
+      "Ressence Sofa Side End Table, 2-Tier Hom",
+      "Hand Pressure Semi-automatic Egg Beater ",
+      "3 Layer Metal Kitchen Storage Rack Oven "
+    ]
+  },
+  "is": {
+    "canonical": "industrial supplies",
+    "category": "Industrial Supplies",
+    "aliases": [
+      "industrial supplies"
+    ],
+    "trending_suggestions": [
+      "Industrial Supplies"
+    ]
+  },
+  "ot": {
+    "canonical": "other",
+    "category": "Other",
+    "aliases": [
+      "other"
+    ],
+    "trending_suggestions": [
+      "Other"
+    ]
+  },
+  "2448": {
+    "canonical": "pet & baby care",
+    "category": "Pet & Baby Care",
+    "aliases": [
+      "pet & baby care"
+    ],
+    "trending_suggestions": [
+      "3-IN-1 Activity Center",
+      "Picocici K37 Kids Sport Backpack | Sport",
+      "4-in-1 Kids Activity & Building Block Ta"
+    ]
+  },
+  "tt": {
+    "canonical": "travel & tourism",
+    "category": "Travel & Tourism",
+    "aliases": [
+      "travel & tourism"
+    ],
+    "trending_suggestions": [
+      "Travel & Tourism"
+    ]
+  }
+}
