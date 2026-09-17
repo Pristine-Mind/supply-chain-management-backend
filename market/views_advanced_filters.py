@@ -245,15 +245,12 @@ class AdvancedProductSearchView(APIView):
         else:
             if not use_ai_search:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
-
-        total_count = queryset.count()
         is_fallback = False
         fallback_reason = None
         suggested_keywords = []
 
-        if total_count == 0 and search_query:
+        if search_query and not queryset.exists():
             synonym_meta = ai_features.get("synonym_resolution") if ai_features else None
-
             if synonym_meta and synonym_meta.get("canonical_term"):
                 target = synonym_meta["canonical_term"].strip()
                 if len(target) <= 3:
@@ -275,12 +272,12 @@ class AdvancedProductSearchView(APIView):
                         fallback_qs = fallback_qs.filter(effective_price__lte=ai_features["max_price"])
                     if ai_features.get("min_price") is not None:
                         fallback_qs = fallback_qs.filter(effective_price__gte=ai_features["min_price"])
+
                 if fallback_qs.exists():
                     queryset = fallback_qs
                     is_fallback = True
                     fallback_reason = f"Exact match unavailable. Showing items matching '{target}'."
                     suggested_keywords = synonym_meta.get("trending_suggestions", [])
-
             if not is_fallback and synonym_meta and synonym_meta.get("category"):
                 cat_name = synonym_meta["category"]
                 fallback_qs = (
@@ -298,18 +295,19 @@ class AdvancedProductSearchView(APIView):
                     suggested_keywords = synonym_meta.get("trending_suggestions", [])
 
             if not is_fallback:
-                queryset = (
+                fallback_qs = (
                     MarketplaceProduct.objects.filter(is_available=True)
                     .annotate(effective_price=Coalesce("discounted_price", "listed_price", output_field=DecimalField()))
                     .select_related("product", "product__brand", "product__category")
                     .prefetch_related("variants", "reviews")
                     .order_by("-listed_date")
                 )
+                queryset = fallback_qs
                 is_fallback = True
                 fallback_reason = "No direct matches found. Showing trending products."
-                suggested_keywords = ["Inverter AC", "Single Door Refrigerator", "Electric Geyser"]
+                suggested_keywords = ["Inverter AC", "Single Door Refrigerator", "Electric Geyser", "Washing Machine"]
 
-            total_count = queryset.count()
+        total_count = queryset.count()
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
@@ -335,6 +333,7 @@ class AdvancedProductSearchView(APIView):
             "trending_suggestions": suggested_keywords,
         })
 
+
 class ProductFacetsView(APIView):
     """
     Get available facet counts for products with current filters applied.
@@ -347,11 +346,7 @@ class ProductFacetsView(APIView):
         from django.db.models import Max, Min
 
         from producer.models import MarketplaceProduct
-
-        # Get base queryset
         queryset = MarketplaceProduct.objects.filter(is_available=True)
-
-        # Apply category filters if specified
         category_id = request.query_params.get("category_id")
         if category_id:
             try:
@@ -359,20 +354,12 @@ class ProductFacetsView(APIView):
                 queryset = queryset.filter(product__category_id=cat_id)
             except (ValueError, TypeError):
                 pass
-
-        # Get facet counts
         try:
             facets = FacetedSearchService.get_facet_counts(queryset)
         except Exception:
             facets = {}
-
-        # Get price range
         price_stats = queryset.aggregate(min_price=Min("listed_price"), max_price=Max("listed_price"))
-
-        # Get available colors
         colors = list(queryset.values_list("color", flat=True).distinct().exclude(color__isnull=True))
-
-        # Get available sizes
         sizes = list(queryset.values_list("size", flat=True).distinct().exclude(size__isnull=True))
 
         return Response(
@@ -391,29 +378,13 @@ def product_filter_options(request):
     """
     Get all available filter options and their possible values.
     Useful for building filter dropdowns and UI elements.
-
-    Returns:
-    - categories: All active categories
-    - brands: All active brands
-    - sizes: All available size options
-    - colors: All available colors with normalization info
-    - price_ranges: Predefined price ranges for quick filtering
-    - stock_statuses: Available stock status options
-    - delivery_times: Available delivery time slots
-    - sort_options: Available sorting methods
     """
     from producer.models import Brand, Category, MarketplaceProduct
 
-    # Categories
     categories = list(Category.objects.filter(is_active=True).values("id", "name", "code"))
-
-    # Brands
     brands = list(Brand.objects.filter(is_active=True).values("id", "name"))
-
-    # Size options
     sizes = [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.SizeChoices.choices]
 
-    # Color options with normalization info
     from producer.search_utils import COLOR_ALIASES
 
     colors_with_aliases = []
@@ -424,7 +395,6 @@ def product_filter_options(request):
             {"value": color_value, "label": color_label, "aliases": aliases, "normalized_value": color_lower}
         )
 
-    # Price ranges
     price_ranges = [
         {"value": "budget", "label": "Under Rs.1,000", "min": 0, "max": 1000},
         {"value": "economy", "label": "Rs.1,000 - Rs.5,000", "min": 1000, "max": 5000},
@@ -433,14 +403,12 @@ def product_filter_options(request):
         {"value": "luxury", "label": "Over Rs.50,000", "min": 50000, "max": None},
     ]
 
-    # Stock status options
     stock_statuses = [
         {"value": "in_stock", "label": "In Stock"},
         {"value": "low_stock", "label": "Low Stock"},
         {"value": "out_of_stock", "label": "Out of Stock"},
     ]
 
-    # Delivery time options
     delivery_times = [
         {"value": "same_day", "label": "Same Day"},
         {"value": "1_day", "label": "1 Day"},
@@ -448,7 +416,6 @@ def product_filter_options(request):
         {"value": "1_week", "label": "Within 1 Week"},
     ]
 
-    # Sort options with descriptions
     sort_options = [
         {"value": "relevance", "label": "Relevance (Default)", "description": "Most relevant results first"},
         {"value": "price_asc", "label": "Price: Low to High", "description": "Cheapest products first"},
@@ -480,73 +447,48 @@ def product_filter_options(request):
 def advanced_product_search(request):
     """
     POST endpoint for complex search queries with JSON body.
-    Useful for advanced search forms.
     """
     data = request.data
-
-    # Convert JSON body to filter params
     filter_params = {}
 
-    # Text search
     if "query" in data:
         filter_params["search"] = data["query"]
-
-    # Category filters
     if "category_id" in data:
         filter_params["category_id"] = data["category_id"]
     if "subcategory_id" in data:
         filter_params["subcategory_id"] = data["subcategory_id"]
-
-    # Price filters
     if "min_price" in data:
         filter_params["min_price"] = data["min_price"]
     if "max_price" in data:
         filter_params["max_price"] = data["max_price"]
     if "price_range" in data:
         filter_params["price_range"] = data["price_range"]
-
-    # Rating filters
     if "min_rating" in data:
         filter_params["min_rating"] = data["min_rating"]
     if "min_reviews" in data:
         filter_params["min_reviews"] = data["min_reviews"]
-
-    # Availability
     if "in_stock" in data:
         filter_params["in_stock"] = "true" if data["in_stock"] else "false"
     if "stock_status" in data:
         filter_params["stock_status"] = data["stock_status"]
-
-    # Offers
     if "has_discount" in data:
         filter_params["has_discount"] = "true" if data["has_discount"] else "false"
     if "on_sale" in data:
         filter_params["on_sale"] = "true" if data["on_sale"] else "false"
-
-    # Attributes
     if "brands" in data:
         filter_params["brand_id"] = data["brands"]
     if "sizes" in data:
         filter_params["size"] = data["sizes"]
     if "colors" in data:
         filter_params["color"] = data["colors"]
-
-    # B2B
     if "b2b_only" in data:
         filter_params["b2b_available"] = "true"
-
-    # Sort
     if "sort_by" in data:
         filter_params["sort_by"] = data["sort_by"]
-
-    # Location
     if "near_me" in data:
         filter_params["near_me"] = data["near_me"]
 
-    # Get results
     result = get_filtered_products_with_facets(filter_params)
-
-    # Serialize
     page_size = request.query_params.get("page_size", 20)
 
     paginator = PageNumberPagination()

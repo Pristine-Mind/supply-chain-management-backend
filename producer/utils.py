@@ -291,7 +291,8 @@ def smart_ai_search(user_query):
         "under", "below", "above", "over", "between", "price", "k", "lakh", "lac",
         "lakhs", "lacs", "crore", "cr", "thousand", "rs", "npr", "cheap", "cheapest",
         "lowest", "budget", "affordable", "expensive", "premium", "highest", "to", "and",
-        "banaune", "garne", "chahiyo", "khojeko", "ramro", "with", "for", "in"
+        "banaune", "garne", "chahiyo", "khojeko", "ramro", "with", "for", "in", "of", "at",
+        "nepal", "nepali"
     }
 
     tokens = re.findall(r"\b[a-zA-Z0-9]+\b", query_str.lower())
@@ -395,7 +396,7 @@ def smart_ai_search(user_query):
         if min_match:
             extracted_features["min_price"] = parse_amount(min_match.group(1), min_match.group(2))
 
-    if re.search(r"\b(nepali|nepal|made in nepal|local)\b", query_str, re.IGNORECASE):
+    if re.search(r"\b(made in nepal|local product|nepali product)\b", query_str, re.IGNORECASE):
         extracted_features["is_made_in_nepal"] = True
 
     if re.search(r"\b(cheap|cheapest|lowest price|budget|affordable)\b", query_str, re.IGNORECASE):
