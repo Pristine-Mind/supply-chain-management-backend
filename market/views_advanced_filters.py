@@ -32,36 +32,15 @@ class StandardResultsSetPagination(PageNumberPagination):
 
 class AdvancedProductSearchView(APIView):
     """
-    Advanced product search with faceted filtering, relevance ranking, and comprehensive filters.
-
-    Query Parameters:
-    - q or search: Text search with relevance ranking
-    - city: City name or ID (case-insensitive)
-    - category_id, subcategory_id, sub_subcategory_id: Category filters
-    - brand_id: Filter by brand (can be multiple: brand_id=1&brand_id=2)
-    - colors: Color values (case-insensitive with aliasing support)
-    - sizes: Size values (case-insensitive)
-    - min_price, max_price: Price range filters
-    - price_range: Preset ranges (budget, economy, mid, premium, luxury)
-    - min_rating: Minimum average rating (1-5)
-    - min_reviews: Minimum number of reviews
-    - in_stock: true/false
-    - stock_status: in_stock, low_stock, out_of_stock
-    - delivery_days_max: Maximum delivery days
-    - has_discount: true/false
-    - discount_min: Minimum discount percentage
-    - on_sale: true/false
-    - b2b_available: true/false
-    - made_in_nepal: true/false
-    - sort_by: relevance, price_asc, price_desc, newest, popular, rating, name_asc, name_desc, discount
-    - near_me: lat,lng,radius_km (e.g., 27.7172,85.3240,10)
+    Advanced product search with faceted filtering, relevance ranking,
+    contextual fallback substitution, and intent logging.
     """
 
     permission_classes = [AllowAny]
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        from producer.models import MarketplaceProduct
+        from producer.models import MarketplaceProduct, SearchIntentLog
 
         search_query = (request.query_params.get("q") or request.query_params.get("search") or "").strip()
         city = request.query_params.get("city")
@@ -81,22 +60,14 @@ class AdvancedProductSearchView(APIView):
         brand_ids = request.query_params.getlist("brand_id")
 
         use_ai_search = bool(search_query and len(search_query) >= 2)
-
         ai_features = None
+
         if search_query and len(search_query) >= 2:
             try:
-                if use_ai_search:
-                    queryset, ai_features = smart_ai_search(search_query)
-                    queryset = queryset.select_related(
-                        "product", "product__user", "product__category", "product__brand"
-                    ).prefetch_related("variants", "reviews")
-                else:
-                    _, ai_features = smart_ai_search(search_query)
-                    queryset = (
-                        MarketplaceProduct.objects.filter(is_available=True)
-                        .select_related("product", "product__user", "product__category", "product__brand")
-                        .prefetch_related("variants", "reviews")
-                    )
+                queryset, ai_features = smart_ai_search(search_query)
+                queryset = queryset.select_related(
+                    "product", "product__user", "product__category", "product__brand"
+                ).prefetch_related("variants", "reviews")
             except Exception:
                 use_ai_search = False
                 ai_features = None
@@ -200,7 +171,6 @@ class AdvancedProductSearchView(APIView):
 
         if has_discount and has_discount.lower() == "true":
             queryset = queryset.filter(discounted_price__isnull=False, discounted_price__lt=F("listed_price"))
-
         if sort_by == "rating":
             queryset = queryset.order_by("-avg_rating", "-num_reviews", "-listed_date").distinct()
         elif sort_by in ["price_asc", "price_low"]:
@@ -245,12 +215,16 @@ class AdvancedProductSearchView(APIView):
         else:
             if not use_ai_search:
                 queryset = queryset.order_by("-listed_date", "-view_count").distinct()
+
         is_fallback = False
+        fallback_type = "none"
         fallback_reason = None
         suggested_keywords = []
 
         if search_query and not queryset.exists():
             synonym_meta = ai_features.get("synonym_resolution") if ai_features else None
+
+            # Tier A: Canonical Term Dropping
             if synonym_meta and synonym_meta.get("canonical_term"):
                 target = synonym_meta["canonical_term"].strip()
                 if len(target) <= 3:
@@ -276,8 +250,10 @@ class AdvancedProductSearchView(APIView):
                 if fallback_qs.exists():
                     queryset = fallback_qs
                     is_fallback = True
+                    fallback_type = "category"
                     fallback_reason = f"Exact match unavailable. Showing items matching '{target}'."
                     suggested_keywords = synonym_meta.get("trending_suggestions", [])
+
             if not is_fallback and synonym_meta and synonym_meta.get("category"):
                 cat_name = synonym_meta["category"]
                 fallback_qs = (
@@ -291,7 +267,8 @@ class AdvancedProductSearchView(APIView):
                 if fallback_qs.exists():
                     queryset = fallback_qs
                     is_fallback = True
-                    fallback_reason = f"Showing popular items from category '{cat_name}'."
+                    fallback_type = "brand_substitute"
+                    fallback_reason = f"Requested brand/item unavailable. Showing popular alternatives in '{cat_name}'."
                     suggested_keywords = synonym_meta.get("trending_suggestions", [])
 
             if not is_fallback:
@@ -304,10 +281,30 @@ class AdvancedProductSearchView(APIView):
                 )
                 queryset = fallback_qs
                 is_fallback = True
+                fallback_type = "trending"
                 fallback_reason = "No direct matches found. Showing trending products."
                 suggested_keywords = ["Inverter AC", "Single Door Refrigerator", "Electric Geyser", "Washing Machine"]
 
         total_count = queryset.count()
+        if search_query:
+            try:
+                synonym_meta = ai_features.get("synonym_resolution") if ai_features else None
+                SearchIntentLog.objects.create(
+                    raw_query=search_query,
+                    user=request.user if request.user.is_authenticated else None,
+                    extracted_terms=ai_features.get("search_terms", []) if ai_features else [],
+                    inferred_intent=synonym_meta.get("canonical_term") if synonym_meta else None,
+                    resolved_category=synonym_meta.get("category") if synonym_meta else None,
+                    hit_count=total_count,
+                    fallback_type=fallback_type,
+                    context_metadata={
+                        "is_made_in_nepal": ai_features.get("is_made_in_nepal", False) if ai_features else False,
+                        "min_price": ai_features.get("min_price") if ai_features else None,
+                        "max_price": ai_features.get("max_price") if ai_features else None,
+                    },
+                )
+            except Exception:
+                pass
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
@@ -318,6 +315,7 @@ class AdvancedProductSearchView(APIView):
             paginated_res.data["ai_search_enabled"] = use_ai_search
             paginated_res.data["ai_features"] = ai_features
             paginated_res.data["is_fallback"] = is_fallback
+            paginated_res.data["fallback_type"] = fallback_type
             paginated_res.data["fallback_reason"] = fallback_reason
             paginated_res.data["trending_suggestions"] = suggested_keywords
             return paginated_res
@@ -329,6 +327,7 @@ class AdvancedProductSearchView(APIView):
             "ai_search_enabled": use_ai_search,
             "ai_features": ai_features,
             "is_fallback": is_fallback,
+            "fallback_type": fallback_type,
             "fallback_reason": fallback_reason,
             "trending_suggestions": suggested_keywords,
         })
@@ -344,8 +343,8 @@ class ProductFacetsView(APIView):
 
     def get(self, request):
         from django.db.models import Max, Min
-
         from producer.models import MarketplaceProduct
+
         queryset = MarketplaceProduct.objects.filter(is_available=True)
         category_id = request.query_params.get("category_id")
         if category_id:
@@ -380,12 +379,11 @@ def product_filter_options(request):
     Useful for building filter dropdowns and UI elements.
     """
     from producer.models import Brand, Category, MarketplaceProduct
+    from producer.search_utils import COLOR_ALIASES
 
     categories = list(Category.objects.filter(is_active=True).values("id", "name", "code"))
     brands = list(Brand.objects.filter(is_active=True).values("id", "name"))
     sizes = [{"value": choice[0], "label": choice[1]} for choice in MarketplaceProduct.SizeChoices.choices]
-
-    from producer.search_utils import COLOR_ALIASES
 
     colors_with_aliases = []
     for color_value, color_label in MarketplaceProduct.ColorChoices.choices:
