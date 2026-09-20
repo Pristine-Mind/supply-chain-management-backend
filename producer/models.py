@@ -1473,3 +1473,76 @@ class DirectSale(models.Model):
             )
 
             super().delete(*args, **kwargs)
+class SearchTaxonomyNode(models.Model):
+    """
+    Replaces static JSON taxonomy files. Stores aliases, canonical categories,
+    and fallback suggestions directly in the database.
+    """
+    key = models.CharField(max_length=100, unique=True, db_index=True, verbose_name=_("Keyword Key"))
+    canonical = models.CharField(max_length=150, verbose_name=_("Canonical Name"))
+    category = models.CharField(max_length=150, db_index=True, verbose_name=_("Target Category"))
+    aliases = models.JSONField(default=list, blank=True, verbose_name=_("Synonyms and Spoken Aliases"))
+    trending_suggestions = models.JSONField(default=list, blank=True, verbose_name=_("Fallback Suggestions"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Active"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Search Taxonomy Node")
+        verbose_name_plural = _("Search Taxonomy Nodes")
+        ordering = ["category", "canonical"]
+
+    def __str__(self):
+        return f"{self.key} -> {self.category} ({self.canonical})"
+
+
+class SearchIntentLog(models.Model):
+    """
+    Adaptive context & learning schema:
+    Tracks search queries, extracted features, resolved intent, and fallback behavior
+    to identify customer demand patterns (even for items not yet in catalog).
+    """
+    class FallbackType(models.TextChoices):
+        NONE = "none", _("Direct Match")
+        BRAND_SUBSTITUTE = "brand_substitute", _("Brand Substitute")
+        CATEGORY = "category", _("Category Fallback")
+        TRENDING = "trending", _("Trending Fallback")
+
+    raw_query = models.CharField(max_length=255, db_index=True, verbose_name=_("Raw Search Query"))
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("User"))
+    extracted_terms = models.JSONField(default=list, blank=True, verbose_name=_("Extracted Search Terms"))
+    inferred_intent = models.CharField(max_length=150, null=True, blank=True, verbose_name=_("Inferred Intent"))
+    resolved_category = models.CharField(max_length=150, null=True, blank=True, db_index=True, verbose_name=_("Resolved Category"))
+    hit_count = models.PositiveIntegerField(default=0, verbose_name=_("Results Returned"))
+    fallback_type = models.CharField(
+        max_length=50,
+        choices=FallbackType.choices,
+        default=FallbackType.NONE,
+        verbose_name=_("Fallback Executed")
+    )
+    clicked_product = models.ForeignKey(
+        MarketplaceProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="search_conversions",
+        verbose_name=_("Converted Product")
+    )
+    context_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("Stores unstructured context: filters applied, user location, price limits, etc.")
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Timestamp"))
+
+    class Meta:
+        verbose_name = _("Search Intent Log")
+        verbose_name_plural = _("Search Intent Logs")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["raw_query", "created_at"]),
+            models.Index(fields=["fallback_type", "hit_count"]),
+        ]
+
+    def __str__(self):
+        return f"'{self.raw_query}' [{self.fallback_type}] - {self.hit_count} hits"

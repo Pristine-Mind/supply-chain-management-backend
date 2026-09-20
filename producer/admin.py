@@ -6,6 +6,8 @@ from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.http import HttpRequest
 from PIL import Image
+from producer.models import SearchTaxonomyNode, SearchIntentLog
+from producer.utils import DynamicSynonymService
 
 from user.admin_mixins import RoleBasedAdminMixin
 
@@ -911,3 +913,28 @@ class SubSubcategoryAdmin(admin.ModelAdmin):
         (None, {"fields": ("subcategory", "code", "name", "description", "is_active")}),
         ("Timestamps", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
+
+@admin.register(SearchTaxonomyNode)
+class SearchTaxonomyNodeAdmin(admin.ModelAdmin):
+    list_display = ("key", "canonical", "category", "is_active", "updated_at")
+    list_filter = ("is_active", "category")
+    search_fields = ("key", "canonical", "category", "aliases")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        DynamicSynonymService.invalidate_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        DynamicSynonymService.invalidate_cache()
+
+
+@admin.register(SearchIntentLog)
+class SearchIntentLogAdmin(admin.ModelAdmin):
+    list_display = ("raw_query", "fallback_type", "inferred_intent", "resolved_category", "hit_count", "created_at")
+    list_filter = ("fallback_type", "resolved_category", "created_at")
+    search_fields = ("raw_query", "inferred_intent", "resolved_category")
+    readonly_fields = [f.name for f in SearchIntentLog._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
