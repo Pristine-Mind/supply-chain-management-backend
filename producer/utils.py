@@ -1,12 +1,10 @@
 import gc
-import json
 import logging
-import os
 import re
 from datetime import date, datetime
 
 from django.core.cache import cache
-from django.db.models import Q
+from django.db.models import DecimalField, Q
 from django.db.models.functions import Coalesce
 from django.utils.timezone import is_naive, localtime, make_aware
 from keybert import KeyBERT
@@ -14,7 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from producer.models import MarketplaceProduct, SearchTaxonomyNode
+from producer.models import Brand, Category, MarketplaceProduct, SearchTaxonomyNode, Subcategory
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +114,6 @@ def generate_and_save_product_tags(product_id):
 
         if not static_tags:
             try:
-                from .models import Brand
-
                 for b_name in Brand.objects.values_list("name", flat=True):
                     b_clean = b_name.strip().lower() if b_name else ""
                     if (
@@ -173,25 +169,39 @@ def generate_and_save_product_tags(product_id):
 class DynamicSynonymService:
     """
     In-memory and Redis-cached taxonomy resolver.
-    Queries the SearchTaxonomyNode PostgreSQL table on cache miss (<0.2ms latency).
+    Prioritizes internal catalog entities (Category, Subcategory, Brand)
+    before falling back to the external SearchTaxonomyNode table.
     """
-    CACHE_KEY = "marketplace_search_taxonomy_map"
+    CACHE_KEY = "marketplace_search_taxonomy_map_v2"
     CACHE_TIMEOUT = 3600  # 1 hour
 
     @classmethod
-    def get_taxonomy(cls):
-        taxonomy = cache.get(cls.CACHE_KEY)
-        if taxonomy is None:
+    def get_taxonomy_bundle(cls):
+        bundle = cache.get(cls.CACHE_KEY)
+        if bundle is None:
             taxonomy = {}
+            alias_to_key = {}
             for node in SearchTaxonomyNode.objects.filter(is_active=True):
-                taxonomy[node.key.lower()] = {
+                k = node.key.lower().strip()
+                taxonomy[k] = {
                     "canonical": node.canonical,
                     "category": node.category,
-                    "aliases": [a.lower() for a in (node.aliases or [])],
+                    "aliases": [a.lower().strip() for a in (node.aliases or [])],
                     "trending_suggestions": node.trending_suggestions or [],
                 }
-            cache.set(cls.CACHE_KEY, taxonomy, timeout=cls.CACHE_TIMEOUT)
-        return taxonomy
+                alias_to_key[k] = k
+                for alias in taxonomy[k]["aliases"]:
+                    if alias:
+                        alias_to_key[alias] = k
+
+            sorted_aliases = sorted(alias_to_key.keys(), key=len, reverse=True)
+            bundle = {
+                "taxonomy": taxonomy,
+                "alias_to_key": alias_to_key,
+                "sorted_aliases": sorted_aliases,
+            }
+            cache.set(cls.CACHE_KEY, bundle, timeout=cls.CACHE_TIMEOUT)
+        return bundle
 
     @classmethod
     def invalidate_cache(cls):
@@ -199,34 +209,68 @@ class DynamicSynonymService:
 
     @classmethod
     def resolve_query(cls, raw_query: str):
-        taxonomy = cls.get_taxonomy()
-        if not taxonomy:
-            return None
-
         cleaned = raw_query.lower().strip()
-        noise_tokens = {"banaune", "garne", "chahiyo", "khojeko", "ramro", "halka", "wala"}
+        noise_tokens = {"banaune", "garne", "chahiyo", "khojeko", "ramro", "halka", "wala", "ko", "ma"}
         filtered_words = [w for w in cleaned.split() if w not in noise_tokens]
         normalized_str = " ".join(filtered_words)
-        if normalized_str in taxonomy:
-            node = taxonomy[normalized_str]
+        internal_cat = Category.objects.filter(name__iexact=normalized_str, is_active=True).first()
+        if internal_cat:
             return {
+                "source": "internal_catalog",
+                "matched_alias": normalized_str,
+                "canonical_term": internal_cat.name,
+                "category": internal_cat.name,
+                "trending_suggestions": [],
+            }
+        internal_subcat = (
+            Subcategory.objects.filter(name__iexact=normalized_str, is_active=True)
+            .select_related("category")
+            .first()
+        )
+        if internal_subcat:
+            return {
+                "source": "internal_catalog",
+                "matched_alias": normalized_str,
+                "canonical_term": internal_subcat.name,
+                "category": internal_subcat.category.name if internal_subcat.category else internal_subcat.name,
+                "trending_suggestions": [],
+            }
+        internal_brand = (
+            Brand.objects.filter(name__iexact=normalized_str, is_active=True)
+            .select_related("category")
+            .first()
+        )
+        if internal_brand:
+            return {
+                "source": "internal_catalog",
+                "matched_alias": normalized_str,
+                "canonical_term": internal_brand.name,
+                "category": internal_brand.category.name if internal_brand.category else "",
+                "trending_suggestions": [],
+            }
+        bundle = cls.get_taxonomy_bundle()
+        taxonomy = bundle["taxonomy"]
+        alias_to_key = bundle["alias_to_key"]
+        sorted_aliases = bundle["sorted_aliases"]
+
+        # Exact match
+        if normalized_str in alias_to_key:
+            target_key = alias_to_key[normalized_str]
+            node = taxonomy[target_key]
+            return {
+                "source": "external_taxonomy",
                 "matched_alias": normalized_str,
                 "canonical_term": node["canonical"],
                 "category": node["category"],
                 "trending_suggestions": node["trending_suggestions"],
             }
-        alias_map = {}
-        for key, node in taxonomy.items():
-            for alias in node.get("aliases", []):
-                alias_map[alias] = key
-
-        sorted_aliases = sorted(alias_map.keys(), key=len, reverse=True)
         for alias in sorted_aliases:
             pattern = r"(^|[\s\-_/.,()])" + re.escape(alias) + r"([\s\-_/.,()]|$)"
             if re.search(pattern, normalized_str):
-                canonical_key = alias_map[alias]
-                entry = taxonomy[canonical_key]
+                target_key = alias_to_key[alias]
+                entry = taxonomy[target_key]
                 return {
+                    "source": "external_taxonomy",
                     "matched_alias": alias,
                     "canonical_term": entry.get("canonical"),
                     "category": entry.get("category"),
@@ -240,7 +284,7 @@ def smart_ai_search(user_query):
     """
     Sub-50ms search query engine:
     Extracts price bounds, origins, and clean search tokens using pure regex.
-    Resolves canonical intents dynamically from DB/Redis cache without running KeyBERT.
+    Combines keywords with OR logic and sorts on effective price.
     """
     query_str = user_query.strip()
     synonym_resolution = DynamicSynonymService.resolve_query(query_str)
@@ -294,28 +338,24 @@ def smart_ai_search(user_query):
         if min_match:
             extracted_features["min_price"] = parse_amount(min_match.group(1), min_match.group(2))
 
-    if re.search(r"\b(made in nepal|local product|nepali product)\b", query_str, re.IGNORECASE):
+    if re.search(r"\b(made in nepal|local product|nepali product|nepal|nepali)\b", query_str, re.IGNORECASE):
         extracted_features["is_made_in_nepal"] = True
 
-    if re.search(r"\b(cheap|cheapest|lowest price|budget|affordable)\b", query_str, re.IGNORECASE):
-        extracted_features["sort_field"] = "listed_price"
-    elif re.search(r"\b(expensive|highest price|premium)\b", query_str, re.IGNORECASE):
-        extracted_features["sort_field"] = "-listed_price"
+    if re.search(r"\b(cheap|cheapest|lowest price|budget|affordable|sasto)\b", query_str, re.IGNORECASE):
+        extracted_features["sort_field"] = "effective_price"
+    elif re.search(r"\b(expensive|highest price|premium|mahango)\b", query_str, re.IGNORECASE):
+        extracted_features["sort_field"] = "-effective_price"
 
     price_stop_words = {
         "under", "below", "above", "over", "between", "price", "k", "lakh", "lac",
         "lakhs", "lacs", "crore", "cr", "thousand", "rs", "npr", "cheap", "cheapest",
         "lowest", "budget", "affordable", "expensive", "premium", "highest", "to", "and",
         "banaune", "garne", "chahiyo", "khojeko", "ramro", "with", "for", "in", "of", "at",
-        "nepal", "nepali"
+        "nepal", "nepali", "local", "product", "ko", "ma", "chha"
     }
 
     tokens = re.findall(r"\b[a-zA-Z0-9]+\b", query_str.lower())
-    clean_terms = []
-    for t in tokens:
-        if t not in price_stop_words and not t.isdigit() and len(t) >= 2:
-            if t not in clean_terms:
-                clean_terms.append(t)
+    clean_terms = [t for t in tokens if t not in price_stop_words and not t.isdigit() and len(t) >= 2]
 
     if synonym_resolution and synonym_resolution.get("canonical_term"):
         c_term = synonym_resolution["canonical_term"].lower().strip()
@@ -326,7 +366,13 @@ def smart_ai_search(user_query):
 
     queryset = (
         MarketplaceProduct.objects.filter(is_available=True)
-        .annotate(effective_price=Coalesce("discounted_price", "listed_price"))
+        .annotate(
+            effective_price=Coalesce(
+                "discounted_price",
+                "listed_price",
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
     )
 
     if extracted_features["max_price"] is not None:
@@ -339,17 +385,17 @@ def smart_ai_search(user_query):
         queryset = queryset.filter(is_made_in_nepal=True)
 
     if extracted_features["search_terms"]:
+        term_queries = Q()
         for term_str in extracted_features["search_terms"]:
-            if len(term_str) <= 3:
-                boundary = r"(^|[\s\-_/.,()])" + re.escape(term_str) + r"([\s\-_/.,()]|$)"
-                word_q = Q(product__name__iregex=boundary) | Q(search_tags__iregex=boundary)
-            else:
-                word_q = (
-                    Q(product__name__icontains=term_str)
-                    | Q(search_tags__icontains=term_str)
-                    | Q(product__description__icontains=term_str)
-                )
-            queryset = queryset.filter(word_q)
+            boundary = r"(^|[\s\-_/.,()])" + re.escape(term_str) + r"([\s\-_/.,()]|$)"
+            term_q = (
+                Q(product__name__iregex=boundary)
+                | Q(search_tags__iregex=boundary)
+                | Q(product__description__icontains=term_str)
+            )
+            term_queries |= term_q
+
+        queryset = queryset.filter(term_queries)
 
     return (
         queryset.select_related("product", "product__brand", "product__category")
