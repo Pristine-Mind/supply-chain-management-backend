@@ -33,7 +33,7 @@ from django.views.decorators.cache import cache_page, never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, serializers, status, views, viewsets
+from rest_framework import generics, mixins, serializers, status, views, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import (
@@ -88,6 +88,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     ProductView,
+    QuoteRequest,
     SellerChatMessage,
     ShoppableVideo,
     ShoppableVideoCategory,
@@ -124,6 +125,9 @@ from .serializers import (
     ProductChatMessageSerializer,
     ProductTagSerializer,
     PurchaseSerializer,
+    QuoteRequestCreateSerializer,
+    QuoteRequestSerializer,
+    QuoteRequestStatusSerializer,
     SellerBidSerializer,
     SellerChatMessageSerializer,
     SellerProductSerializer,
@@ -4022,3 +4026,54 @@ class SellerProfileWithProductsViewSet(viewsets.ReadOnlyModelViewSet):
         except Exception:
             pass
         return Response(profile_data)
+
+
+class QuoteRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """
+    POST   /quote-requests/               create
+    GET    /quote-requests/               list   (?status=, ?product_id=, ?role=sent|received)
+    GET    /quote-requests/{id}/          retrieve
+    PATCH  /quote-requests/{id}/status/   update status
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = QuoteRequest.objects.select_related("requested_by", "requested_to", "product")
+
+        # Regular users see requests they sent or received; staff see everything
+        user = self.request.user
+        if not user.is_staff:
+            qs = qs.filter(Q(requested_by=user) | Q(requested_to=user))
+
+        params = self.request.query_params
+        role = params.get("role")
+        if role == "sent":
+            qs = qs.filter(requested_by=user)
+        elif role == "received":
+            qs = qs.filter(requested_to=user)
+        if status_ := params.get("status"):
+            qs = qs.filter(status=status_)
+        if product_id := params.get("product_id"):
+            qs = qs.filter(product_id=product_id)
+        return qs
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return QuoteRequestCreateSerializer
+        if self.action == "update_status":
+            return QuoteRequestStatusSerializer
+        return QuoteRequestSerializer
+
+    @action(detail=True, methods=["patch"], url_path="status")
+    def update_status(self, request, pk=None):
+        quote_request = self.get_object()
+        serializer = self.get_serializer(quote_request, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(QuoteRequestSerializer(quote_request, context={"request": request}).data)
