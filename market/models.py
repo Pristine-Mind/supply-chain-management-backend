@@ -2997,3 +2997,49 @@ class SalesBannerStats(models.Model):
             },
         )
         return stats
+
+
+class QuoteRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        QUOTED = "quoted", "Quoted"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        CANCELLED = "cancelled", "Cancelled"
+
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="quote_requests",
+    )
+    requested_to = models.ForeignKey(User, on_delete=models.PROTECT, related_name="quote_requests_to")
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    product = models.ForeignKey(
+        MarketplaceProduct,
+        on_delete=models.PROTECT,
+        related_name="quote_request_items",
+    )
+    quantity = models.PositiveIntegerField()
+
+    # Delivery location
+    city = models.CharField(max_length=100)
+    region = models.CharField(max_length=100)
+    zone = models.CharField(max_length=100, blank=True)
+
+    expected_delivery_date = models.DateTimeField()
+    requirements = models.TextField(blank=True, null=True)
+    document = models.FileField(verbose_name=_("RFQ document"), null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"QuoteRequest #{self.pk} - supplier {self.requested_by} ({self.status})"

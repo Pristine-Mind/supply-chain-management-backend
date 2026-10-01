@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -41,6 +42,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     Purchase,
+    QuoteRequest,
     SalesBannerStats,
     SellerChatMessage,
     ShoppableVideo,
@@ -2521,3 +2523,125 @@ def add_location_to_request(request, latitude: float, longitude: float):
     request._user_latitude = latitude
     request._user_longitude = longitude
     return request
+
+
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".png", ".jpg", ".jpeg"}
+MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# Allowed status transitions
+STATUS_TRANSITIONS = {
+    QuoteRequest.Status.PENDING: {
+        QuoteRequest.Status.QUOTED,
+        QuoteRequest.Status.REJECTED,
+        QuoteRequest.Status.CANCELLED,
+    },
+    QuoteRequest.Status.QUOTED: {
+        QuoteRequest.Status.ACCEPTED,
+        QuoteRequest.Status.REJECTED,
+        QuoteRequest.Status.CANCELLED,
+    },
+    QuoteRequest.Status.ACCEPTED: set(),
+    QuoteRequest.Status.REJECTED: set(),
+    QuoteRequest.Status.CANCELLED: set(),
+}
+
+
+class QuoteRequestSerializer(serializers.ModelSerializer):
+    """Read serializer for list / retrieve / create responses."""
+
+    product_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = QuoteRequest
+        fields = [
+            "id",
+            "requested_by",
+            "requested_to",
+            "status",
+            "product_id",
+            "quantity",
+            "city",
+            "region",
+            "zone",
+            "expected_delivery_date",
+            "requirements",
+            "document",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class QuoteRequestCreateSerializer(serializers.ModelSerializer):
+    """
+    Accepts JSON or multipart/form-data.
+    `requested_by` is taken from the authenticated user, and
+    `status` always starts as "pending".
+    """
+
+    product_id = serializers.PrimaryKeyRelatedField(
+        source="product",
+        queryset=QuoteRequest._meta.get_field("product").related_model.objects.all(),
+    )
+    quantity = serializers.IntegerField(min_value=1)
+    document = serializers.FileField(required=False, allow_null=True)
+
+    class Meta:
+        model = QuoteRequest
+        fields = [
+            "id",
+            "product_id",
+            "requested_by",
+            "requested_to",
+            "quantity",
+            "city",
+            "region",
+            "zone",
+            "expected_delivery_date",
+            "requirements",
+            "document",
+        ]
+        read_only_fields = ["id", "requested_by", "requested_to"]
+
+    def validate_expected_delivery_date(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError("Expected delivery date cannot be in the past.")
+        return value
+
+    def validate_document(self, file):
+        if file is None:
+            return file
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+            raise serializers.ValidationError(
+                f"Unsupported file type '{ext}'. Allowed: " f"{', '.join(sorted(ALLOWED_DOCUMENT_EXTENSIONS))}."
+            )
+        if file.size > MAX_DOCUMENT_SIZE:
+            raise serializers.ValidationError(f"File exceeds the {MAX_DOCUMENT_SIZE // (1024 * 1024)} MB limit.")
+        return file
+
+    def create(self, validated_data):
+        validated_data["requested_to"] = (
+            MarketplaceProduct.objects.filter(id=validated_data["product_id"]).first().product.user_id
+        )
+        validated_data["requested_by"] = self.context["request"].user
+
+        return super().create(validated_data)
+
+    def to_representation(self, instance):
+        return QuoteRequestSerializer(instance, context=self.context).data
+
+
+class QuoteRequestStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QuoteRequest
+        fields = ["status"]
+
+    def validate_status(self, new_status):
+        current = self.instance.status
+        if new_status == current:
+            return new_status
+        allowed = STATUS_TRANSITIONS.get(current, set())
+        if new_status not in allowed:
+            raise serializers.ValidationError(f"Cannot change status from '{current}' to '{new_status}'.")
+        return new_status
