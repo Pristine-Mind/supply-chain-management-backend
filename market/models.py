@@ -3025,6 +3025,7 @@ class QuoteRequest(models.Model):
         related_name="quote_request_items",
     )
     quantity = models.PositiveIntegerField()
+    proposed_price = models.FloatField(null=True, blank=True)
 
     # Delivery location
     city = models.CharField(max_length=100)

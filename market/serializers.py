@@ -2566,6 +2566,7 @@ class QuoteRequestSerializer(serializers.ModelSerializer):
             "expected_delivery_date",
             "requirements",
             "document",
+            "proposed_price",
             "created_at",
             "updated_at",
         ]
@@ -2600,6 +2601,7 @@ class QuoteRequestCreateSerializer(serializers.ModelSerializer):
             "expected_delivery_date",
             "requirements",
             "document",
+            "proposed_price",
         ]
         read_only_fields = ["id", "requested_by", "requested_to"]
 
