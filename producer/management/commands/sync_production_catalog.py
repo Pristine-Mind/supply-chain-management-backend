@@ -121,9 +121,7 @@ class Command(BaseCommand):
                         "enable_geo_restrictions": item.get("enable_geo_restrictions", False),
                         "search_tags": tags
                     }
-                    if hasattr(MarketplaceProduct, 'producer') and default_producer:
-                        mp_defaults["producer"] = default_producer
-
+                    
                     MarketplaceProduct.objects.update_or_create(
                         id=item.get("id"),
                         defaults=mp_defaults
