@@ -48,8 +48,8 @@ class Command(BaseCommand):
                         clean_desc = f"{name} - Quality marketplace verified product."
 
                     cat_info = p_details.get("category_info", {}) or {}
-                    cat_name = (cat_info.get("name") or "General").strip()
-                    raw_cat_code = str(cat_info.get("code") or "GEN").strip()[:5].upper() or "GEN"
+                    cat_name = (cat_info.get("name") or "Other").strip()
+                    raw_cat_code = str(cat_info.get("code") or "OT").strip()[:5].upper() or "OT"
 
                     category, _ = Category.objects.get_or_create(
                         code=raw_cat_code,

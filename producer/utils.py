@@ -254,7 +254,6 @@ class DynamicSynonymService:
         alias_to_key = bundle["alias_to_key"]
         sorted_aliases = bundle["sorted_aliases"]
 
-        # Exact match
         if normalized_str in alias_to_key:
             target_key = alias_to_key[normalized_str]
             node = taxonomy[target_key]
@@ -370,7 +369,6 @@ def smart_ai_search(user_query, target_count=20):
 
     extracted_features["search_terms"] = clean_terms
 
-    # Base Queryset
     base_qs = (
         MarketplaceProduct.objects.filter(is_available=True)
         .annotate(
@@ -390,47 +388,32 @@ def smart_ai_search(user_query, target_count=20):
 
     if extracted_features["is_made_in_nepal"]:
         base_qs = base_qs.filter(is_made_in_nepal=True)
-    tier1_ids = []
+    tier1_q = Q()
     if extracted_features["search_terms"]:
-        tier1_q = Q()
         for term_str in extracted_features["search_terms"]:
             tier1_q |= (
                 Q(product__name__icontains=term_str)
                 | Q(search_tags__icontains=term_str)
                 | Q(product__description__icontains=term_str)
             )
-        tier1_ids = list(base_qs.filter(tier1_q).values_list("id", flat=True))
-    tier2_ids = []
+
+    tier2_q = Q()
     if resolved_category:
         tier2_q = (
             Q(product__category__name__icontains=resolved_category)
             | Q(product__subcategory__name__icontains=resolved_category)
             | Q(search_tags__icontains=resolved_category.lower())
         )
-        tier2_ids = list(
-            base_qs.filter(tier2_q)
-            .exclude(id__in=tier1_ids)
-            .values_list("id", flat=True)
-        )
-    current_count = len(tier1_ids) + len(tier2_ids)
-    tier3_ids = []
-    if current_count < target_count:
-        needed = target_count - current_count
-        excluded = set(tier1_ids + tier2_ids)
-        tier3_ids = list(
-            base_qs.exclude(id__in=excluded)
-            .order_by("-listed_date")
-            .values_list("id", flat=True)[:needed]
-        )
-
-    all_candidate_ids = tier1_ids + tier2_ids + tier3_ids
+    when_clauses = []
+    if tier1_q:
+        when_clauses.append(When(tier1_q, then=Value(1)))
+    if tier2_q:
+        when_clauses.append(When(tier2_q, then=Value(2)))
 
     final_qs = (
-        base_qs.filter(id__in=all_candidate_ids)
-        .annotate(
+        base_qs.annotate(
             match_rank=Case(
-                When(id__in=tier1_ids, then=Value(1)),
-                When(id__in=tier2_ids, then=Value(2)),
+                *when_clauses,
                 default=Value(3),
                 output_field=IntegerField(),
             )
