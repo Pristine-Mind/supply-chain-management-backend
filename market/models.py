@@ -3044,3 +3044,28 @@ class QuoteRequest(models.Model):
 
     def __str__(self):
         return f"QuoteRequest #{self.pk} - supplier {self.requested_by} ({self.status})"
+
+
+class RFQNegotiationMessage(models.Model):
+    rfq = models.ForeignKey(QuoteRequest, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="rfq_negotiation_messages",
+    )
+    message = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    quoted_unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    quoted_quantity = models.PositiveIntegerField(null=True, blank=True)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    delivery_charge = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    estimated_delivery = models.CharField(max_length=255, null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    status_event = models.CharField(max_length=32, null=True, blank=True)
+
+    class Meta:
+        ordering = ["timestamp", "id"]
+
+    def __str__(self):
+        return f"RFQ #{self.rfq_id} message #{self.pk} from {self.sender_id}"

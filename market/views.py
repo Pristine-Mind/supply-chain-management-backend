@@ -36,6 +36,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, serializers, status, views, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import (
     AllowAny,
     IsAdminUser,
@@ -88,6 +89,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     ProductView,
+    RFQNegotiationMessage,
     QuoteRequest,
     SellerChatMessage,
     ShoppableVideo,
@@ -125,6 +127,9 @@ from .serializers import (
     ProductChatMessageSerializer,
     ProductTagSerializer,
     PurchaseSerializer,
+    RFQChatMessageCreateSerializer,
+    RFQNegotiationMessageSerializer,
+    RFQQuoteCreateSerializer,
     QuoteRequestCreateSerializer,
     QuoteRequestSerializer,
     QuoteRequestStatusSerializer,
@@ -4063,17 +4068,132 @@ class QuoteRequestViewSet(
             qs = qs.filter(product_id=product_id)
         return qs
 
+    def _require_participant(self, quote_request, user):
+        if user.pk not in (quote_request.requested_by_id, quote_request.requested_to_id):
+            raise PermissionDenied("Only the buyer or supplier on this RFQ can participate.")
+
     def get_serializer_class(self):
         if self.action == "create":
             return QuoteRequestCreateSerializer
         if self.action == "update_status":
             return QuoteRequestStatusSerializer
+        if self.action == "messages":
+            return RFQChatMessageCreateSerializer if self.request.method == "POST" else RFQNegotiationMessageSerializer
+        if self.action == "quotes":
+            return RFQQuoteCreateSerializer
         return QuoteRequestSerializer
 
     @action(detail=True, methods=["patch"], url_path="status")
     def update_status(self, request, pk=None):
         quote_request = self.get_object()
+        previous_status = quote_request.status
         serializer = self.get_serializer(quote_request, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        with transaction.atomic():
+            serializer.save()
+            if quote_request.status != previous_status:
+                RFQNegotiationMessage.objects.create(
+                    rfq=quote_request,
+                    sender=request.user,
+                    message=f"RFQ status changed to {quote_request.status}.",
+                    status_event=quote_request.status,
+                )
         return Response(QuoteRequestSerializer(quote_request, context={"request": request}).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="messages")
+    def messages(self, request, pk=None):
+        quote_request = self.get_object()
+        self._require_participant(quote_request, request.user)
+
+        if request.method == "GET":
+            queryset = quote_request.messages.select_related("sender", "sender__user_profile", "rfq").order_by(
+                "timestamp", "id"
+            )
+            page = self.paginate_queryset(queryset)
+            serializer = RFQNegotiationMessageSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = RFQNegotiationMessage.objects.create(
+            rfq=quote_request,
+            sender=request.user,
+            message=serializer.validated_data["message"],
+        )
+        return Response(
+            RFQNegotiationMessageSerializer(message).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="quotes")
+    def quotes(self, request, pk=None):
+        quote_request = self.get_object()
+        self._require_participant(quote_request, request.user)
+
+        if quote_request.status in {
+            QuoteRequest.Status.ACCEPTED,
+            QuoteRequest.Status.REJECTED,
+            QuoteRequest.Status.CANCELLED,
+        }:
+            raise serializers.ValidationError("Quotes cannot be submitted for a closed RFQ.")
+
+        is_buyer = request.user.pk == quote_request.requested_by_id
+        if is_buyer and not quote_request.messages.filter(status_event="quote_submitted").exists():
+            raise serializers.ValidationError("The supplier must submit a quotation before a counter-offer.")
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        previous_quote = (
+            quote_request.messages.filter(quoted_unit_price__isnull=False).order_by("-timestamp", "-id").first()
+        )
+
+        zero = Decimal("0.00")
+        discount = data.get("discount", zero)
+        delivery_charge = data.get(
+            "delivery_charge",
+            previous_quote.delivery_charge
+            if is_buyer and previous_quote and previous_quote.delivery_charge is not None
+            else zero,
+        )
+        estimated_delivery = data.get(
+            "estimated_delivery",
+            previous_quote.estimated_delivery if is_buyer and previous_quote else None,
+        )
+        valid_until = data.get("valid_until", previous_quote.valid_until if is_buyer and previous_quote else None)
+        subtotal = data["quoted_unit_price"] * data["quantity"]
+        if discount > subtotal:
+            raise serializers.ValidationError({"discount": "Discount cannot exceed the quoted subtotal."})
+
+        event = "counter_offered" if is_buyer else "quote_submitted"
+        message_text = (
+            f"Counter-offer submitted: Rs. {data['quoted_unit_price']} / unit for {data['quantity']} units."
+            if is_buyer
+            else f"Quotation submitted: Rs. {data['quoted_unit_price']} / unit for {data['quantity']} units."
+        )
+        notes = data.get("notes")
+        if notes:
+            message_text = f"{message_text}\n{notes}"
+
+        with transaction.atomic():
+            message = RFQNegotiationMessage.objects.create(
+                rfq=quote_request,
+                sender=request.user,
+                message=message_text,
+                quoted_unit_price=data["quoted_unit_price"],
+                quoted_quantity=data["quantity"],
+                discount=discount,
+                delivery_charge=delivery_charge,
+                estimated_delivery=estimated_delivery,
+                valid_until=valid_until,
+                total_amount=subtotal - discount + delivery_charge,
+                status_event=event,
+            )
+            if not is_buyer and quote_request.status != QuoteRequest.Status.QUOTED:
+                quote_request.status = QuoteRequest.Status.QUOTED
+                quote_request.save(update_fields=["status", "updated_at"])
+
+        return Response(
+            RFQNegotiationMessageSerializer(message).data,
+            status=status.HTTP_201_CREATED,
+        )
