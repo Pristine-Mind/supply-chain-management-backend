@@ -13,6 +13,7 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 from producer.models import Brand, Category, MarketplaceProduct, SearchTaxonomyNode, Subcategory
+from django.db.models import Case, DecimalField, IntegerField, Q, Value, When
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,6 @@ class DynamicSynonymService:
         alias_to_key = bundle["alias_to_key"]
         sorted_aliases = bundle["sorted_aliases"]
 
-        # Exact match
         if normalized_str in alias_to_key:
             target_key = alias_to_key[normalized_str]
             node = taxonomy[target_key]
@@ -279,14 +279,14 @@ class DynamicSynonymService:
 
         return None
 
-
-def smart_ai_search(user_query):
+def smart_ai_search(user_query, target_count=20):
     """
-    Sub-50ms search query engine:
-    Extracts price bounds, origins, and clean search tokens using pure regex.
-    Combines keywords with OR logic and sorts on effective price.
+    Ranked 3-Tier Marketplace Search:
+    - Tier 1: Exact token/name/tag/description matches (Rank 1)
+    - Tier 2: Category / Inferred Synonym matches (Rank 2)
+    - Tier 3: Popular/Available catalog padding to fulfill pagination (Rank 3)
     """
-    query_str = user_query.strip()
+    query_str = (user_query or "").strip()
     synonym_resolution = DynamicSynonymService.resolve_query(query_str)
 
     extracted_features = {
@@ -351,20 +351,25 @@ def smart_ai_search(user_query):
         "lakhs", "lacs", "crore", "cr", "thousand", "rs", "npr", "cheap", "cheapest",
         "lowest", "budget", "affordable", "expensive", "premium", "highest", "to", "and",
         "banaune", "garne", "chahiyo", "khojeko", "ramro", "with", "for", "in", "of", "at",
-        "nepal", "nepali", "local", "product", "ko", "ma", "chha"
+        "nepal", "nepali", "local", "product", "ko", "ma", "chha", "the", "a", "an"
     }
 
     tokens = re.findall(r"\b[a-zA-Z0-9]+\b", query_str.lower())
     clean_terms = [t for t in tokens if t not in price_stop_words and not t.isdigit() and len(t) >= 2]
 
-    if synonym_resolution and synonym_resolution.get("canonical_term"):
-        c_term = synonym_resolution["canonical_term"].lower().strip()
-        if c_term not in clean_terms:
-            clean_terms.insert(0, c_term)
+    canonical_term = None
+    resolved_category = None
+    if synonym_resolution:
+        canonical_term = synonym_resolution.get("canonical_term")
+        resolved_category = synonym_resolution.get("category")
+        if canonical_term:
+            for term in canonical_term.lower().split():
+                if term not in clean_terms and term not in price_stop_words:
+                    clean_terms.append(term)
 
     extracted_features["search_terms"] = clean_terms
 
-    queryset = (
+    base_qs = (
         MarketplaceProduct.objects.filter(is_available=True)
         .annotate(
             effective_price=Coalesce(
@@ -376,29 +381,45 @@ def smart_ai_search(user_query):
     )
 
     if extracted_features["max_price"] is not None:
-        queryset = queryset.filter(effective_price__lte=extracted_features["max_price"])
+        base_qs = base_qs.filter(effective_price__lte=extracted_features["max_price"])
 
     if extracted_features["min_price"] is not None:
-        queryset = queryset.filter(effective_price__gte=extracted_features["min_price"])
+        base_qs = base_qs.filter(effective_price__gte=extracted_features["min_price"])
 
     if extracted_features["is_made_in_nepal"]:
-        queryset = queryset.filter(is_made_in_nepal=True)
-
+        base_qs = base_qs.filter(is_made_in_nepal=True)
+    tier1_q = Q()
     if extracted_features["search_terms"]:
-        term_queries = Q()
         for term_str in extracted_features["search_terms"]:
-            boundary = r"(^|[\s\-_/.,()])" + re.escape(term_str) + r"([\s\-_/.,()]|$)"
-            term_q = (
-                Q(product__name__iregex=boundary)
-                | Q(search_tags__iregex=boundary)
+            tier1_q |= (
+                Q(product__name__icontains=term_str)
+                | Q(search_tags__icontains=term_str)
                 | Q(product__description__icontains=term_str)
             )
-            term_queries |= term_q
 
-        queryset = queryset.filter(term_queries)
+    tier2_q = Q()
+    if resolved_category:
+        tier2_q = (
+            Q(product__category__name__icontains=resolved_category)
+            | Q(product__subcategory__name__icontains=resolved_category)
+            | Q(search_tags__icontains=resolved_category.lower())
+        )
+    when_clauses = []
+    if tier1_q:
+        when_clauses.append(When(tier1_q, then=Value(1)))
+    if tier2_q:
+        when_clauses.append(When(tier2_q, then=Value(2)))
 
-    return (
-        queryset.select_related("product", "product__brand", "product__category")
-        .order_by(extracted_features["sort_field"]),
-        extracted_features,
+    final_qs = (
+        base_qs.annotate(
+            match_rank=Case(
+                *when_clauses,
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        )
+        .select_related("product", "product__brand", "product__category")
+        .order_by("match_rank", extracted_features["sort_field"])
     )
+
+    return final_qs, extracted_features
