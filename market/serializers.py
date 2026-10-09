@@ -42,6 +42,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     Purchase,
+    RFQNegotiationMessage,
     QuoteRequest,
     SalesBannerStats,
     SellerChatMessage,
@@ -2622,13 +2623,28 @@ class QuoteRequestCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"File exceeds the {MAX_DOCUMENT_SIZE // (1024 * 1024)} MB limit.")
         return file
 
+    @transaction.atomic
     def create(self, validated_data):
-        validated_data["requested_to"] = (
-            MarketplaceProduct.objects.filter(id=validated_data["product_id"]).first().product.user_id
-        )
+        product = validated_data["product"]
+        validated_data["requested_to"] = product.product.user_id
         validated_data["requested_by"] = self.context["request"].user
 
-        return super().create(validated_data)
+        quote_request = super().create(validated_data)
+        proposed_price = quote_request.proposed_price
+        _ = RFQNegotiationMessage.objects.create(
+            rfq=quote_request,
+            sender=quote_request.requested_by,
+            message="RFQ initiated with a target price proposal."
+            if proposed_price is not None
+            else "RFQ created.",
+            quoted_unit_price=Decimal(str(proposed_price)) if proposed_price is not None else None,
+            quoted_quantity=quote_request.quantity if proposed_price is not None else None,
+            discount=Decimal("0.00") if proposed_price is not None else None,
+            delivery_charge=Decimal("0.00") if proposed_price is not None else None,
+            total_amount=Decimal(str(proposed_price)) * quote_request.quantity if proposed_price is not None else None,
+            status_event="rfq_created",
+        )
+        return quote_request
 
     def to_representation(self, instance):
         return QuoteRequestSerializer(instance, context=self.context).data
@@ -2647,3 +2663,68 @@ class QuoteRequestStatusSerializer(serializers.ModelSerializer):
         if new_status not in allowed:
             raise serializers.ValidationError(f"Cannot change status from '{current}' to '{new_status}'.")
         return new_status
+
+
+class RFQNegotiationMessageSerializer(serializers.ModelSerializer):
+    rfq_id = serializers.IntegerField(read_only=True)
+    sender_id = serializers.IntegerField(read_only=True)
+    sender_name = serializers.SerializerMethodField()
+    sender_role = serializers.SerializerMethodField()
+    quoted_unit_price = serializers.FloatField(read_only=True)
+    quoted_quantity = serializers.IntegerField(read_only=True)
+    discount = serializers.FloatField(read_only=True)
+    delivery_charge = serializers.FloatField(read_only=True)
+    total_amount = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = RFQNegotiationMessage
+        fields = [
+            "id",
+            "rfq_id",
+            "sender_id",
+            "sender_name",
+            "sender_role",
+            "message",
+            "timestamp",
+            "quoted_unit_price",
+            "quoted_quantity",
+            "discount",
+            "delivery_charge",
+            "estimated_delivery",
+            "valid_until",
+            "total_amount",
+            "status_event",
+        ]
+        read_only_fields = fields
+
+    def get_sender_name(self, obj):
+        profile = getattr(obj.sender, "user_profile", None)
+        if profile and profile.registered_business_name:
+            return profile.registered_business_name
+        return obj.sender.get_full_name() or obj.sender.username
+
+    def get_sender_role(self, obj):
+        return "buyer" if obj.sender_id == obj.rfq.requested_by_id else "supplier"
+
+
+class RFQChatMessageCreateSerializer(serializers.Serializer):
+    message = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+
+class RFQQuoteCreateSerializer(serializers.Serializer):
+    quoted_unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    quantity = serializers.IntegerField(min_value=1)
+    discount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
+    )
+    delivery_charge = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
+    )
+    estimated_delivery = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    valid_until = serializers.DateTimeField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+    def validate_valid_until(self, value):
+        if value is not None and value <= timezone.now():
+            raise serializers.ValidationError("valid_until must be in the future.")
+        return value
