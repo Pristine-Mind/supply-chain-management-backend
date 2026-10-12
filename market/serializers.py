@@ -2626,7 +2626,7 @@ class QuoteRequestCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         product = validated_data["product"]
-        validated_data["requested_to"] = product.product.user_id
+        validated_data["requested_to"] = product.product.user
         validated_data["requested_by"] = self.context["request"].user
 
         quote_request = super().create(validated_data)
