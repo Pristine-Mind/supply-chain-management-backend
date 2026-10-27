@@ -42,6 +42,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     Purchase,
+    RFQDelivery,
     RFQNegotiationMessage,
     QuoteRequest,
     SalesBannerStats,
@@ -2728,3 +2729,9 @@ class RFQQuoteCreateSerializer(serializers.Serializer):
         if value is not None and value <= timezone.now():
             raise serializers.ValidationError("valid_until must be in the future.")
         return value
+
+
+class RFQDeliverySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RFQDelivery
+        fields = "__all__"

@@ -54,6 +54,7 @@ from market.views import (
     ProductChatMessageViewSet,
     ProductFeedbackView,
     QuoteRequestViewSet,
+    RFQDeliveryViewSet,
     RelatedProductsView,
     SellerChatMessageViewSet,
     SellerProductsView,
@@ -189,6 +190,7 @@ router.register(r"new-year-sales", NewYearSaleViewSet, basename="new-year-sale")
 router.register(r"seller-profiles", SellerProfileWithProductsViewSet, basename="seller-profiles")
 router.register(r"all-products", AllProductViewSet, basename="all-products")
 router.register(r"rfq", QuoteRequestViewSet, basename="quote-request")
+router.register(r"rfq-deliveries", RFQDeliveryViewSet, basename="rfq-deliveries")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

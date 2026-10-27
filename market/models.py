@@ -3069,3 +3069,23 @@ class RFQNegotiationMessage(models.Model):
 
     def __str__(self):
         return f"RFQ #{self.rfq_id} message #{self.pk} from {self.sender_id}"
+
+
+class RFQDelivery(models.Model):
+    rfq = models.ForeignKey(QuoteRequest, on_delete=models.CASCADE, related_name="deliveries")
+    # Customer information
+    customer_name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20)
+    email = models.CharField(max_length=255)
+
+    # Delivery address
+    address = models.TextField()
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    zip_code = models.CharField(max_length=20)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+
+
+    def __str__(self):
+        return f"Delivery for RFQ #{self.rfq_id} to {self.customer_name}"
