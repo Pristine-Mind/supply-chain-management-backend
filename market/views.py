@@ -89,6 +89,7 @@ from .models import (
     ProductChatMessage,
     ProductTag,
     ProductView,
+    RFQDelivery,
     RFQNegotiationMessage,
     QuoteRequest,
     SellerChatMessage,
@@ -128,6 +129,7 @@ from .serializers import (
     ProductTagSerializer,
     PurchaseSerializer,
     RFQChatMessageCreateSerializer,
+    RFQDeliverySerializer,
     RFQNegotiationMessageSerializer,
     RFQQuoteCreateSerializer,
     QuoteRequestCreateSerializer,
@@ -4049,7 +4051,11 @@ class QuoteRequestViewSet(
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = QuoteRequest.objects.select_related("requested_by", "requested_to", "product")
+        qs = QuoteRequest.objects.select_related(
+            "requested_by", "requested_to", "product"
+        ).filter(
+            messages__valid_until__gte=timezone.now()
+        ).distinct()
 
         # Regular users see requests they sent or received; staff see everything
         user = self.request.user
@@ -4197,3 +4203,22 @@ class QuoteRequestViewSet(
             RFQNegotiationMessageSerializer(message).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class RFQDeliveryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing RFQDelivery records.
+
+    Endpoints
+    ---------
+    GET /rfq-deliveries/               - List all RFQDelivery records (paginated).
+    POST /rfq-deliveries/              - Create a new RFQDelivery record.
+    GET /rfq-deliveries/{id}/          - Retrieve a specific RFQDelivery record.
+    PUT /rfq-deliveries/{id}/          - Update a specific RFQDelivery record.
+    PATCH /rfq-deliveries/{id}/        - Partially update a specific RFQDelivery record.
+    DELETE /rfq-deliveries/{id}/       - Delete a specific RFQDelivery record.
+    """
+
+    queryset = RFQDelivery.objects.all()
+    serializer_class = RFQDeliverySerializer
+    
