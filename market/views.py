@@ -4054,7 +4054,7 @@ class QuoteRequestViewSet(
         qs = QuoteRequest.objects.select_related(
             "requested_by", "requested_to", "product"
         ).filter(
-            messages__valid_until__gte=timezone.now()
+            expected_delivery_date__gte=timezone.now()
         ).distinct()
 
         # Regular users see requests they sent or received; staff see everything
