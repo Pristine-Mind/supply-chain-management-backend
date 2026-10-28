@@ -38,6 +38,9 @@ from .models import (
     Payment,
     ProductTag,
     Purchase,
+    QuoteRequest,
+    RFQDelivery,
+    RFQNegotiationMessage,
     SalesBannerStats,
     ShoppableVideo,
     UserInteraction,
@@ -1135,3 +1138,61 @@ class SalesBannerStatsAdmin(admin.ModelAdmin):
             "period_end",
         )
         return super().changeform_view(request, object_id, form_url, extra_context)
+
+
+@admin.register(QuoteRequest)
+class QuoteRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "requested_by",
+        "requested_to",
+        "product",
+        "quantity",
+        "proposed_price",
+        "status",
+        "expected_delivery_date",
+        "created_at",
+    )
+    list_filter = ("status", "created_at", "expected_delivery_date")
+    search_fields = (
+        "requested_by__username",
+        "requested_to__username",
+        "product__name",
+        "city",
+        "region",
+        "requirements",
+    )
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(RFQNegotiationMessage)
+class RFQNegotiationMessageAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "rfq",
+        "sender",
+        "timestamp",
+        "quoted_unit_price",
+        "quoted_quantity",
+        "total_amount",
+        "status_event",
+        "valid_until",
+    )
+    list_filter = ("status_event", "timestamp")
+    search_fields = ("rfq__id", "sender__username", "message")
+    readonly_fields = ("timestamp",)
+
+
+@admin.register(RFQDelivery)
+class RFQDeliveryAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "rfq",
+        "customer_name",
+        "phone_number",
+        "email",
+        "city",
+        "state",
+        "zip_code",
+    )
+    search_fields = ("rfq__id", "customer_name", "phone_number", "email", "city", "state", "zip_code")
