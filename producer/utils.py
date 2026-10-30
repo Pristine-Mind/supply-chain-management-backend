@@ -13,6 +13,18 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 from producer.models import Brand, Category, MarketplaceProduct, SearchTaxonomyNode, Subcategory
+from utils.constants import (
+    CHEAP_SORT_REGEX,
+    DEFAULT_TAXONOMY_CACHE_TIMEOUT,
+    EXPENSIVE_SORT_REGEX,
+    MARKETPLACE_TAXONOMY_CACHE_KEY,
+    NEPALI_PRODUCT_REGEX,
+    PRICE_BETWEEN_REGEX,
+    PRICE_MAX_REGEX,
+    PRICE_MIN_REGEX,
+    PRICE_STOP_WORDS,
+    QUERY_NOISE_TOKENS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +179,8 @@ def generate_and_save_product_tags(product_id):
 
 
 class DynamicSynonymService:
-    CACHE_KEY = "marketplace_dynamic_taxonomy_graph_v3"
-    CACHE_TIMEOUT = 3600  # 1 hour
+    CACHE_KEY = MARKETPLACE_TAXONOMY_CACHE_KEY
+    CACHE_TIMEOUT = DEFAULT_TAXONOMY_CACHE_TIMEOUT
 
     @classmethod
     def get_dynamic_graph(cls):
@@ -250,13 +262,9 @@ class DynamicSynonymService:
         sorted_aliases = graph.get("sorted_aliases", [])
 
         cleaned = raw_query.lower().strip()
-        noise_tokens = {
-            "banaune", "garne", "chahiyo", "khojeko", "ramro", "halka", "wala", 
-            "ko", "ma", "under", "cheap", "sasto", "for", "with", "and"
-        }
         tokens = [
-            w for w in re.findall(r"\b[a-zA-Z0-9]+\b", cleaned) 
-            if w not in noise_tokens and not w.isdigit() and len(w) >= 2
+            w for w in re.findall(r"\b[a-zA-Z0-9]+\b", cleaned)
+            if w not in QUERY_NOISE_TOKENS and not w.isdigit() and len(w) >= 2
         ]
         normalized_str = " ".join(tokens)
 
@@ -353,51 +361,31 @@ def smart_ai_search(user_query, target_count=20):
             return amt * 10000000.0
         return amt
 
-    between_match = re.search(
-        r"between\s+(\d+(?:\.\d+)?)\s*(k|lakh|lac|lakhs|lacs|crore|cr)?\s+(?:and|to|-)\s+(\d+(?:\.\d+)?)\s*(k|lakh|lac|lakhs|lacs|crore|cr)?",
-        query_str,
-        re.IGNORECASE,
-    )
+    between_match = re.search(PRICE_BETWEEN_REGEX, query_str, re.IGNORECASE)
     if between_match:
         extracted_features["min_price"] = parse_amount(between_match.group(1), between_match.group(2))
         extracted_features["max_price"] = parse_amount(between_match.group(3), between_match.group(4))
 
     if not extracted_features["max_price"]:
-        max_match = re.search(
-            r"(?:under|below|less than|max(?:imum)?)\s+(?:rs\.?|npr)?\s*(\d+(?:\.\d+)?)\s*(k|lakh|lac|lakhs|lacs|crore|cr)?",
-            query_str,
-            re.IGNORECASE,
-        )
+        max_match = re.search(PRICE_MAX_REGEX, query_str, re.IGNORECASE)
         if max_match:
             extracted_features["max_price"] = parse_amount(max_match.group(1), max_match.group(2))
 
     if not extracted_features["min_price"]:
-        min_match = re.search(
-            r"(?:above|over|more than|min(?:imum)?)\s+(?:rs\.?|npr)?\s*(\d+(?:\.\d+)?)\s*(k|lakh|lac|lakhs|lacs|crore|cr)?",
-            query_str,
-            re.IGNORECASE,
-        )
+        min_match = re.search(PRICE_MIN_REGEX, query_str, re.IGNORECASE)
         if min_match:
             extracted_features["min_price"] = parse_amount(min_match.group(1), min_match.group(2))
 
-    if re.search(r"\b(made in nepal|local product|nepali product|nepal|nepali)\b", query_str, re.IGNORECASE):
+    if re.search(NEPALI_PRODUCT_REGEX, query_str, re.IGNORECASE):
         extracted_features["is_made_in_nepal"] = True
 
-    if re.search(r"\b(cheap|cheapest|lowest price|budget|affordable|sasto)\b", query_str, re.IGNORECASE):
+    if re.search(CHEAP_SORT_REGEX, query_str, re.IGNORECASE):
         extracted_features["sort_field"] = "effective_price"
-    elif re.search(r"\b(expensive|highest price|premium|mahango)\b", query_str, re.IGNORECASE):
+    elif re.search(EXPENSIVE_SORT_REGEX, query_str, re.IGNORECASE):
         extracted_features["sort_field"] = "-effective_price"
 
-    price_stop_words = {
-        "under", "below", "above", "over", "between", "price", "k", "lakh", "lac",
-        "lakhs", "lacs", "crore", "cr", "thousand", "rs", "npr", "cheap", "cheapest",
-        "lowest", "budget", "affordable", "expensive", "premium", "highest", "to", "and",
-        "banaune", "garne", "chahiyo", "khojeko", "ramro", "with", "for", "in", "of", "at",
-        "nepal", "nepali", "local", "product", "ko", "ma", "chha", "the", "a", "an",
-    }
-
     tokens = re.findall(r"\b[a-zA-Z0-9]+\b", query_str.lower())
-    clean_terms = [t for t in tokens if t not in price_stop_words and not t.isdigit() and len(t) >= 2]
+    clean_terms = [t for t in tokens if t not in PRICE_STOP_WORDS and not t.isdigit() and len(t) >= 2]
 
     canonical_term = None
     resolved_category = None
@@ -409,7 +397,7 @@ def smart_ai_search(user_query, target_count=20):
 
         if canonical_term:
             for term in canonical_term.lower().split():
-                if term not in clean_terms and term not in price_stop_words:
+                if term not in clean_terms and term not in PRICE_STOP_WORDS:
                     clean_terms.append(term)
 
     extracted_features["search_terms"] = clean_terms
@@ -433,7 +421,6 @@ def smart_ai_search(user_query, target_count=20):
 
     if extracted_features["is_made_in_nepal"]:
         base_qs = base_qs.filter(is_made_in_nepal=True)
-
 
     tier1_q = Q()
     if clean_terms:
