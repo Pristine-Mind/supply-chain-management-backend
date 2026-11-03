@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <p>Hello {{ supplier_name }},</p>
+    <p>Great news! The buyer has accepted the agreed quotation and completed checkout.</p>
+
+    <h2>Order Details</h2>
+    <table>
+      <tr><th align="left">RFQ Reference</th><td>{{ rfq_id }}</td></tr>
+      <tr><th align="left">Product</th><td>{{ product_title }}</td></tr>
+      <tr><th align="left">Quantity</th><td>{{ quantity }} units</td></tr>
+      <tr><th align="left">Agreed Unit Price</th><td>{{ unit_price_display }}</td></tr>
+      <tr><th align="left">Total Payable</th><td>{{ total_payable_display }}</td></tr>
+    </table>
+
+    <h2>Shipping Information</h2>
+    <p>Customer Name: {{ buyer_name }}<br>
+      Phone: {{ buyer_phone }}<br>
+      Email: {{ buyer_email }}<br>
+      Delivery Address: {{ delivery_address }}</p>
+
+    <p>Please prepare the shipment according to your agreed timeline
+      ({{ estimated_delivery_agreed|default:"as agreed" }}). Contact the customer directly if you need to coordinate
+      dispatch or verification.</p>
+  </body>
+</html>

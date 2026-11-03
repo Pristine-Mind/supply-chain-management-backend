@@ -1,0 +1,21 @@
+Hello {{ supplier_name }},
+
+Great news! The buyer has accepted the agreed quotation and completed checkout.
+
+Order Details
+-------------
+RFQ Reference: {{ rfq_id }}
+Product: {{ product_title }}
+Quantity: {{ quantity }} units
+Agreed Unit Price: {{ unit_price_display }}
+Total Payable: {{ total_payable_display }}
+
+Shipping Information
+--------------------
+Customer Name: {{ buyer_name }}
+Phone: {{ buyer_phone }}
+Email: {{ buyer_email }}
+Delivery Address: {{ delivery_address }}
+
+Please prepare the shipment according to your agreed timeline ({{ estimated_delivery_agreed|default:"as agreed" }}).
+Contact the customer directly if you need to coordinate dispatch or verification.

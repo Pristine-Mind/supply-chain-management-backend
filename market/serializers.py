@@ -2571,6 +2571,7 @@ class QuoteRequestSerializer(serializers.ModelSerializer):
             "proposed_price",
             "created_at",
             "updated_at",
+            "agree_terms_and_conditions",
         ]
         read_only_fields = fields
 
@@ -2604,6 +2605,7 @@ class QuoteRequestCreateSerializer(serializers.ModelSerializer):
             "requirements",
             "document",
             "proposed_price",
+            "agree_terms_and_conditions",
         ]
         read_only_fields = ["id", "requested_by", "requested_to"]
 
@@ -2732,6 +2734,23 @@ class RFQQuoteCreateSerializer(serializers.Serializer):
 
 
 class RFQDeliverySerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(max_length=255)
+
     class Meta:
         model = RFQDelivery
         fields = "__all__"
+        read_only_fields = ["buyer_email_sent_at", "supplier_email_sent_at"]
+
+    def validate(self, attrs):
+        rfq = attrs.get("rfq", getattr(self.instance, "rfq", None))
+        if rfq is None:
+            return attrs
+
+        request = self.context.get("request")
+        if request and request.user.pk != rfq.requested_by_id:
+            raise serializers.ValidationError({"rfq": "Only the buyer on this RFQ can complete checkout."})
+        if rfq.status != QuoteRequest.Status.ACCEPTED:
+            raise serializers.ValidationError({"rfq": "Checkout is only available for accepted RFQs."})
+        if RFQDelivery.objects.filter(rfq=rfq).exclude(pk=getattr(self.instance, "pk", None)).exists():
+            raise serializers.ValidationError({"rfq": "Checkout has already been completed for this RFQ."})
+        return attrs

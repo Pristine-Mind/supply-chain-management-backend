@@ -1,9 +1,10 @@
 import logging
+from decimal import Decimal
 
 import requests
 from celery import shared_task
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.db.models import Q
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -13,9 +14,133 @@ from requests.exceptions import RequestException
 from producer.models import Order, Sale
 
 from .locks import lock_manager
-from .models import Negotiation
+from .models import Negotiation, RFQDelivery
 
 logger = logging.getLogger(__name__)
+
+
+def _rfq_checkout_email_context(delivery):
+    rfq = delivery.rfq
+    product = rfq.product.product
+    supplier = rfq.requested_to
+    quote = rfq.messages.filter(quoted_unit_price__isnull=False).order_by("-timestamp", "-id").first()
+
+    unit_price = (
+        Decimal(str(quote.quoted_unit_price))
+        if quote
+        else Decimal(str(rfq.proposed_price))
+        if rfq.proposed_price is not None
+        else None
+    )
+    if unit_price is None:
+        raise ValueError(f"Accepted RFQ {rfq.pk} has no agreed unit price.")
+
+    quantity = quote.quoted_quantity if quote and quote.quoted_quantity else rfq.quantity
+    discount = quote.discount or Decimal("0.00") if quote else Decimal("0.00")
+    delivery_charge = quote.delivery_charge or Decimal("0.00") if quote else Decimal("0.00")
+    subtotal = unit_price * quantity
+    total_payable = quote.total_amount if quote and quote.total_amount is not None else (
+        subtotal - discount + delivery_charge
+    )
+    profile = getattr(supplier, "user_profile", None)
+    supplier_name = (
+        profile.registered_business_name
+        if profile and profile.registered_business_name
+        else supplier.get_full_name() or supplier.username
+    )
+    address_parts = [delivery.address, delivery.city, delivery.state, delivery.zip_code]
+    delivery_address = ", ".join(part.strip() for part in address_parts if part and part.strip())
+    estimated_delivery = (
+        quote.estimated_delivery
+        if quote and quote.estimated_delivery
+        else rfq.expected_delivery_date.strftime("%Y-%m-%d")
+    )
+
+    return {
+        "rfq_id": f"RFQ-{rfq.pk:06d}",
+        "customer_name": delivery.customer_name,
+        "buyer_name": delivery.customer_name,
+        "buyer_phone": delivery.phone_number,
+        "buyer_email": delivery.email,
+        "product_title": product.name,
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "unit_price_display": f"Rs. {unit_price:,.2f}",
+        "subtotal": subtotal,
+        "delivery_charge": delivery_charge,
+        "delivery_charge_display": f"Rs. {delivery_charge:,.2f}",
+        "discount": discount,
+        "discount_display": f"Rs. {discount:,.2f}",
+        "total_payable": total_payable,
+        "total_payable_display": f"Rs. {total_payable:,.2f}",
+        "delivery_address": delivery_address,
+        "supplier_name": supplier_name,
+        "supplier_email": supplier.email,
+        "supplier_phone": profile.phone_number if profile and profile.phone_number else "",
+        "estimated_delivery": estimated_delivery,
+        "estimated_delivery_agreed": estimated_delivery,
+        "delivery": delivery,
+    }
+
+
+def _send_rfq_checkout_email(recipient, subject, template_prefix, context):
+    if not recipient:
+        logger.error(
+            "Cannot send RFQ checkout email %r: recipient email is missing",
+            subject,
+        )
+        return False
+
+    text_body = render_to_string(f"{template_prefix}.txt", context)
+    html_body = render_to_string(f"{template_prefix}.html", context)
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient],
+    )
+    message.attach_alternative(html_body, "text/html")
+    if message.send(fail_silently=False) != 1:
+        raise RuntimeError(f"Email backend did not send checkout email to {recipient}.")
+    return True
+
+
+@shared_task(bind=True, max_retries=3)
+def send_rfq_checkout_emails_task(self, delivery_id):
+    try:
+        delivery = RFQDelivery.objects.select_related(
+            "rfq__product__product",
+            "rfq__requested_to__user_profile",
+        ).get(pk=delivery_id)
+        context = _rfq_checkout_email_context(delivery)
+
+        if delivery.buyer_email_sent_at is None:
+            subject = f"Order Confirmed: RFQ #{delivery.rfq_id:06d} - {context['product_title']}"
+            if _send_rfq_checkout_email(
+                delivery.email,
+                subject,
+                "market/emails/rfq_checkout_buyer",
+                context,
+            ):
+                delivery.buyer_email_sent_at = timezone.now()
+                delivery.save(update_fields=["buyer_email_sent_at"])
+
+        if delivery.supplier_email_sent_at is None:
+            subject = f"Action Required: New Order Placed for RFQ #{delivery.rfq_id:06d}"
+            if _send_rfq_checkout_email(
+                delivery.rfq.requested_to.email,
+                subject,
+                "market/emails/rfq_checkout_supplier",
+                context,
+            ):
+                delivery.supplier_email_sent_at = timezone.now()
+                delivery.save(update_fields=["supplier_email_sent_at"])
+    except RFQDelivery.DoesNotExist:
+        logger.error("RFQ delivery %s does not exist; checkout emails were not sent.", delivery_id)
+    except Exception as exc:
+        countdown = 60 * (2**self.request.retries)
+        logger.exception("Failed to send checkout emails for RFQ delivery %s.", delivery_id)
+        raise self.retry(exc=exc, countdown=countdown)
 
 
 @shared_task

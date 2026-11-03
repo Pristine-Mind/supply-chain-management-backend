@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <p>Hi {{ customer_name }},</p>
+    <p>Thank you for your order! Your request for quotation has been finalized and confirmed.</p>
+
+    <h2>Order Summary</h2>
+    <table>
+      <tr><th align="left">RFQ Reference</th><td>{{ rfq_id }}</td></tr>
+      <tr><th align="left">Product</th><td>{{ product_title }}</td></tr>
+      <tr><th align="left">Quantity</th><td>{{ quantity }} units</td></tr>
+      <tr><th align="left">Agreed Unit Price</th><td>{{ unit_price_display }}</td></tr>
+      <tr><th align="left">Subtotal</th><td>Rs. {{ subtotal|floatformat:2 }}</td></tr>
+      <tr><th align="left">Delivery Charge</th><td>{{ delivery_charge_display }}</td></tr>
+      <tr><th align="left">Discount</th><td>{{ discount_display }}</td></tr>
+      <tr><th align="left">Total Amount</th><td>{{ total_payable_display }}</td></tr>
+    </table>
+
+    <h2>Delivery Details</h2>
+    <p>Recipient: {{ customer_name }} ({{ delivery.phone_number }})<br>
+      Address: {{ delivery_address }}</p>
+
+    <h2>Supplier Information</h2>
+    <p>Supplier: {{ supplier_name }}<br>
+      Contact: {{ supplier_phone }}{% if supplier_email %} / {{ supplier_email }}{% endif %}<br>
+      Estimated Delivery: {{ estimated_delivery|default:"As agreed with the supplier" }}</p>
+    <p>The supplier has received your shipping information and will coordinate delivery.</p>
+  </body>
+</html>

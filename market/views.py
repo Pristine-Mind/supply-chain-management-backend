@@ -4219,6 +4219,40 @@ class RFQDeliveryViewSet(viewsets.ModelViewSet):
     DELETE /rfq-deliveries/{id}/       - Delete a specific RFQDelivery record.
     """
 
-    queryset = RFQDelivery.objects.all()
     serializer_class = RFQDeliverySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = RFQDelivery.objects.select_related("rfq")
+        if self.request.user.is_staff:
+            return queryset
+        return queryset.filter(
+            Q(rfq__requested_by=self.request.user) | Q(rfq__requested_to=self.request.user)
+        )
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            delivery = serializer.save()
+            rfq = delivery.rfq
+            rfq.status = QuoteRequest.Status.ORDERED
+            rfq.save(update_fields=["status", "updated_at"])
+            RFQNegotiationMessage.objects.create(
+                rfq=rfq,
+                sender=self.request.user,
+                message="RFQ status changed to ordered.",
+                status_event=QuoteRequest.Status.ORDERED,
+            )
+
+            def enqueue_checkout_emails(delivery_id=delivery.pk):
+                from .tasks import send_rfq_checkout_emails_task
+
+                try:
+                    send_rfq_checkout_emails_task.delay(delivery_id)
+                except Exception:
+                    logger.exception(
+                        "Could not enqueue checkout emails for RFQ delivery %s",
+                        delivery_id,
+                    )
+
+            transaction.on_commit(enqueue_checkout_emails)
     

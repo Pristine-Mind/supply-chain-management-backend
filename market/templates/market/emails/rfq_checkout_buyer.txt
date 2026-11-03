@@ -1,0 +1,27 @@
+Hi {{ customer_name }},
+
+Thank you for your order! Your request for quotation has been finalized and confirmed.
+
+Order Summary
+-------------
+RFQ Reference: {{ rfq_id }}
+Product: {{ product_title }}
+Quantity: {{ quantity }} units
+Agreed Unit Price: {{ unit_price_display }}
+Subtotal: Rs. {{ subtotal|floatformat:2 }}
+Delivery Charge: {{ delivery_charge_display }}
+Discount: {{ discount_display }}
+Total Amount: {{ total_payable_display }}
+
+Delivery Details
+----------------
+Recipient: {{ customer_name }} ({{ delivery.phone_number }})
+Address: {{ delivery_address }}
+
+Supplier Information
+--------------------
+Supplier: {{ supplier_name }}
+Contact: {{ supplier_phone }}{% if supplier_email %} / {{ supplier_email }}{% endif %}
+Estimated Delivery: {{ estimated_delivery|default:"As agreed with the supplier" }}
+
+The supplier has received your shipping information and will coordinate delivery.

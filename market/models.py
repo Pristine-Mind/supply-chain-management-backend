@@ -3004,6 +3004,7 @@ class QuoteRequest(models.Model):
         PENDING = "pending", "Pending"
         QUOTED = "quoted", "Quoted"
         ACCEPTED = "accepted", "Accepted"
+        ORDERED = "ordered", "Ordered"
         REJECTED = "rejected", "Rejected"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -3026,6 +3027,7 @@ class QuoteRequest(models.Model):
     )
     quantity = models.PositiveIntegerField()
     proposed_price = models.FloatField(null=True, blank=True)
+    agree_terms_and_conditions = models.BooleanField(default=False)
 
     # Delivery location
     city = models.CharField(max_length=100)
@@ -3086,6 +3088,13 @@ class RFQDelivery(models.Model):
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
 
+    buyer_email_sent_at = models.DateTimeField(null=True, blank=True)
+    supplier_email_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["rfq"], name="unique_rfq_delivery"),
+        ]
 
     def __str__(self):
         return f"Delivery for RFQ #{self.rfq_id} to {self.customer_name}"
