@@ -25,19 +25,19 @@ class CategoryAPITestCase(TestCase):
 
     def test_categories_list(self):
         """Test listing categories"""
-        response = self.client.get("/api/categories/")
+        response = self.client.get("/api/v1/categories/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreater(len(response.data["results"]), 0)
 
     def test_category_hierarchy(self):
         """Test category hierarchy endpoint"""
-        response = self.client.get("/api/categories/hierarchy/")
+        response = self.client.get("/api/v1/categories/hierarchy/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
 
     def test_subcategories_filtered(self):
         """Test filtering subcategories by category"""
-        response = self.client.get(f"/api/subcategories/?category={self.category.id}")
+        response = self.client.get(f"/api/v1/subcategories/?category={self.category.id}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreater(len(response.data["results"]), 0)
 

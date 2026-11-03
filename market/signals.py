@@ -165,7 +165,7 @@ def order_notifications(sender, instance, created, **kwargs):
                 },
             },
             via_sms=True,
-            sms_number=instance.user.user_profile.phone_number,
+            sms_number=getattr(getattr(instance.user, "user_profile", None), "phone_number", None) if hasattr(instance, "user") and instance.user else None,
             sms_body=f"Order {instance.order_number} placed successfully!",
         )
     else:
@@ -291,7 +291,7 @@ def stocklist_notifications(sender, instance, created, **kwargs):
 #                 email_tpl="stock_alert.html",
 #                 email_ctx={"product_id": instance.id},
 #                 via_sms=True,
-#                 sms_number=instance.user.user_profile.phone_number,
+#                 sms_number=getattr(getattr(instance.user, "user_profile", None), "phone_number", None) if hasattr(instance, "user") and instance.user else None,
 #                 sms_body=msg,
 #             )
 

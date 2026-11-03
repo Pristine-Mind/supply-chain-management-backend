@@ -12,11 +12,14 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from producer.models import Brand, Category, MarketplaceProduct, SearchTaxonomyNode, Subcategory
+from producer.models import Brand, Category, MarketplaceProduct, SearchTaxonomyNode
 from utils.constants import (
     CHEAP_SORT_REGEX,
+    COMMON_ATTRIBUTES,
     DEFAULT_TAXONOMY_CACHE_TIMEOUT,
+    DEFAULT_TAXONOMY_SEEDS,
     EXPENSIVE_SORT_REGEX,
+    FOOTWEAR_ACCESSORY_EXCLUSIONS,
     MARKETPLACE_TAXONOMY_CACHE_KEY,
     NEPALI_PRODUCT_REGEX,
     PRICE_BETWEEN_REGEX,
@@ -178,176 +181,160 @@ def generate_and_save_product_tags(product_id):
         return None
 
 
+class TrieNode:
+    def __init__(self):
+        self.children = {}
+        self.is_terminal = False
+        self.canonical = None
+        self.category = None
+        self.primary_noun = None
+        self.aliases = []
+
+
+class TaxonomyTrie:
+    def __init__(self):
+        self.root = TrieNode()
+
+    def insert(self, phrase: str, canonical: str, category: str, primary_noun: str, aliases: list = None):
+        words = phrase.lower().strip().split()
+        curr = self.root
+        for word in words:
+            if word not in curr.children:
+                curr.children[word] = TrieNode()
+            curr = curr.children[word]
+        curr.is_terminal = True
+        curr.canonical = canonical
+        curr.category = category
+        curr.primary_noun = primary_noun
+        curr.aliases = aliases or []
+
+    def match_longest(self, tokens, start_idx):
+        curr = self.root
+        last_match = None
+        matched_len = 0
+        for i in range(start_idx, len(tokens)):
+            w = tokens[i]
+            if w in curr.children:
+                curr = curr.children[w]
+                if curr.is_terminal:
+                    last_match = (curr.canonical, curr.category, curr.primary_noun, curr.aliases)
+                    matched_len = (i - start_idx) + 1
+            else:
+                break
+        return last_match, matched_len
+
+
 class DynamicSynonymService:
     CACHE_KEY = MARKETPLACE_TAXONOMY_CACHE_KEY
     CACHE_TIMEOUT = DEFAULT_TAXONOMY_CACHE_TIMEOUT
 
     @classmethod
-    def get_dynamic_graph(cls):
-        cached_graph = cache.get(cls.CACHE_KEY)
-        if cached_graph is not None:
-            return cached_graph
+    def get_dynamic_tree(cls):
+        try:
+            cached_tree = cache.get(cls.CACHE_KEY)
+            if cached_tree is not None:
+                return cached_tree
+        except Exception as e:
+            logger.warning(f"Redis lookup failed ({e}), building tree directly...")
 
-        category_map = {}
-        subcategory_to_category = {}
-        for cat in Category.objects.filter(is_active=True).prefetch_related("subcategories"):
-            c_name = cat.name.strip()
-            c_key = c_name.lower()
-            subcats = [s.name.strip() for s in cat.subcategories.filter(is_active=True)]
+        trie = TaxonomyTrie()
 
-            category_map[c_key] = {
-                "id": cat.id,
-                "name": c_name,
-                "subcategories": subcats,
-                "brands": set(),
-            }
-            for s in subcats:
-                subcategory_to_category[s.lower()] = c_key
+        for phrase, canonical, category, noun, aliases in DEFAULT_TAXONOMY_SEEDS:
+            trie.insert(phrase, canonical, category, noun, aliases)
 
-        active_pairs = (
-            MarketplaceProduct.objects.filter(is_available=True)
-            .values("product__brand__name", "product__category__name")
-            .distinct()
-        )
-        for pair in active_pairs:
-            b_name = pair.get("product__brand__name")
-            c_name = pair.get("product__category__name")
-            if b_name and c_name:
-                b_clean = b_name.strip()
-                c_key = c_name.strip().lower()
-                if b_clean.lower() != "unbranded":
-                    if c_key in category_map:
-                        category_map[c_key]["brands"].add(b_clean)
+        try:
+            for node in SearchTaxonomyNode.objects.filter(is_active=True):
+                k = node.key.lower().strip()
+                canonical = node.canonical
+                cat = node.category or ""
+                aliases = [a.lower().strip() for a in (node.aliases or []) if a]
+                trie.insert(k, canonical, cat, k, aliases)
+                for alias in aliases:
+                    trie.insert(alias, canonical, cat, k, aliases)
+        except Exception as e:
+            logger.debug(f"Taxonomy DB sync bypassed: {e}")
 
-        for c_key in category_map:
-            category_map[c_key]["brands"] = sorted(list(category_map[c_key]["brands"]))
+        try:
+            cache.set(cls.CACHE_KEY, trie, timeout=cls.CACHE_TIMEOUT)
+        except Exception as e:
+            logger.warning(f"Failed to cache taxonomy tree in Redis: {e}")
 
-        taxonomy_nodes = {}
-        alias_to_key = {}
-        for node in SearchTaxonomyNode.objects.filter(is_active=True):
-            k = node.key.lower().strip()
-            taxonomy_nodes[k] = {
-                "canonical": node.canonical,
-                "category": node.category,
-                "aliases": [a.lower().strip() for a in (node.aliases or []) if a],
-                "trending_suggestions": node.trending_suggestions or [],
-            }
-            alias_to_key[k] = k
-            for alias in taxonomy_nodes[k]["aliases"]:
-                alias_to_key[alias] = k
-
-        sorted_aliases = sorted(alias_to_key.keys(), key=len, reverse=True)
-
-        bundle = {
-            "category_map": category_map,
-            "subcategory_to_category": subcategory_to_category,
-            "taxonomy_nodes": taxonomy_nodes,
-            "alias_to_key": alias_to_key,
-            "sorted_aliases": sorted_aliases,
-        }
-        cache.set(cls.CACHE_KEY, bundle, timeout=cls.CACHE_TIMEOUT)
-        return bundle
+        return trie
 
     @classmethod
     def invalidate_cache(cls):
-        cache.delete(cls.CACHE_KEY)
+        try:
+            cache.delete(cls.CACHE_KEY)
+        except Exception as e:
+            logger.warning(f"Failed to invalidate Redis cache: {e}")
 
     @classmethod
     def resolve_query(cls, raw_query: str):
-        graph = cls.get_dynamic_graph()
-        category_map = graph.get("category_map", {})
-        subcategory_to_category = graph.get("subcategory_to_category", {})
-        taxonomy_nodes = graph.get("taxonomy_nodes", {})
-        alias_to_key = graph.get("alias_to_key", {})
-        sorted_aliases = graph.get("sorted_aliases", [])
+        trie = cls.get_dynamic_tree()
+        cleaned = raw_query.lower()
 
-        cleaned = raw_query.lower().strip()
-        tokens = [
-            w for w in re.findall(r"\b[a-zA-Z0-9]+\b", cleaned)
-            if w not in QUERY_NOISE_TOKENS and not w.isdigit() and len(w) >= 2
+        tokens = re.findall(r"\b[a-zA-Z0-9\-]+\b", cleaned)
+        filtered_tokens = [
+            t for t in tokens
+            if t not in QUERY_NOISE_TOKENS and not t.isdigit() and len(t) >= 2
         ]
-        normalized_str = " ".join(tokens)
 
-        extracted = {
-            "canonical_term": None,
-            "category": None,
-            "related_brands": [],
-            "sibling_subcategories": [],
-            "matched_alias": None,
-            "trending_suggestions": [],
+        canonical_term = None
+        resolved_category = None
+        target_noun = None
+        aliases = []
+
+        i = 0
+        while i < len(filtered_tokens):
+            match, length = trie.match_longest(filtered_tokens, i)
+            if match:
+                canonical_term, resolved_category, target_noun, aliases = match
+                i += length
+            else:
+                i += 1
+
+        primary_words = []
+        modifier_words = []
+        for t in filtered_tokens:
+            if t in PRICE_STOP_WORDS:
+                continue
+            if t in COMMON_ATTRIBUTES:
+                modifier_words.append(t)
+            else:
+                primary_words.append(t)
+
+        target_anchors = list(dict.fromkeys(
+            primary_words + ([target_noun] if target_noun else []) + aliases
+        ))
+
+        return {
+            "canonical_term": canonical_term,
+            "category": resolved_category,
+            "target_noun": target_noun,
+            "primary_words": primary_words,
+            "modifier_words": modifier_words,
+            "target_anchors": target_anchors,
+            "aliases": aliases,
         }
-
-        for token in tokens:
-            candidate_keys = [token, token.rstrip("s")]
-            matched_c_key = next((k for k in candidate_keys if k in category_map), None)
-            if matched_c_key:
-                cat_info = category_map[matched_c_key]
-                extracted["category"] = cat_info["name"]
-                extracted["related_brands"].extend(cat_info["brands"][:6])
-                extracted["sibling_subcategories"].extend(cat_info["subcategories"][:6])
-                extracted["matched_alias"] = token
-                break
-
-        if not extracted["sibling_subcategories"]:
-            for token in tokens:
-                candidate_keys = [token, token.rstrip("s")]
-                matched_sub = next((k for k in candidate_keys if k in subcategory_to_category), None)
-                if matched_sub:
-                    parent_c_key = subcategory_to_category[matched_sub]
-                    cat_info = category_map.get(parent_c_key, {})
-                    extracted["category"] = cat_info.get("name")
-                    siblings = [s for s in cat_info.get("subcategories", []) if s.lower() != matched_sub]
-                    extracted["sibling_subcategories"].extend(siblings[:6])
-                    extracted["related_brands"].extend(cat_info.get("brands", [])[:4])
-                    extracted["matched_alias"] = token
-                    break
-
-        matched_key = None
-        if normalized_str in alias_to_key:
-            matched_key = alias_to_key[normalized_str]
-            extracted["matched_alias"] = normalized_str
-        else:
-            for alias in sorted_aliases:
-                pattern = r"(^|[\s\-_/.,()])" + re.escape(alias) + r"([\s\-_/.,()]|$)"
-                if re.search(pattern, normalized_str):
-                    matched_key = alias_to_key[alias]
-                    extracted["matched_alias"] = alias
-                    break
-
-        if matched_key and matched_key in taxonomy_nodes:
-            node = taxonomy_nodes[matched_key]
-            extracted["canonical_term"] = node["canonical"]
-            if not extracted["category"] and node["category"]:
-                extracted["category"] = node["category"]
-            extracted["trending_suggestions"] = node["trending_suggestions"]
-
-            cat_k = (node["category"] or "").lower().strip()
-            if cat_k in category_map:
-                cat_info = category_map[cat_k]
-                extracted["related_brands"].extend(cat_info.get("brands", [])[:5])
-                extracted["sibling_subcategories"].extend(cat_info.get("subcategories", [])[:5])
-
-        extracted["related_brands"] = list(dict.fromkeys(extracted["related_brands"]))
-        extracted["sibling_subcategories"] = list(dict.fromkeys(extracted["sibling_subcategories"]))
-
-        return extracted if any(extracted.values()) else None
 
 
 def smart_ai_search(user_query, target_count=20):
     query_str = (user_query or "").strip()
-    synonym_resolution = DynamicSynonymService.resolve_query(query_str)
+    resolution = DynamicSynonymService.resolve_query(query_str)
 
     extracted_features = {
-        "search_terms": [],
-        "related_brands": [],
-        "sibling_subcategories": [],
+        "search_terms": resolution["target_anchors"],
+        "primary_words": resolution["primary_words"],
+        "modifier_words": resolution["modifier_words"],
+        "target_noun": resolution["target_noun"],
+        "canonical_term": resolution["canonical_term"],
+        "category": resolution["category"],
         "color": None,
         "max_price": None,
         "min_price": None,
-        "brand": None,
         "is_made_in_nepal": False,
         "sort_field": "-listed_date",
-        "synonym_resolution": synonym_resolution,
+        "synonym_resolution": resolution,
     }
 
     def parse_amount(val_str, unit_str):
@@ -384,24 +371,6 @@ def smart_ai_search(user_query, target_count=20):
     elif re.search(EXPENSIVE_SORT_REGEX, query_str, re.IGNORECASE):
         extracted_features["sort_field"] = "-effective_price"
 
-    tokens = re.findall(r"\b[a-zA-Z0-9]+\b", query_str.lower())
-    clean_terms = [t for t in tokens if t not in PRICE_STOP_WORDS and not t.isdigit() and len(t) >= 2]
-
-    canonical_term = None
-    resolved_category = None
-    if synonym_resolution:
-        canonical_term = synonym_resolution.get("canonical_term")
-        resolved_category = synonym_resolution.get("category")
-        extracted_features["related_brands"] = synonym_resolution.get("related_brands", [])
-        extracted_features["sibling_subcategories"] = synonym_resolution.get("sibling_subcategories", [])
-
-        if canonical_term:
-            for term in canonical_term.lower().split():
-                if term not in clean_terms and term not in PRICE_STOP_WORDS:
-                    clean_terms.append(term)
-
-    extracted_features["search_terms"] = clean_terms
-
     base_qs = (
         MarketplaceProduct.objects.filter(is_available=True)
         .annotate(
@@ -419,57 +388,102 @@ def smart_ai_search(user_query, target_count=20):
     if extracted_features["min_price"] is not None:
         base_qs = base_qs.filter(effective_price__gte=extracted_features["min_price"])
 
-    if extracted_features["is_made_in_nepal"]:
-        base_qs = base_qs.filter(is_made_in_nepal=True)
+    if resolution["category"] == "Footwear":
+        for acc in FOOTWEAR_ACCESSORY_EXCLUSIONS:
+            base_qs = base_qs.exclude(product__name__icontains=acc)
 
+  
     tier1_q = Q()
-    if clean_terms:
-        for term_str in clean_terms:
-            tier1_q |= (
-                Q(product__name__icontains=term_str)
-                | Q(search_tags__icontains=term_str)
-                | Q(product__description__icontains=term_str)
-            )
+    if resolution["canonical_term"]:
+        tier1_q |= Q(product__name__icontains=resolution["canonical_term"])
 
     tier2_q = Q()
-    for rel_brand in extracted_features["related_brands"][:5]:
-        tier2_q |= (
-            Q(product__brand__name__iexact=rel_brand)
-            | Q(product__name__icontains=rel_brand)
-        )
+    target_noun = resolution["target_noun"]
+    if target_noun:
+        noun_q = Q(product__name__iregex=r"\y" + re.escape(target_noun) + r"\y")
+        for a in resolution["aliases"]:
+            noun_q |= Q(product__name__iregex=r"\y" + re.escape(a) + r"\y")
+        tier2_q &= noun_q
 
-    for sibling in extracted_features["sibling_subcategories"][:5]:
-        tier2_q |= (
-            Q(product__subcategory__name__iexact=sibling)
-            | Q(product__name__icontains=sibling)
-            | Q(search_tags__icontains=sibling.lower())
-        )
+    for pw in resolution["primary_words"]:
+        if len(pw) >= 3:
+            tier2_q |= (
+                Q(product__name__iregex=r"\y" + re.escape(pw) + r"\y")
+                | Q(product__description__iregex=r"\y" + re.escape(pw) + r"\y")
+            )
 
     tier3_q = Q()
-    if resolved_category:
+    for mw in resolution["modifier_words"]:
         tier3_q |= (
-            Q(product__category__name__icontains=resolved_category)
-            | Q(search_tags__icontains=resolved_category.lower())
+            Q(product__name__iregex=r"\y" + re.escape(mw) + r"\y")
+            | Q(product__description__iregex=r"\y" + re.escape(mw) + r"\y")
         )
 
-    when_clauses = []
-    if tier1_q.children:
-        when_clauses.append(When(tier1_q, then=Value(1)))
-    if tier2_q.children:
-        when_clauses.append(When(tier2_q, then=Value(2)))
-    if tier3_q.children:
-        when_clauses.append(When(tier3_q, then=Value(3)))
+    candidate_q = Q()
+    for anchor in resolution["target_anchors"]:
+        candidate_q |= (
+            Q(product__name__iregex=r"\y" + re.escape(anchor) + r"\y")
+            | Q(product__description__iregex=r"\y" + re.escape(anchor) + r"\y")
+        )
+
+    if candidate_q.children:
+        base_qs = base_qs.filter(candidate_q)
+
+    
+    match_score_expr = Value(0)
+    if resolution["canonical_term"]:
+        match_score_expr = match_score_expr + Case(
+            When(product__name__icontains=resolution["canonical_term"], then=Value(25)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+
+    if resolution["target_noun"]:
+        noun_wb = r"\y" + re.escape(resolution["target_noun"]) + r"\y"
+        match_score_expr = match_score_expr + Case(
+            When(Q(product__name__iregex=noun_wb), then=Value(15)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+
+    if extracted_features["is_made_in_nepal"]:
+        match_score_expr = match_score_expr + Case(
+            When(Q(is_made_in_nepal=True), then=Value(10)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+
+    for pw in resolution["primary_words"]:
+        if len(pw) >= 2:
+            wb_pw = r"\y" + re.escape(pw) + r"\y"
+            match_score_expr = match_score_expr + Case(
+                When(Q(product__name__iregex=wb_pw), then=Value(10)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ) + Case(
+                When(Q(product__description__iregex=wb_pw), then=Value(4)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+
+    for mw in resolution["modifier_words"]:
+        wb_mw = r"\y" + re.escape(mw) + r"\y"
+        match_score_expr = match_score_expr + Case(
+            When(Q(product__name__iregex=wb_mw), then=Value(6)),
+            default=Value(0),
+            output_field=IntegerField(),
+        ) + Case(
+            When(Q(product__description__iregex=wb_mw), then=Value(2)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
 
     final_qs = (
         base_qs.annotate(
-            match_rank=Case(
-                *when_clauses,
-                default=Value(4),
-                output_field=IntegerField(),
-            )
+            match_score=match_score_expr
         )
         .select_related("product", "product__brand", "product__category")
-        .order_by("match_rank", extracted_features["sort_field"])
+        .order_by("-match_score", extracted_features["sort_field"])
     )
 
     return final_qs, extracted_features

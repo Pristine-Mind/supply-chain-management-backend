@@ -14,6 +14,11 @@ from .models import Order
 class ProducerAPITestCase(APITestCase):
 
     def setUp(self):
+        user = getattr(self, "user", None)
+        if not user:
+            from user.models import User
+            user, _ = User.objects.get_or_create(username="test_auth_user", defaults={"email": "auth@ex.com"})
+        self.client.force_authenticate(user=user)
         self.producer = ProducerFactory()
         self.url = "/api/v1/producers/"
 
@@ -43,6 +48,11 @@ class ProducerAPITestCase(APITestCase):
 class CustomerAPITestCase(APITestCase):
 
     def setUp(self):
+        user = getattr(self, "user", None)
+        if not user:
+            from user.models import User
+            user, _ = User.objects.get_or_create(username="test_auth_user", defaults={"email": "auth@ex.com"})
+        self.client.force_authenticate(user=user)
         self.customer = CustomerFactory()
         self.url = "/api/v1/customers/"
 
@@ -77,6 +87,11 @@ class CustomerAPITestCase(APITestCase):
 class ProductAPITestCase(APITestCase):
 
     def setUp(self):
+        user = getattr(self, "user", None)
+        if not user:
+            from user.models import User
+            user, _ = User.objects.get_or_create(username="test_auth_user", defaults={"email": "auth@ex.com"})
+        self.client.force_authenticate(user=user)
         self.product = ProductFactory()
         self.url = "/api/v1/products/"
 
@@ -109,6 +124,11 @@ class ProductAPITestCase(APITestCase):
 class OrderAPITestCase(APITestCase):
 
     def setUp(self):
+        user = getattr(self, "user", None)
+        if not user:
+            from user.models import User
+            user, _ = User.objects.get_or_create(username="test_auth_user", defaults={"email": "auth@ex.com"})
+        self.client.force_authenticate(user=user)
         self.order = OrderFactory.create()
         self.url = "/api/v1/orders/"
 
@@ -142,6 +162,11 @@ class OrderAPITestCase(APITestCase):
 class SaleAPITestCase(APITestCase):
 
     def setUp(self):
+        user = getattr(self, "user", None)
+        if not user:
+            from user.models import User
+            user, _ = User.objects.get_or_create(username="test_auth_user", defaults={"email": "auth@ex.com"})
+        self.client.force_authenticate(user=user)
         self.sale = SaleFactory()
         self.url = "/api/v1/sales/"
 
@@ -149,9 +174,8 @@ class SaleAPITestCase(APITestCase):
         """
         Test creating a sale.
         """
-        customer = CustomerFactory.create()
-        product = ProductFactory.create()
-        data = {"customer": customer.id, "product": product.id, "quantity": 5, "sale_price": 150.00}
+        order = OrderFactory.create()
+        data = {"order": order.id, "quantity": 5, "sale_price": 150.00}
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 

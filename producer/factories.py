@@ -3,36 +3,49 @@ from factory.django import DjangoModelFactory
 from faker import Faker
 
 from user.models import User
-
 from .models import AuditLog, Customer, LedgerEntry, Order, Producer, Product, Sale
 
 fake = Faker()
 
 
-class UserFactory(factory.django.DjangoModelFactory):
+class UserFactory(DjangoModelFactory):
     class Meta:
         model = User
+        django_get_or_create = ("username",)
 
     username = factory.Sequence(lambda n: f"user{n}")
     email = factory.LazyAttribute(lambda obj: f"{obj.username}@example.com")
     password = factory.PostGenerationMethodCall("set_password", "testpass123")
+
+    @factory.post_generation
+    def create_profile(obj, create, extracted, **kwargs):
+        if not create:
+            return
+        try:
+            from user.models import UserProfile
+            UserProfile.objects.get_or_create(user=obj, defaults={"phone_number": "9800000000"})
+        except Exception:
+            pass
+
 
 
 class ProducerFactory(DjangoModelFactory):
     class Meta:
         model = Producer
 
+    user = factory.SubFactory(UserFactory)
     name = factory.Faker("company")
     contact = factory.Faker("phone_number")
     email = factory.Faker("email")
     address = factory.Faker("address")
-    registration_number = factory.Faker("isbn10")
+    registration_number = factory.Sequence(lambda n: f"REG-{n:06d}")
 
 
 class CustomerFactory(DjangoModelFactory):
     class Meta:
         model = Customer
 
+    user = factory.SubFactory(UserFactory)
     name = factory.Faker("name")
     customer_type = "Retailer"
     contact = factory.Faker("phone_number")
@@ -41,7 +54,6 @@ class CustomerFactory(DjangoModelFactory):
     shipping_address = factory.Faker("address")
     credit_limit = factory.Faker("pydecimal", left_digits=5, right_digits=2, positive=True)
     current_balance = factory.Faker("pydecimal", left_digits=4, right_digits=2, positive=True)
-    producer = factory.SubFactory(ProducerFactory)
 
 
 class ProductFactory(DjangoModelFactory):
@@ -54,33 +66,33 @@ class ProductFactory(DjangoModelFactory):
     price = factory.Faker("pydecimal", left_digits=3, right_digits=2, positive=True)
     cost_price = factory.Faker("pydecimal", left_digits=3, right_digits=2, positive=True)
     stock = factory.Faker("random_int", min=1, max=500)
-    producer = factory.SubFactory(ProducerFactory)
+    user = factory.SubFactory(UserFactory)
 
 
 class OrderFactory(DjangoModelFactory):
     class Meta:
         model = Order
 
+    user = factory.SubFactory(UserFactory)
     customer = factory.SubFactory(CustomerFactory)
     product = factory.SubFactory(ProductFactory)
     quantity = factory.Faker("random_int", min=1, max=100)
     status = "Pending"
     total_price = factory.Faker("pydecimal", left_digits=4, right_digits=2, positive=True)
     order_date = factory.Faker("date_time")
-    payment_status = "Pending"
 
 
 class SaleFactory(DjangoModelFactory):
     class Meta:
         model = Sale
 
-    customer = factory.SubFactory(CustomerFactory)
-    product = factory.SubFactory(ProductFactory)
+    user = factory.SubFactory(UserFactory)
+    order = factory.SubFactory(OrderFactory)
     quantity = factory.Faker("random_int", min=1, max=50)
     sale_price = factory.Faker("pydecimal", left_digits=3, right_digits=2, positive=True)
 
 
-class LedgerEntryFactory(factory.django.DjangoModelFactory):
+class LedgerEntryFactory(DjangoModelFactory):
     class Meta:
         model = LedgerEntry
 
@@ -93,7 +105,7 @@ class LedgerEntryFactory(factory.django.DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
 
 
-class AuditLogFactory(factory.django.DjangoModelFactory):
+class AuditLogFactory(DjangoModelFactory):
     class Meta:
         model = AuditLog
 
