@@ -4103,6 +4103,7 @@ class QuoteRequestViewSet(
                     sender=request.user,
                     message=f"RFQ status changed to {quote_request.status}.",
                     status_event=quote_request.status,
+                    reason_for_cancellation=serializer.validated_data.get("reason_for_cancellation")
                 )
         return Response(QuoteRequestSerializer(quote_request, context={"request": request}).data)
 

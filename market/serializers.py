@@ -2667,6 +2667,21 @@ class QuoteRequestStatusSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Cannot change status from '{current}' to '{new_status}'.")
         return new_status
 
+    def validate(self, attrs):
+        ALLOWED_CANCEL_STATES = ['pending', 'quoted']
+
+        if self.instance.status not in ALLOWED_CANCEL_STATES:
+            raise serializers.ValidationError(
+                f"Cannot cancel an RFQ in '{self.instance.status}' status. Cancellation is only allowed while pending or quoted."
+            )
+        if self.instance.requested_by != self.context["request"].user:
+            raise serializers.ValidationError(
+                {
+                    "error": "Only the buyer who created this RFQ is permitted to cancel it."
+                },
+            )
+        return attrs
+
 
 class RFQNegotiationMessageSerializer(serializers.ModelSerializer):
     rfq_id = serializers.IntegerField(read_only=True)

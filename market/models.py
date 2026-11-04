@@ -3028,6 +3028,7 @@ class QuoteRequest(models.Model):
     quantity = models.PositiveIntegerField()
     proposed_price = models.FloatField(null=True, blank=True)
     agree_terms_and_conditions = models.BooleanField(default=False)
+    reason_for_cancellation = models.TextField(blank=True, null=True)
 
     # Delivery location
     city = models.CharField(max_length=100)
