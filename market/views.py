@@ -4095,6 +4095,7 @@ class QuoteRequestViewSet(
         previous_status = quote_request.status
         serializer = self.get_serializer(quote_request, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+
         with transaction.atomic():
             serializer.save()
             if quote_request.status != previous_status:
@@ -4103,7 +4104,6 @@ class QuoteRequestViewSet(
                     sender=request.user,
                     message=f"RFQ status changed to {quote_request.status}.",
                     status_event=quote_request.status,
-                    reason_for_cancellation=serializer.validated_data.get("reason_for_cancellation")
                 )
         return Response(QuoteRequestSerializer(quote_request, context={"request": request}).data)
 

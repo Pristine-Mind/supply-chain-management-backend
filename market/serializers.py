@@ -2572,6 +2572,7 @@ class QuoteRequestSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "agree_terms_and_conditions",
+            "reason_for_cancellation"
         ]
         read_only_fields = fields
 
@@ -2656,7 +2657,7 @@ class QuoteRequestCreateSerializer(serializers.ModelSerializer):
 class QuoteRequestStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuoteRequest
-        fields = ["status"]
+        fields = ["status", "reason_for_cancellation"]
 
     def validate_status(self, new_status):
         current = self.instance.status
@@ -2668,9 +2669,14 @@ class QuoteRequestStatusSerializer(serializers.ModelSerializer):
         return new_status
 
     def validate(self, attrs):
-        ALLOWED_CANCEL_STATES = ['pending', 'quoted']
+        if attrs.get("status") != QuoteRequest.Status.CANCELLED:
+            return attrs
 
-        if self.instance.status not in ALLOWED_CANCEL_STATES:
+        allowed_cancel_states = {
+            QuoteRequest.Status.PENDING,
+            QuoteRequest.Status.QUOTED,
+        }
+        if self.instance.status not in allowed_cancel_states:
             raise serializers.ValidationError(
                 f"Cannot cancel an RFQ in '{self.instance.status}' status. Cancellation is only allowed while pending or quoted."
             )
